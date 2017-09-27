@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import irc.bot
 
 irc.client.ServerConnection.buffer_class.errors = 'replace'
