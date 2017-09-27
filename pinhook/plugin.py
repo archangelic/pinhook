@@ -17,3 +17,10 @@ def message(msg):
 def add_plugin(command, func):
     cmds.append({'cmd': command, 'func': func})
 
+
+def register(command):
+    def register_for_command(func):
+        add_plugin(command, func)
+        return func
+    return register_for_command
+
