@@ -56,7 +56,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.quit("See y'all later!")
             quit()
         elif cmd in self.cmds:
-            output = self.cmds[cmd](nick=nick, arg=arg)
+            output = self.cmds[cmd](cmd=cmd, nick=nick, arg=arg)
 
         if output:
             if output.msg_type == 'message':
