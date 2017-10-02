@@ -51,6 +51,10 @@ Keyword arguments currently passed to the plugin:
 * `nick`: the user who triggered the command
 * `arg`: all the trailing text after the command. This is what you will use to get optional information for the command
 
+The plugin function *must* return one of the following:
+* `pinhook.plugin.message`: basic message in channel where command was triggered
+* `pinhook.plugin.action`: CTCP action in the channel where command was triggered (basically like using `/me does a thing`)
+
 ## Examples
 There are some basic examples in the `examples` directory in this repository.
 
