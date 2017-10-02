@@ -3,6 +3,9 @@ from setuptools import setup
 
 setup(
     name='pinhook',
+    version='0.1.0',
+    license="MIT",
+    description="A pluggable IRC bot framework in Python",
     install_requires=[
         'irc',
     ],
