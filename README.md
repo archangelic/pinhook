@@ -51,3 +51,7 @@ Keyword arguments currently passed to the plugin:
 * `nick`: the user who triggered the command
 * `arg`: all the trailing text after the command. This is what you will use to get optional information for the command
 
+## Examples
+There are some basic examples in the `examples` directory in this repository.
+
+For a live and maintained bot running the current version of pinhook see [pinhook-tilde](https://github.com/archangelic/pinhook-tilde).
