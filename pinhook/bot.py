@@ -55,6 +55,10 @@ class Bot(irc.bot.SingleServerIRCBot):
         elif cmd == '!quit' and nick in self.ops:
             c.quit("See y'all later!")
             quit()
+        elif cmd == '!help':
+            helplist = sorted([i for i in self.cmds])
+            msg = ', '.join(helplist)
+            c.privmsg(chan, 'Available commands: {}'.format(msg))
         elif cmd in self.cmds:
             output = self.cmds[cmd](cmd=cmd, nick=nick, arg=arg)
 
