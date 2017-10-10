@@ -1,8 +1,6 @@
 # pinhook
 a pluggable irc bot framework in python
 
-# Currently in very early stages and may change wildly until final release
-
 ## Tutorial
 ### Installation
 ```
