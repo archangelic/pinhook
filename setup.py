@@ -72,14 +72,13 @@ class UploadCommand(Command):
 # Where the magic happens:
 setup(
     name=NAME,
-    version='1.0.0',
+    version='1.0.2',
     description=DESCRIPTION,
     long_description=long_description,
     author=AUTHOR,
     author_email=EMAIL,
     url=URL,
-    # If your package is a single module, use this instead of 'packages':
-    py_modules=['pinhook'],
+    packages=['pinhook'],
     install_requires=REQUIRED,
     include_package_data=True,
     license='MIT',
