@@ -1,5 +1,6 @@
 import imp
 import os
+import ssl
 
 import irc.bot
 
@@ -16,18 +17,22 @@ class Message:
 
 
 class Bot(irc.bot.SingleServerIRCBot):
-    def __init__(self, channels, nickname, server, port=6667, ops=[], plugin_dir='plugins'):
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, port)], nickname, nickname)
+    def __init__(self, channels, nickname, server, **kwargs):
+        self.set_kwargs(**kwargs)
+        if self.ssl_required:
+            factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port)], nickname, nickname, connect_factory=factory)
+        else:
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port)], nickname, nickname)
         self.chanlist = channels
         self.bot_nick = nickname
-        self.ops = ops
 
         # load all plugins
         plugins = []
-        for m in os.listdir(plugin_dir):
+        for m in os.listdir(self.plugin_dir):
             if m.endswith('.py'):
                 name = m[:-3]
-                fp, pathname, description = imp.find_module(name, [plugin_dir])
+                fp, pathname, description = imp.find_module(name, [self.plugin_dir])
                 plugins.append(imp.load_module(name, fp, pathname, description))
 
         # gather all commands
@@ -36,7 +41,25 @@ class Bot(irc.bot.SingleServerIRCBot):
             for cmd in plugin.pinhook.plugin.cmds:
                 self.cmds[cmd['cmd']] = cmd['func']
 
+    def set_kwargs(self, **kwargs):
+        kwarguments = {
+            'port': 6667,
+            'ops': [],
+            'plugin_dir': 'plugins',
+            'ssl_required': False,
+            'ns_pass': None,
+            'nickserv': 'NickServ',
+        }
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        for a in kwarguments:
+            if a not in kwargs:
+                setattr(self, a, kwarguments[a])
+
+
     def on_welcome(self, c, e):
+        if self.ns_pass:
+            c.privmsg(self.nickserv, 'identify {}'.format(self.ns_pass))
         for channel in self.chanlist:
             c.join(channel)
 
