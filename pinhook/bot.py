@@ -5,6 +5,15 @@ import irc.bot
 
 irc.client.ServerConnection.buffer_class.errors = 'replace'
 
+class Message:
+    def __init__(self, channel, nick, cmd, arg, botnick, ops):
+        self.channel = channel
+        self.nick = nick
+        self.cmd = cmd
+        self.arg = arg
+        self.botnick = botnick
+        self.ops = ops
+
 
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, port=6667, ops=[], plugin_dir='plugins'):
@@ -60,7 +69,14 @@ class Bot(irc.bot.SingleServerIRCBot):
             msg = ', '.join(helplist)
             c.privmsg(chan, 'Available commands: {}'.format(msg))
         elif cmd in self.cmds:
-            output = self.cmds[cmd](cmd=cmd, nick=nick, arg=arg)
+            output = self.cmds[cmd](Message(
+                channel=chan,
+                cmd=cmd,
+                nick=nick,
+                arg=arg,
+                botnick=self.bot_nick,
+                ops=self.ops
+            ))
 
         if output:
             if output.msg_type == 'message':
