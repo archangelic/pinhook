@@ -26,20 +26,8 @@ class Bot(irc.bot.SingleServerIRCBot):
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port)], nickname, nickname)
         self.chanlist = channels
         self.bot_nick = nickname
+        self.load_plugins()
 
-        # load all plugins
-        plugins = []
-        for m in os.listdir(self.plugin_dir):
-            if m.endswith('.py'):
-                name = m[:-3]
-                fp, pathname, description = imp.find_module(name, [self.plugin_dir])
-                plugins.append(imp.load_module(name, fp, pathname, description))
-
-        # gather all commands
-        self.cmds = {}
-        for plugin in plugins:
-            for cmd in plugin.pinhook.plugin.cmds:
-                self.cmds[cmd['cmd']] = cmd['func']
 
     def set_kwargs(self, **kwargs):
         kwarguments = {
@@ -56,6 +44,24 @@ class Bot(irc.bot.SingleServerIRCBot):
             if a not in kwargs:
                 setattr(self, a, kwarguments[a])
 
+    def load_plugins(self):
+         # load all plugins
+        plugins = []
+        for m in os.listdir(self.plugin_dir):
+            if m.endswith('.py'):
+                try:
+                    name = m[:-3]
+                    fp, pathname, description = imp.find_module(name, [self.plugin_dir])
+                    p = imp.load_module(name, fp, pathname, description)
+                    p.pinhook
+                    plugins.append(p)
+                except Exception as e:
+                    print(e)
+        # gather all commands
+        self.cmds = {}
+        for plugin in plugins:
+            for cmd in plugin.pinhook.plugin.cmds:
+                self.cmds[cmd['cmd']] = cmd['func']
 
     def on_welcome(self, c, e):
         if self.ns_pass:
@@ -92,14 +98,17 @@ class Bot(irc.bot.SingleServerIRCBot):
             msg = ', '.join(helplist)
             c.privmsg(chan, 'Available commands: {}'.format(msg))
         elif cmd in self.cmds:
-            output = self.cmds[cmd](Message(
-                channel=chan,
-                cmd=cmd,
-                nick=nick,
-                arg=arg,
-                botnick=self.bot_nick,
-                ops=self.ops
-            ))
+            try:
+                output = self.cmds[cmd](Message(
+                    channel=chan,
+                    cmd=cmd,
+                    nick=nick,
+                    arg=arg,
+                    botnick=self.bot_nick,
+                    ops=self.ops
+                ))
+            except Exception as e:
+                print(e)
 
         if output:
             if output.msg_type == 'message':
