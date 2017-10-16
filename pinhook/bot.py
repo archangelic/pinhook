@@ -97,6 +97,9 @@ class Bot(irc.bot.SingleServerIRCBot):
             helplist = sorted([i for i in self.cmds])
             msg = ', '.join(helplist)
             c.privmsg(chan, 'Available commands: {}'.format(msg))
+        elif cmd == '!reload' and nick in self.ops:
+            self.load_plugins()
+            c.privmsg(chan, 'Plugins reloaded')
         elif cmd in self.cmds:
             try:
                 output = self.cmds[cmd](Message(
