@@ -4,7 +4,7 @@ a pluggable irc bot framework in python
 ## Tutorial
 ### Installation
 ```
-$ pip install git+git://github.com/archangelic/pinhook.git
+$ pip install pinhook
 ```
 
 ### Creating the Bot
