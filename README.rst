@@ -82,3 +82,9 @@ give a response to the command:
 
 Examples
 --------
+
+There are some basic examples in the ``examples`` directory in this
+repository.
+
+For a live and maintained bot running the current version of pinhook see
+`pinhook-tilde <https://github.com/archangelic/pinhook-tilde>`__.
