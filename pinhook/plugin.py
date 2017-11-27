@@ -3,7 +3,10 @@ cmds = []
 class Output:
     def __init__(self, msg_type, msg):
         self.msg_type = msg_type
-        self.msg = msg
+        self.msg = self.sanitize(msg)
+
+    def sanitize(self, msg):
+        return msg.splitlines()
 
 
 def action(msg):

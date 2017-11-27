@@ -1,10 +1,13 @@
 import imp
 import os
 import ssl
+import time
 
 import irc.bot
 
+
 irc.client.ServerConnection.buffer_class.errors = 'replace'
+
 
 class Message:
     def __init__(self, channel, nick, cmd, arg, botnick, ops):
@@ -45,7 +48,10 @@ class Bot(irc.bot.SingleServerIRCBot):
                 setattr(self, a, kwarguments[a])
 
     def load_plugins(self):
-         # load all plugins
+        # ensure plugin folder exists
+        if not os.path.exists(self.plugin_dir):
+            os.makedirs(self.plugin_dir)
+        # load all plugins
         plugins = []
         for m in os.listdir(self.plugin_dir):
             if m.endswith('.py'):
@@ -114,8 +120,10 @@ class Bot(irc.bot.SingleServerIRCBot):
                 print(e)
 
         if output:
-            if output.msg_type == 'message':
-                c.privmsg(chan, output.msg)
-            elif output.msg_type == 'action':
-                c.action(chan, output.msg)
+            for msg in output.msg:
+                if output.msg_type == 'message':
+                    c.privmsg(chan, msg)
+                elif output.msg_type == 'action':
+                    c.action(chan, msg)
+                time.sleep(.5)
 
