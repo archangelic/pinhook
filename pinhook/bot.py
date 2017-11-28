@@ -10,9 +10,10 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
 class Message:
-    def __init__(self, channel, nick, botnick, ops, cmd=None, arg=None, text=None):
+    def __init__(self, channel, nick, botnick, ops, cmd=None, arg=None, text=None, num_nicks=None):
         self.channel = channel
         self.nick = nick
+        self.num_nicks = num_nicks
         self.botnick = botnick
         self.ops = ops
         if cmd:
@@ -103,6 +104,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     output = self.lstnrs[lstnr](Message(
                         channel=chan,
                         text=e.arguments[0],
+                        num_nicks=len(self.channels[chan].users()),
                         nick=nick,
                         botnick=self.bot_nick,
                         ops=self.ops
