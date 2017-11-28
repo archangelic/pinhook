@@ -10,14 +10,19 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
 class Message:
-    def __init__(self, channel, nick, cmd, arg, botnick, ops):
+    def __init__(self, channel, nick, botnick, ops, cmd=None, arg=None, text=None):
         self.channel = channel
         self.nick = nick
-        self.cmd = cmd
-        self.arg = arg
         self.botnick = botnick
         self.ops = ops
-
+        if cmd:
+            self.cmd = cmd
+        if arg:
+            self.arg = arg
+        if text:
+            self.text = text
+        if not (cmd or text):
+            print('Please pass Message a command or text!')
 
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
@@ -30,7 +35,6 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.chanlist = channels
         self.bot_nick = nickname
         self.load_plugins()
-
 
     def set_kwargs(self, **kwargs):
         kwarguments = {
@@ -63,11 +67,14 @@ class Bot(irc.bot.SingleServerIRCBot):
                     plugins.append(p)
                 except Exception as e:
                     print(e)
-        # gather all commands
+        # gather all commands and listeners
         self.cmds = {}
+        self.lstnrs = {}
         for plugin in plugins:
             for cmd in plugin.pinhook.plugin.cmds:
                 self.cmds[cmd['cmd']] = cmd['func']
+            for lstnr in plugin.pinhook.plugin.lstnrs:
+                self.lstnrs[lstnr['lstn']] = lstnr['func']
 
     def on_welcome(self, c, e):
         if self.ns_pass:
@@ -76,17 +83,36 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.join(channel)
 
     def on_pubmsg(self, c, e):
-        self.process_command(c, e, e.arguments[0])
+        self.process_message(c, e)
 
     def on_privmsg(self, c, e):
-        self.process_command(c, e, e.arguments[0])
+        self.process_message(c, e)
 
-    def process_command(self, c, e, text):
+    def process_message(self, c, e):
         nick = e.source.nick
         if e.target == self.bot_nick:
             chan = nick
         else:
             chan = e.target
+        if e.arguments[0].startswith('!'):
+            self.process_command(c, e, nick, chan, e.arguments[0])
+        else:
+            output = None
+            for lstnr in self.lstnrs:
+                try:
+                    output = self.lstnrs[lstnr](Message(
+                        channel=chan,
+                        text=e.arguments[0],
+                        nick=nick,
+                        botnick=self.bot_nick,
+                        ops=self.ops
+                    ))
+                    if output:
+                        self.process_output(c, chan, output)
+                except Exception as e:
+                    print(e)
+
+    def process_command(self, c, e, nick, chan, text):
         cmd = text.split(' ')[0]
         if len(text.split(' ')) > 1:
             arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
@@ -120,10 +146,12 @@ class Bot(irc.bot.SingleServerIRCBot):
                 print(e)
 
         if output:
-            for msg in output.msg:
-                if output.msg_type == 'message':
-                    c.privmsg(chan, msg)
-                elif output.msg_type == 'action':
-                    c.action(chan, msg)
-                time.sleep(.5)
+            self.process_output(c, chan, output)
 
+    def process_output(self, c, chan, output):
+        for msg in output.msg:
+            if output.msg_type == 'message':
+                c.privmsg(chan, msg)
+            elif output.msg_type == 'action':
+                c.action(chan, msg)
+            time.sleep(.5)
