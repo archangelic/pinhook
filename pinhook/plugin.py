@@ -21,6 +21,10 @@ def add_plugin(command, func):
     cmds.append({'cmd': command, 'func': func})
 
 
+def clear_plugins():
+    cmds.clear()
+
+
 def register(command):
     def register_for_command(func):
         add_plugin(command, func)
