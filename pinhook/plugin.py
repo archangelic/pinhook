@@ -1,4 +1,5 @@
 cmds = []
+regexes = []
 
 class Output:
     def __init__(self, msg_type, msg):
@@ -21,6 +22,10 @@ def add_plugin(command, func):
     cmds.append({'cmd': command, 'func': func})
 
 
+def add_regex(regex, func):
+    regexes.append({'regex': regex, 'func': func})
+
+
 def clear_plugins():
     cmds.clear()
 
@@ -31,3 +36,9 @@ def register(command):
         return func
     return register_for_command
 
+
+def register_regex(regex):
+    def register_for_regex(func):
+        add_regex(regex, func)
+        return func
+    return register_for_regex

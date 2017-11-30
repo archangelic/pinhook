@@ -31,6 +31,8 @@ Optional arguments are:
 ### Creating plugins
 In your chosen plugins directory ("plugins" by default) make a python file with a function. You can use the `@pinhook.plugin.register` decorator to tell the bot the command to activate the function.
 
+Use the `@pinhook.plugin.register_regex` to activate your functions for all messages, that match a regular expression, you define.
+
 The function will need to be structured as such:
 ```python
 import pinhook.plugin

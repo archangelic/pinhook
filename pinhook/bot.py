@@ -1,5 +1,6 @@
 import imp
 import os
+import re
 import ssl
 import time
 import pinhook.plugin
@@ -66,11 +67,15 @@ class Bot(irc.bot.SingleServerIRCBot):
                     plugins.append(p)
                 except Exception as e:
                     print(e)
-        # gather all commands
+        # gather all commands and regexes
         self.cmds = {}
+        self.regexes = []
         for plugin in plugins:
             for cmd in plugin.pinhook.plugin.cmds:
                 self.cmds[cmd['cmd']] = cmd['func']
+            for regex in plugin.pinhook.plugin.regexes:
+                self.regexes.append(regex)
+
 
     def on_welcome(self, c, e):
         if self.ns_pass:
@@ -121,6 +126,18 @@ class Bot(irc.bot.SingleServerIRCBot):
                 ))
             except Exception as e:
                 print(e)
+        # check if text matches agains any defined regex
+        for regex in self.regexes:
+            match = re.match(regex['regex'], text)
+            if match:
+                output = regex['func'](Message(
+                    channel=chan,
+                    cmd=regex['regex'],
+                    nick=nick,
+                    arg=text,
+                    botnick=self.bot_nick,
+                    ops=self.ops
+                ))
 
         if output:
             for msg in output.msg:
