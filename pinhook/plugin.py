@@ -26,6 +26,10 @@ def add_regex(regex, func):
     regexes.append({'regex': regex, 'func': func})
 
 
+def clear_plugins():
+    cmds.clear()
+
+
 def register(command):
     def register_for_command(func):
         add_plugin(command, func)

@@ -3,6 +3,7 @@ import os
 import re
 import ssl
 import time
+import pinhook.plugin
 
 import irc.bot
 
@@ -49,6 +50,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                 setattr(self, a, kwarguments[a])
 
     def load_plugins(self):
+        # clear plugin list to ensure no old plugins remain
+        pinhook.plugin.clear_plugins()
         # ensure plugin folder exists
         if not os.path.exists(self.plugin_dir):
             os.makedirs(self.plugin_dir)
