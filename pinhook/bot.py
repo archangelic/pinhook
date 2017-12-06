@@ -25,6 +25,7 @@ class Message:
         if not (cmd or text):
             print('Please pass Message a command or text!')
 
+
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
         self.set_kwargs(**kwargs)
@@ -84,37 +85,18 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.join(channel)
 
     def on_pubmsg(self, c, e):
-        self.process_message(c, e)
+        self.process_command(c, e)
 
     def on_privmsg(self, c, e):
-        self.process_message(c, e)
+        self.process_command(c, e)
 
-    def process_message(self, c, e):
+    def process_command(self, c, e):
         nick = e.source.nick
+        text = e.arguments[0]
         if e.target == self.bot_nick:
             chan = nick
         else:
             chan = e.target
-        if e.arguments[0] in plugin.pinhook.plugin.cmds:
-            self.process_command(c, e, nick, chan, e.arguments[0])
-        else:
-            output = None
-            for lstnr in self.lstnrs:
-                try:
-                    output = self.lstnrs[lstnr](Message(
-                        channel=chan,
-                        text=e.arguments[0],
-                        nick_list=list(self.channels[chan].users()),
-                        nick=nick,
-                        botnick=self.bot_nick,
-                        ops=self.ops
-                    ))
-                    if output:
-                        self.process_output(c, chan, output)
-                except Exception as e:
-                    print(e)
-
-    def process_command(self, c, e, nick, chan, text):
         cmd = text.split(' ')[0]
         if len(text.split(' ')) > 1:
             arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
@@ -145,11 +127,25 @@ class Bot(irc.bot.SingleServerIRCBot):
                     botnick=self.bot_nick,
                     ops=self.ops
                 ))
+                if output:
+                    self.process_output(c, chan, output)
             except Exception as e:
                 print(e)
-
-        if output:
-            self.process_output(c, chan, output)
+        else:
+            for lstnr in self.lstnrs:
+                try:
+                    output = self.lstnrs[lstnr](Message(
+                        channel=chan,
+                        text=text,
+                        nick_list=list(self.channels[chan].users()),
+                        nick=nick,
+                        botnick=self.bot_nick,
+                        ops=self.ops
+                    ))
+                    if output:
+                        self.process_output(c, chan, output)
+                except Exception as e:
+                    print(e)
 
     def process_output(self, c, chan, output):
         for msg in output.msg:
