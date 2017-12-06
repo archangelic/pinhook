@@ -22,6 +22,8 @@ def message(msg):
 def add_plugin(command, func):
     cmds.append({'cmd': command, 'func': func})
 
+def clear_plugins():
+    cmds.clear()
 
 def add_listener(name, func):
     lstnrs.append({'lstn': name, 'func': func})
