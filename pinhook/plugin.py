@@ -28,6 +28,7 @@ def add_plugin(command, func):
 
 def clear_plugins():
     cmds.clear()
+    lstnrs.clear()
 
 
 def add_listener(name, func):
