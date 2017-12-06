@@ -95,7 +95,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             chan = nick
         else:
             chan = e.target
-        if e.arguments[0].startswith('!'):
+        if e.arguments[0] in plugin.pinhook.plugin.cmds:
             self.process_command(c, e, nick, chan, e.arguments[0])
         else:
             output = None
