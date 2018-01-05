@@ -12,12 +12,13 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
 class Message:
-    def __init__(self, channel, nick, botnick, ops, cmd=None, arg=None, text=None, nick_list=None):
+    def __init__(self, channel, nick, botnick, ops, logger, cmd=None, arg=None, text=None, nick_list=None):
         self.channel = channel
         self.nick = nick
         self.nick_list = nick_list
         self.botnick = botnick
         self.ops = ops
+        self.logger = logger
         if cmd:
             self.cmd = cmd
         if arg:
@@ -31,7 +32,6 @@ class Message:
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
         self.set_kwargs(**kwargs)
-        self.start_logging(self.log_level)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port)], nickname, nickname, connect_factory=factory)
@@ -39,6 +39,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port)], nickname, nickname)
         self.chanlist = channels
         self.bot_nick = nickname
+        self.start_logging(self.log_level)
         self.load_plugins()
 
     def set_kwargs(self, **kwargs):
@@ -66,7 +67,8 @@ class Bot(irc.bot.SingleServerIRCBot):
             level = logging.INFO
         elif level == 'debug':
             level = logging.DEBUG
-        self.logger = logging.getLogger('{}'.format(self.bot_nick))
+        self.logger = logging.getLogger(self.bot_nick)
+        self.logger.setLevel(level)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s - %(message)s')
         # Set console logger
         ch = logging.StreamHandler()
@@ -79,6 +81,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         # Add handlers
         self.logger.addHandler(ch)
         self.logger.addHandler(fh)
+        self.logger.info('Logging started!')
 
     def load_plugins(self):
         # clear plugin list to ensure no old plugins remain
@@ -154,7 +157,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                     nick=nick,
                     arg=arg,
                     botnick=self.bot_nick,
-                    ops=self.ops
+                    ops=self.ops,
+                    logger=self.logger
                 ))
                 if output:
                     self.process_output(c, chan, output)
@@ -169,7 +173,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                         nick_list=list(self.channels[chan].users()),
                         nick=nick,
                         botnick=self.bot_nick,
-                        ops=self.ops
+                        ops=self.ops,
+                        logger=self.logger
                     ))
                     if output:
                         self.process_output(c, chan, output)
