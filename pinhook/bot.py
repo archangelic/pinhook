@@ -68,16 +68,18 @@ class Bot(irc.bot.SingleServerIRCBot):
         elif level == 'debug':
             level = logging.DEBUG
         self.logger = logging.getLogger(self.bot_nick)
-        self.logger.setLevel(level)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s - %(message)s')
         # Set console logger
         ch = logging.StreamHandler()
-        ch.setLevel(level)
         ch.setFormatter(formatter)
         # Set file logger
         fh = logging.FileHandler('{}.log'.format(self.bot_nick))
-        fh.setLevel(level)
         fh.setFormatter(formatter)
+        # Set levels
+        if level != "off":
+            self.logger.setLevel(level)
+            ch.setLevel(level)
+            fh.setLevel(level)
         # Add handlers
         self.logger.addHandler(ch)
         self.logger.addHandler(fh)
