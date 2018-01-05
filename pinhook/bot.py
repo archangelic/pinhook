@@ -1,4 +1,5 @@
 import imp
+import logging
 import os
 import ssl
 import time
@@ -30,6 +31,7 @@ class Message:
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
         self.set_kwargs(**kwargs)
+        self.start_logging(self.log_level)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port)], nickname, nickname, connect_factory=factory)
@@ -47,12 +49,36 @@ class Bot(irc.bot.SingleServerIRCBot):
             'ssl_required': False,
             'ns_pass': None,
             'nickserv': 'NickServ',
+            'log_level': 'info',
         }
         for k, v in kwargs.items():
             setattr(self, k, v)
         for a in kwarguments:
             if a not in kwargs:
                 setattr(self, a, kwarguments[a])
+
+    def start_logging(self, level):
+        if level == 'error':
+            level = logging.ERROR
+        elif level == 'warning':
+            level = logging.WARNING
+        elif level == 'info':
+            level = logging.INFO
+        elif level == 'debug':
+            level = logging.DEBUG
+        self.logger = logging.getLogger('{}'.format(self.bot_nick))
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+        # Set console logger
+        ch = logging.StreamHandler()
+        ch.setLevel(level)
+        ch.setFormatter(formatter)
+        # Set file logger
+        fh = logging.FileHandler('{}.log'.format(self.bot_nick))
+        fh.setLevel(level)
+        fh.setFormatter(formatter)
+        # Add handlers
+        self.logger.addHandler(ch)
+        self.logger.addHandler(fh)
 
     def load_plugins(self):
         # clear plugin list to ensure no old plugins remain
@@ -148,7 +174,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     if output:
                         self.process_output(c, chan, output)
                 except Exception as e:
-                    print(e)
+                    self.logger.error(e)
 
     def process_output(self, c, chan, output):
         for msg in output.msg:
