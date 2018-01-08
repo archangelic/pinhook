@@ -61,25 +61,21 @@ class Bot(irc.bot.SingleServerIRCBot):
         if not os.path.exists(self.plugin_dir):
             os.makedirs(self.plugin_dir)
         # load all plugins
-        plugins = []
         for m in os.listdir(self.plugin_dir):
             if m.endswith('.py'):
                 try:
                     name = m[:-3]
                     fp, pathname, description = imp.find_module(name, [self.plugin_dir])
-                    p = imp.load_module(name, fp, pathname, description)
-                    p.pinhook
-                    plugins.append(p)
+                    imp.load_module(name, fp, pathname, description)
                 except Exception as e:
                     print(e)
         # gather all commands and listeners
         self.cmds = {}
         self.lstnrs = {}
-        for plugin in plugins:
-            for cmd in plugin.pinhook.plugin.cmds:
-                self.cmds[cmd['cmd']] = cmd['func']
-            for lstnr in plugin.pinhook.plugin.lstnrs:
-                self.lstnrs[lstnr['lstn']] = lstnr['func']
+        for cmd in pinhook.plugin.cmds:
+            self.cmds[cmd['cmd']] = cmd['func']
+        for lstnr in pinhook.plugin.lstnrs:
+            self.lstnrs[lstnr['lstn']] = lstnr['func']
 
     def on_welcome(self, c, e):
         if self.ns_pass:
