@@ -87,9 +87,12 @@ class Bot(irc.bot.SingleServerIRCBot):
 
     def load_plugins(self):
         # clear plugin list to ensure no old plugins remain
+        self.logger.info('clearing plugin cache')
         pinhook.plugin.clear_plugins()
         # ensure plugin folder exists
+        self.logger.info('checking plugin directory')
         if not os.path.exists(self.plugin_dir):
+            self.logger.info('plugin directory {} not found, creating'.format(self.plugin_dir))
             os.makedirs(self.plugin_dir)
         # load all plugins
         plugins = []
