@@ -100,25 +100,30 @@ class Bot(irc.bot.SingleServerIRCBot):
             if m.endswith('.py'):
                 try:
                     name = m[:-3]
+                    self.logger.info('loading plugin {}'.format(name))
                     fp, pathname, description = imp.find_module(name, [self.plugin_dir])
                     p = imp.load_module(name, fp, pathname, description)
                     p.pinhook
                     plugins.append(p)
                 except Exception as e:
-                    print(e)
+                    self.logger.exception('could not load plugin')
         # gather all commands and listeners
         self.cmds = {}
         self.lstnrs = {}
         for plugin in plugins:
             for cmd in plugin.pinhook.plugin.cmds:
+                self.logger.debug('adding command {}'.format(cmd['cmd']))
                 self.cmds[cmd['cmd']] = cmd['func']
             for lstnr in plugin.pinhook.plugin.lstnrs:
+                self.logger.debug('adding listener {}'.format(lstnr['lisn']))
                 self.lstnrs[lstnr['lstn']] = lstnr['func']
 
     def on_welcome(self, c, e):
         if self.ns_pass:
+            self.logger.info('identifying with nickserv')
             c.privmsg(self.nickserv, 'identify {}'.format(self.ns_pass))
         for channel in self.chanlist:
+            self.logger.info('joining channel {}'.format(channel))
             c.join(channel)
 
     def on_pubmsg(self, c, e):
@@ -135,15 +140,20 @@ class Bot(irc.bot.SingleServerIRCBot):
         else:
             chan = e.target
         cmd = text.split(' ')[0]
+        self.logger.debug(
+            'Message info: channel: {}, nick: {}, cmd: {}, text: {}'.format(chan, nick, cmd, text)
+        )
         if len(text.split(' ')) > 1:
             arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
         else:
             arg = ''
         output = None
         if cmd == '!join' and nick in self.ops:
+            self.logger.info('joining {} per request of {}'.format(arg, nick))
             c.join(arg)
             c.privmsg(chan, '{}: joined {}'.format(nick, arg))
         elif cmd == '!quit' and nick in self.ops:
+            self.logger.info('quitting per request of {}'.format(nick))
             c.quit("See y'all later!")
             quit()
         elif cmd == '!help':
@@ -151,6 +161,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             msg = ', '.join(helplist)
             c.privmsg(chan, 'Available commands: {}'.format(msg))
         elif cmd == '!reload' and nick in self.ops:
+            self.logger.info('reloading plugins per request of {}'.format(nick))
             self.load_plugins()
             c.privmsg(chan, 'Plugins reloaded')
         elif cmd in self.cmds:
@@ -168,7 +179,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 if output:
                     self.process_output(c, chan, output)
             except Exception as e:
-                print(e)
+                self.logger.exception('issue with command {}'.format(cmd))
         else:
             for lstnr in self.lstnrs:
                 try:
@@ -184,12 +195,14 @@ class Bot(irc.bot.SingleServerIRCBot):
                     if output:
                         self.process_output(c, chan, output)
                 except Exception as e:
-                    self.logger.error(e)
+                    self.logger.exception('issue with listener {}'.format(lstnr))
 
     def process_output(self, c, chan, output):
         for msg in output.msg:
             if output.msg_type == 'message':
+                self.logger.debug('output message: {}'.format(msg))
                 c.privmsg(chan, msg)
             elif output.msg_type == 'action':
+                self.logger.debut('output action: {}'.format(msg))
                 c.action(chan, msg)
             time.sleep(.5)
