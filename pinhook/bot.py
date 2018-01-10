@@ -111,7 +111,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.logger.debug('adding command {}'.format(cmd['cmd']))
             self.cmds[cmd['cmd']] = cmd['func']
         for lstnr in pinhook.plugin.lstnrs:
-            self.logger.debug('adding listener {}'.format(lstnr['lisn']))
+            self.logger.debug('adding listener {}'.format(lstnr['lstn']))
             self.lstnrs[lstnr['lstn']] = lstnr['func']
 
     def on_welcome(self, c, e):
