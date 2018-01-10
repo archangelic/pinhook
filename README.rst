@@ -40,6 +40,8 @@ Optional arguments are:
    other channels or quit (default: empty list)
 -  ``plugin_dir``: directory where the bot should look for plugins
    (default: "plugins")
+-  ``log_level``: string indicating logging level. Logging can be
+   disabled by setting this to "off". (default: "info")
 
 Creating plugins
 ~~~~~~~~~~~~~~~~
@@ -71,6 +73,7 @@ The ``Message`` object has the following attributes:
 -  ``channel``: the channel where the command was initiated
 -  ``ops``: the list of bot operators
 -  ``botnick``: the nickname of the bot
+-  ``logger``: instance of ``Bot``'s logger
 
 The plugin function **must** return one of the following in order to
 give a response to the command:

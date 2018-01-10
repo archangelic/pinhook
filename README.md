@@ -27,6 +27,7 @@ Optional arguments are:
 * `port`: choose a custom port to connect to the server (default: 6667)
 * `ops`: list of operators who can do things like make the bot join other channels or quit (default: empty list)
 * `plugin_dir`: directory where the bot should look for plugins (default: "plugins")
+* `log_level`: string indicating logging level. Logging can be disabled by setting this to "off". (default: "info")
 
 ### Creating plugins
 In your chosen plugins directory ("plugins" by default) make a python file with a function. You can use the `@pinhook.plugin.register` decorator to tell the bot the command to activate the function.
@@ -50,6 +51,7 @@ The `Message` object has the following attributes:
 * `channel`: the channel where the command was initiated
 * `ops`: the list of bot operators
 * `botnick`: the nickname of the bot
+* `logger`: instance of `Bot`'s logger
 
 The plugin function **must** return one of the following in order to give a response to the command:
 * `pinhook.plugin.message`: basic message in channel where command was triggered
