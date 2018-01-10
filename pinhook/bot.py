@@ -21,7 +21,6 @@ class Message:
         self.logger = logger
         if cmd:
             self.cmd = cmd
-        if arg:
             self.arg = arg
         if text:
             self.text = text
