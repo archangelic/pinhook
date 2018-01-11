@@ -198,6 +198,6 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.logger.debug('output message: {}'.format(msg))
                 c.privmsg(chan, msg)
             elif output.msg_type == 'action':
-                self.logger.debut('output action: {}'.format(msg))
+                self.logger.debug('output action: {}'.format(msg))
                 c.action(chan, msg)
             time.sleep(.5)
