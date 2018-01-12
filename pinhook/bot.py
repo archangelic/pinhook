@@ -25,7 +25,7 @@ class Message:
         if text:
             self.text = text
         if not (cmd or text):
-            print('Please pass Message a command or text!')
+            raise TypeError('missing cmd or text parameter')
 
 
 class Bot(irc.bot.SingleServerIRCBot):
@@ -127,6 +127,9 @@ class Bot(irc.bot.SingleServerIRCBot):
     def on_privmsg(self, c, e):
         self.process_command(c, e)
 
+    def on_action(self, c, e):
+        self.process_command(c, e)
+
     def process_command(self, c, e):
         nick = e.source.nick
         text = e.arguments[0]
@@ -134,7 +137,10 @@ class Bot(irc.bot.SingleServerIRCBot):
             chan = nick
         else:
             chan = e.target
-        cmd = text.split(' ')[0]
+        if e.type == 'action':
+            cmd = ''
+        else:
+            cmd = text.split(' ')[0]
         self.logger.debug(
             'Message info: channel: {}, nick: {}, cmd: {}, text: {}'.format(chan, nick, cmd, text)
         )
