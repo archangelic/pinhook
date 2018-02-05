@@ -11,23 +11,6 @@ import irc.bot
 irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
-class Message:
-    def __init__(self, channel, nick, botnick, ops, logger, cmd=None, arg=None, text=None, nick_list=None):
-        self.channel = channel
-        self.nick = nick
-        self.nick_list = nick_list
-        self.botnick = botnick
-        self.ops = ops
-        self.logger = logger
-        if cmd:
-            self.cmd = cmd
-            self.arg = arg
-        if text:
-            self.text = text
-        if not (cmd or text):
-            raise TypeError('missing cmd or text parameter')
-
-
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
         self.set_kwargs(**kwargs)
@@ -40,6 +23,22 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.bot_nick = nickname
         self.start_logging(self.log_level)
         self.load_plugins()
+        
+    class Message:
+        def __init__(self, channel, nick, botnick, ops, logger, cmd=None, arg=None, text=None, nick_list=None):
+            self.channel = channel
+            self.nick = nick
+            self.nick_list = nick_list
+            self.botnick = botnick
+            self.ops = ops
+            self.logger = logger
+            if cmd:
+                self.cmd = cmd
+                self.arg = arg
+            if text:
+                self.text = text
+            if not (cmd or text):
+                raise TypeError('missing cmd or text parameter')
 
     def set_kwargs(self, **kwargs):
         kwarguments = {
@@ -168,7 +167,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.privmsg(chan, 'Plugins reloaded')
         elif cmd in self.cmds:
             try:
-                output = self.cmds[cmd](Message(
+                output = self.cmds[cmd](self.Message(
                     channel=chan,
                     cmd=cmd,
                     nick_list=list(self.channels[chan].users()),
@@ -185,7 +184,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         else:
             for lstnr in self.lstnrs:
                 try:
-                    output = self.lstnrs[lstnr](Message(
+                    output = self.lstnrs[lstnr](self.Message(
                         channel=chan,
                         text=text,
                         nick_list=list(self.channels[chan].users()),
@@ -208,3 +207,25 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.logger.debug('output action: {}'.format(msg))
                 c.action(chan, msg)
             time.sleep(.5)
+            
+            
+class TwitchBot(Bot):
+    def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='info', ops=[]):
+        self.bot_nick = nickname
+        self.start_logging(log_level)
+        self.channel = channel
+        self.plugin_dir = plugin_dir
+        self.ops = ops
+        server = 'irc.twitch.tv'
+        port = 6667
+        self.logger.info('Joining Twitch Server')
+        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], nickname, nickname)
+        self.load_plugins()
+        
+    def on_welcome(self, c, e):
+        self.logger.info('requesting permissions')
+        c.cap('REQ', ':twitch.tv/membership')
+        c.cap('REQ', ':twitch.tv/tags')
+        c.cap('REQ', ':twitch.tv/commands')
+        self.logger.info('Joining channel ' + self.channel)
+        c.join(self.channel)
