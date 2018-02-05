@@ -210,11 +210,12 @@ class Bot(irc.bot.SingleServerIRCBot):
             
             
 class TwitchBot(Bot):
-    def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='debug'):
+    def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='debug', ops=[]):
         self.bot_nick = nickname
         self.start_logging(log_level)
         self.channel = channel
         self.plugin_dir = plugin_dir
+        self.ops = ops
         server = 'irc.twitch.tv'
         port = 6667
         self.logger.info('Joining Twitch Server')
