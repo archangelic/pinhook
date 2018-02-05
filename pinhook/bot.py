@@ -131,7 +131,6 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.process_command(c, e)
 
     def process_command(self, c, e):
-        print("what the actual fuck")
         nick = e.source.nick
         text = e.arguments[0]
         if e.target == self.bot_nick:
@@ -211,7 +210,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             
             
 class TwitchBot(Bot):
-    def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='debug', ops=[]):
+    def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='info', ops=[]):
         self.bot_nick = nickname
         self.start_logging(log_level)
         self.channel = channel
