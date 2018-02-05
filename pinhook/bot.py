@@ -131,6 +131,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.process_command(c, e)
 
     def process_command(self, c, e):
+        print("what the actual fuck")
         nick = e.source.nick
         text = e.arguments[0]
         if e.target == self.bot_nick:
