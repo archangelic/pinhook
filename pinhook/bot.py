@@ -219,7 +219,7 @@ class TwitchBot(Bot):
         port = 6667
         self.logger.info('Joining Twitch Server')
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], nickname, nickname)
-        self.load_plugins()
+        #self.load_plugins()
         
     def on_welcome(self, c, e):
         self.logger.info('requesting permissions')
