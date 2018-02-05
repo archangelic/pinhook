@@ -219,14 +219,14 @@ class TwitchBot(Bot):
         port = 6667
         self.logger.info('Joining Twitch Server')
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], nickname, nickname)
-        #self.load_plugins()
+        self.load_plugins()
         
     def on_welcome(self, c, e):
         self.logger.info('requesting permissions')
         c.cap('REQ', ':twitch.tv/membership')
         c.cap('REQ', ':twitch.tv/tags')
         c.cap('REQ', ':twitch.tv/commands')
-        self.logger.info('Joining channel' + self.channel)
+        self.logger.info('Joining channel ' + self.channel)
         c.join(self.channel)
         
         
