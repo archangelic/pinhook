@@ -211,8 +211,8 @@ class Bot(irc.bot.SingleServerIRCBot):
             
 class TwitchBot(Bot):
     def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='debug'):
-        self.start_logging(log_level)
         self.bot_nick = nickname
+        self.start_logging(log_level)
         self.channel = channel
         self.plugin_dir = plugin_dir
         server = 'irc.chat.twitch.tv'
