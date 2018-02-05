@@ -215,7 +215,7 @@ class TwitchBot(Bot):
         self.start_logging(log_level)
         self.channel = channel
         self.plugin_dir = plugin_dir
-        server = 'irc.chat.twitch.tv'
+        server = 'irc.twitch.tv'
         port = 6667
         self.logger.info('Joining Twitch Server')
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], nickname, nickname)
