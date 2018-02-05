@@ -33,9 +33,9 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.set_kwargs(**kwargs)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port)], nickname, nickname, connect_factory=factory)
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
         else:
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port)], nickname, nickname)
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname)
         self.chanlist = channels
         self.bot_nick = nickname
         self.start_logging(self.log_level)
@@ -50,6 +50,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             'ns_pass': None,
             'nickserv': 'NickServ',
             'log_level': 'info',
+            'server_pass': None,
         }
         for k, v in kwargs.items():
             setattr(self, k, v)
