@@ -229,7 +229,3 @@ class TwitchBot(Bot):
         c.cap('REQ', ':twitch.tv/commands')
         self.logger.info('Joining channel ' + self.channel)
         c.join(self.channel)
-        
-        
-        
-        
