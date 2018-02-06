@@ -13,8 +13,8 @@ Installation
 
     $ pip install pinhook
 
-Creating the Bot
-~~~~~~~~~~~~~~~~
+Creating an IRC Bot
+~~~~~~~~~~~~~~~~~~~
 
 To create the bot, just create a python file with the following:
 
@@ -42,6 +42,36 @@ Optional arguments are:
    (default: "plugins")
 -  ``log_level``: string indicating logging level. Logging can be
    disabled by setting this to "off". (default: "info")
+-  ``ns_pass``: this is the password to identify with nickserv
+-  ``server_pass``: password for the server
+-  ``ssl_required``: boolean to turn ssl on or off
+
+Creating a Twitch Bot
+~~~~~~~~~~~~~~~~~~~~~
+
+Pinhook has a baked in way to connect directly to a twitch channel
+
+.. code:: python
+
+    import pinhook.bot
+
+    bot = pinhook.bot.TwitchBot(
+        nickname='ph-bot',
+        channel='#channel',
+        token='super-secret-oauth-token'
+    )
+    bot.start()
+
+This function has far less options, as the server, port, and ssl are
+already handled by twitch.
+
+Optional aguments are:
+
+-  ``ops``
+-  ``plugin_dir``
+-  ``log_level``
+
+These options are the same for both IRC and Twitch
 
 Creating plugins
 ~~~~~~~~~~~~~~~~
