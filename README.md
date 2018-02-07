@@ -1,5 +1,5 @@
 # pinhook
-a pluggable irc bot framework in python
+the pluggable python framework for IRC bots and Twitch bots
 
 ## Tutorial
 ### Installation
