@@ -20,9 +20,9 @@ To create the bot, just create a python file with the following:
 
 .. code:: python
 
-    import pinhook.bot
+    from pinhook.bot import Bot
 
-    bot = pinhook.bot.Bot(
+    bot = Bot(
         channels=['#foo', '#bar'],
         nickname='ph-bot',
         server='irc.freenode.net'
@@ -53,9 +53,9 @@ Pinhook has a baked in way to connect directly to a twitch channel
 
 .. code:: python
 
-    import pinhook.bot
+    from pinhook.bot import TwitchBot
 
-    bot = pinhook.bot.TwitchBot(
+    bot = TwitchBot(
         nickname='ph-bot',
         channel='#channel',
         token='super-secret-oauth-token'

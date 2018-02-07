@@ -1,6 +1,6 @@
-import pinhook.bot
+from pinhook.bot import Bot
 
-ph = pinhook.bot.Bot(
+ph = Bot(
     channels=['#dicechannel'],
     nickname='dicebot',
     server='irc.freenode.net',

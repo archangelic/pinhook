@@ -1,4 +1,8 @@
-import pinhook.bot
+from pinhook.bot import TwitchBot
 
-bot = pinhook.bot.TwitchBot('dicebot', '#dicechannel', 'supersecrettokenhere')
+bot = TwitchBot(
+    nickname='dicebot',
+    channel='#dicechannel',
+    token='supersecrettokenhere'
+)
 bot.start()
