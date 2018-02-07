@@ -12,7 +12,7 @@ def build_output(rolls, modifier):
         all_rolls = ''.join([str(i)+', ' for i in rolls]).strip(', ')
         start = '{} = {}'.format(all_rolls, sum(rolls))
     if modifier:
-        output = start + ' + {} = '.format(modifier)
+        output = start + ' + {} = {}'.format(modifier, sum(rolls) + int(modifier))
     else:
         output = start
     return output
