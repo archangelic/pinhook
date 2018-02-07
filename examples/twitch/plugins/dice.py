@@ -19,7 +19,7 @@ def build_output(rolls, modifier):
 
 @pinhook.plugin.register('!roll')
 def roll(msg):
-    matches = dicepatern.match(msg.arg)
+    matches = dicepattern.match(msg.arg)
     if matches:
         msg.logger.info('Valid dice roll: {}'.format(msg.arg))
         rolls = [random.randrange(1, int(matches.group('sides'))+1) for i in range(int(matches.group('amount')))]
