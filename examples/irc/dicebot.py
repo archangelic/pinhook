@@ -1,4 +1,9 @@
 import pinhook.bot
 
-ph = pinhook.bot.Bot(['#dicechannel'],  'dicebot', 'irc.freenode.net, ops=['archangelic'])
+ph = pinhook.bot.Bot(
+    channels=['#dicechannel'],
+    nickname='dicebot',
+    server='irc.freenode.net',
+    ops=['archangelic']
+)
 ph.start()
