@@ -154,7 +154,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.quit("See y'all later!")
             quit()
         elif cmd == '!help':
-            helplist = sorted([i for i in self.cmds])
+            helplist = sorted([i for i in pinhook.plugin.cmds])
             msg = ', '.join(helplist)
             c.privmsg(chan, 'Available commands: {}'.format(msg))
         elif cmd == '!reload' and nick in self.ops:
