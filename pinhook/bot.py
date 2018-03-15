@@ -105,9 +105,9 @@ class Bot(irc.bot.SingleServerIRCBot):
                     self.logger.exception('could not load plugin')
         # gather all commands and listeners
         for cmd in pinhook.plugin.cmds:
-            self.logger.debug('adding command {}'.format(cmd['cmd']))
+            self.logger.debug('adding command {}'.format(cmd))
         for lstnr in pinhook.plugin.lstnrs:
-            self.logger.debug('adding listener {}'.format(lstnr['lstn']))
+            self.logger.debug('adding listener {}'.format(lstnr))
 
     def on_welcome(self, c, e):
         if self.ns_pass:
