@@ -1,5 +1,5 @@
-cmds = []
-lstnrs = []
+cmds = {}
+lstnrs = {}
 
 
 class Output:
@@ -22,8 +22,12 @@ def message(msg):
     return Output('message', msg)
 
 
-def add_plugin(command, func):
-    cmds.append({'cmd': command, 'func': func})
+def _add_plugin(command, func):
+    cmds[command] = func
+
+
+def _add_listener(name, func):
+    lstnrs[name] = func
 
 
 def clear_plugins():
@@ -31,19 +35,15 @@ def clear_plugins():
     lstnrs.clear()
 
 
-def add_listener(name, func):
-    lstnrs.append({'lstn': name, 'func': func})
-
-
 def register(command):
     def register_for_command(func):
-        add_plugin(command, func)
+        _add_plugin(command, func)
         return func
     return register_for_command
 
 
 def listener(name):
     def register_as_listener(func):
-        add_listener(name, func)
+        _add_listener(name, func)
         return func
     return register_as_listener

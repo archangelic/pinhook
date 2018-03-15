@@ -23,7 +23,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.bot_nick = nickname
         self.start_logging(self.log_level)
         self.load_plugins()
-        
+
     class Message:
         def __init__(self, channel, nick, botnick, ops, logger, cmd=None, arg=None, text=None, nick_list=None):
             self.channel = channel
@@ -104,14 +104,10 @@ class Bot(irc.bot.SingleServerIRCBot):
                 except Exception as e:
                     self.logger.exception('could not load plugin')
         # gather all commands and listeners
-        self.cmds = {}
-        self.lstnrs = {}
         for cmd in pinhook.plugin.cmds:
             self.logger.debug('adding command {}'.format(cmd['cmd']))
-            self.cmds[cmd['cmd']] = cmd['func']
         for lstnr in pinhook.plugin.lstnrs:
             self.logger.debug('adding listener {}'.format(lstnr['lstn']))
-            self.lstnrs[lstnr['lstn']] = lstnr['func']
 
     def on_welcome(self, c, e):
         if self.ns_pass:
@@ -165,9 +161,9 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.logger.info('reloading plugins per request of {}'.format(nick))
             self.load_plugins()
             c.privmsg(chan, 'Plugins reloaded')
-        elif cmd in self.cmds:
+        elif cmd in pinhook.plugin.cmds:
             try:
-                output = self.cmds[cmd](self.Message(
+                output = pinhook.plugin.cmds[cmd](self.Message(
                     channel=chan,
                     cmd=cmd,
                     nick_list=list(self.channels[chan].users()),
@@ -182,9 +178,9 @@ class Bot(irc.bot.SingleServerIRCBot):
             except Exception as e:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
-            for lstnr in self.lstnrs:
+            for lstnr in pinhook.plugin.lstnrs:
                 try:
-                    output = self.lstnrs[lstnr](self.Message(
+                    output = pinhook.plugin.lstnrs[lstnr](self.Message(
                         channel=chan,
                         text=text,
                         nick_list=list(self.channels[chan].users()),
