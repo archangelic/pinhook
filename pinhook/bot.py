@@ -213,7 +213,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'nick_list': nick_list,
                 'arg': arg
             }
-            output = call_plugins(plugin_info**)
+            output = call_plugins(**plugin_info)
         if output:
             process_output(c, chan, output)
 
