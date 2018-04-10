@@ -131,8 +131,10 @@ class Bot(irc.bot.SingleServerIRCBot):
         text = e.arguments[0]
         if e.target == self.bot_nick:
             chan = nick
+            nick_list = [nick]
         else:
             chan = e.target
+            nick_list = list(self.channels[chan].users())
         if e.type == 'action':
             cmd = ''
         else:
@@ -166,7 +168,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 output = pinhook.plugin.cmds[cmd](self.Message(
                     channel=chan,
                     cmd=cmd,
-                    nick_list=list(self.channels[chan].users()),
+                    nick_list=nick_list,
                     nick=nick,
                     arg=arg,
                     botnick=self.bot_nick,
@@ -183,7 +185,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     output = pinhook.plugin.lstnrs[lstnr](self.Message(
                         channel=chan,
                         text=text,
-                        nick_list=list(self.channels[chan].users()),
+                        nick_list=nick_list,
                         nick=nick,
                         botnick=self.bot_nick,
                         ops=self.ops,
