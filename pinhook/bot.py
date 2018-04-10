@@ -22,6 +22,8 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.chanlist = channels
         self.bot_nick = nickname
         self.start_logging(self.log_level)
+        self.output_message = pinhook.plugin.message
+        self.output_action = pinhook.plugin.action
         self.load_plugins()
 
     class Message:
@@ -118,15 +120,71 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.join(channel)
 
     def on_pubmsg(self, c, e):
-        self.process_command(c, e)
+        self.process_event(c, e)
 
     def on_privmsg(self, c, e):
-        self.process_command(c, e)
+        self.process_event(c, e)
 
     def on_action(self, c, e):
-        self.process_command(c, e)
+        self.process_event(c, e)
 
-    def process_command(self, c, e):
+    def call_internal_commands(channel, nick, cmd, text, arg, c):
+        output = None
+        if nick in self.ops:
+            op = True
+        else:
+            op = False
+        if cmd == '!join' and op:
+            c.join(arg)
+            self.logger.info('joining {} per request of {}'.format(arg, nick))
+            output = self.output_message('{}: joined {}'.format(nick, arg))
+        elif cmd == '!quit' and op:
+            self.logger.info('quitting per request of {}'.format(nick))
+            c.quit("See y'all later!")
+            quit()
+        elif cmd == '!help':
+            helplist = sorted([i for i in pinhook.plugin.cmds])
+            msg = ', '.join(helplist)
+            output = self.output_message('Available commands: {}'.format(msg))
+        elif cmd == '!reload' and op:
+            self.logger.info('reloading plugins per request of {}'.format(nick))
+            self.load_plugins()
+            output = self.output_message('Plugins reloaded')
+        return output
+
+    def call_plugins(chan, cmd, text, nick_list, arg):
+        output = None
+        if cmd in pinhook.plugin.cmds:
+            try:
+                output = pinhook.plugin.cmds[cmd](self.Message(
+                    channel=chan,
+                    cmd=cmd,
+                    nick_list=nick_list,
+                    nick=nick,
+                    arg=arg,
+                    botnick=self.bot_nick,
+                    ops=self.ops,
+                    logger=self.logger
+                ))
+            except Exception as e:
+                self.logger.exception('issue with command {}'.format(cmd))
+        else:
+            for lstnr in pinhook.plugin.listnrs:
+                try:
+                    output = pinhook.plugin.lstnrs[lstnr](self.Message(
+                        channel=chan,
+                        text=text,
+                        nick_list=nick_list,
+                        nick=nick,
+                        botnick=self.bot_nick,
+                        ops=self.ops,
+                        logger=self.logger
+                    ))
+                except Exception as e:
+                    self.logger.exception('issue with listener {}'.format(lstnr))
+        return output
+
+    def process_event(self, c, e):
         nick = e.source.nick
         text = e.arguments[0]
         if e.target == self.bot_nick:
@@ -146,55 +204,18 @@ class Bot(irc.bot.SingleServerIRCBot):
             arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
         else:
             arg = ''
-        output = None
-        if cmd == '!join' and nick in self.ops:
-            self.logger.info('joining {} per request of {}'.format(arg, nick))
-            c.join(arg)
-            c.privmsg(chan, '{}: joined {}'.format(nick, arg))
-        elif cmd == '!quit' and nick in self.ops:
-            self.logger.info('quitting per request of {}'.format(nick))
-            c.quit("See y'all later!")
-            quit()
-        elif cmd == '!help':
-            helplist = sorted([i for i in pinhook.plugin.cmds])
-            msg = ', '.join(helplist)
-            c.privmsg(chan, 'Available commands: {}'.format(msg))
-        elif cmd == '!reload' and nick in self.ops:
-            self.logger.info('reloading plugins per request of {}'.format(nick))
-            self.load_plugins()
-            c.privmsg(chan, 'Plugins reloaded')
-        elif cmd in pinhook.plugin.cmds:
-            try:
-                output = pinhook.plugin.cmds[cmd](self.Message(
-                    channel=chan,
-                    cmd=cmd,
-                    nick_list=nick_list,
-                    nick=nick,
-                    arg=arg,
-                    botnick=self.bot_nick,
-                    ops=self.ops,
-                    logger=self.logger
-                ))
-                if output:
-                    self.process_output(c, chan, output)
-            except Exception as e:
-                self.logger.exception('issue with command {}'.format(cmd))
-        else:
-            for lstnr in pinhook.plugin.lstnrs:
-                try:
-                    output = pinhook.plugin.lstnrs[lstnr](self.Message(
-                        channel=chan,
-                        text=text,
-                        nick_list=nick_list,
-                        nick=nick,
-                        botnick=self.bot_nick,
-                        ops=self.ops,
-                        logger=self.logger
-                    ))
-                    if output:
-                        self.process_output(c, chan, output)
-                except Exception as e:
-                    self.logger.exception('issue with listener {}'.format(lstnr))
+        output = call_internal_commands(chan, nick, cmd, text, arg, c)
+        if not output:
+            plugin_info = {
+                'chan': chan,
+                'cmd': cmd,
+                'text': text,
+                'nick_list': nick_list,
+                'arg': arg
+            }
+            output = call_plugins(plugin_info**)
+        if output:
+            process_output(c, chan, output)
 
     def process_output(self, c, chan, output):
         for msg in output.msg:
