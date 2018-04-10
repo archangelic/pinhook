@@ -169,7 +169,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             except Exception as e:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
-            for lstnr in pinhook.plugin.listnrs:
+            for lstnr in pinhook.plugin.lstnrs:
                 try:
                     output = pinhook.plugin.lstnrs[lstnr](self.Message(
                         channel=chan,
