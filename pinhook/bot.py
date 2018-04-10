@@ -152,7 +152,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             output = self.output_message('Plugins reloaded')
         return output
 
-    def call_plugins(self, chan, cmd, text, nick_list, arg):
+    def call_plugins(self, chan, cmd, text, nick_list, nick, arg):
         output = None
         if cmd in pinhook.plugin.cmds:
             try:
