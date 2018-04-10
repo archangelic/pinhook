@@ -128,7 +128,7 @@ class Bot(irc.bot.SingleServerIRCBot):
     def on_action(self, c, e):
         self.process_event(c, e)
 
-    def call_internal_commands(channel, nick, cmd, text, arg, c):
+    def call_internal_commands(self, channel, nick, cmd, text, arg, c):
         output = None
         if nick in self.ops:
             op = True
@@ -152,7 +152,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             output = self.output_message('Plugins reloaded')
         return output
 
-    def call_plugins(chan, cmd, text, nick_list, arg):
+    def call_plugins(self, chan, cmd, text, nick_list, arg):
         output = None
         if cmd in pinhook.plugin.cmds:
             try:
@@ -204,7 +204,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
         else:
             arg = ''
-        output = call_internal_commands(chan, nick, cmd, text, arg, c)
+        output = self.call_internal_commands(chan, nick, cmd, text, arg, c)
         if not output:
             plugin_info = {
                 'chan': chan,
@@ -213,9 +213,9 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'nick_list': nick_list,
                 'arg': arg
             }
-            output = call_plugins(**plugin_info)
+            output = self.call_plugins(**plugin_info)
         if output:
-            process_output(c, chan, output)
+            self.process_output(c, chan, output)
 
     def process_output(self, c, chan, output):
         for msg in output.msg:
