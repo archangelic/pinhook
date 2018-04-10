@@ -211,6 +211,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'cmd': cmd,
                 'text': text,
                 'nick_list': nick_list,
+                'nick': nick,
                 'arg': arg
             }
             output = self.call_plugins(**plugin_info)
