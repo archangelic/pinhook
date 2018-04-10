@@ -203,8 +203,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.logger.debug('output action: {}'.format(msg))
                 c.action(chan, msg)
             time.sleep(.5)
-            
-            
+
+
 class TwitchBot(Bot):
     def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='info', ops=[]):
         self.bot_nick = nickname
@@ -217,7 +217,7 @@ class TwitchBot(Bot):
         self.logger.info('Joining Twitch Server')
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], nickname, nickname)
         self.load_plugins()
-        
+
     def on_welcome(self, c, e):
         self.logger.info('requesting permissions')
         c.cap('REQ', ':twitch.tv/membership')
@@ -225,3 +225,4 @@ class TwitchBot(Bot):
         c.cap('REQ', ':twitch.tv/commands')
         self.logger.info('Joining channel ' + self.channel)
         c.join(self.channel)
+
