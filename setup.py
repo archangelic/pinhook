@@ -21,6 +21,7 @@ AUTHOR = 'M. Hancock'
 # What packages are required for this module to be executed?
 REQUIRED = [
     'irc',
+    'enum34',
 ]
 
 # The rest you shouldn't have to touch too much :)
