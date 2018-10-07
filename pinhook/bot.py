@@ -220,7 +220,9 @@ class Bot(irc.bot.SingleServerIRCBot):
 
     def process_output(self, c, chan, output):
         for msg in output.msg:
-            if output.msg_type == 'message':
+            if len(msg.encode('UTF-8')) > 512:
+                self.logger.error('output message too long: {}'.format(msg))
+            elif output.msg_type == 'message':
                 self.logger.debug('output message: {}'.format(msg))
                 c.privmsg(chan, msg)
             elif output.msg_type == 'action':
