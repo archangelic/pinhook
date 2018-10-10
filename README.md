@@ -1,5 +1,6 @@
 # pinhook
 [![Supported Python versions](https://img.shields.io/pypi/pyversions/pinhook.svg)](https://pypi.org/project/pinhook) [![Package License](https://img.shields.io/pypi/l/pinhook.svg)](https://github.com/archangelic/pinhook/blob/master/LICENSE) [![PyPI package format](https://img.shields.io/pypi/format/pinhook.svg)](https://pypi.org/project/pinhook) [![Package development status](https://img.shields.io/pypi/status/pinhook.svg)](https://pypi.org/project/pinhook) [![With love from tilde.town](https://img.shields.io/badge/with%20love%20from-tilde%20town-e0b0ff.svg)](https://tilde.town)
+
 the pluggable python framework for IRC bots and Twitch bots
 
 ## Tutorial

@@ -2,8 +2,9 @@ pinhook
 =======
 
 |Supported Python versions| |Package License| |PyPI package format|
-|Package development status| |With love from tilde.town| the pluggable
-python framework for IRC bots and Twitch bots
+|Package development status| |With love from tilde.town|
+
+the pluggable python framework for IRC bots and Twitch bots
 
 Tutorial
 --------
