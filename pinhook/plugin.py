@@ -1,5 +1,13 @@
+from enum import Enum
+
+
 cmds = {}
 lstnrs = {}
+
+
+class OutputType(Enum):
+    Message = 'message'
+    Action = 'action'
 
 
 class Output:
@@ -15,11 +23,11 @@ class Output:
 
 
 def action(msg):
-    return Output('action', msg)
+    return Output(OutputType.Action, msg)
 
 
 def message(msg):
-    return Output('message', msg)
+    return Output(OutputType.Message, msg)
 
 
 def _add_plugin(command, func):
