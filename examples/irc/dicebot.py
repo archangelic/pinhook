@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from pinhook.bot import Bot
 
 ph = Bot(
