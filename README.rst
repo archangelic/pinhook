@@ -1,7 +1,9 @@
 pinhook
 =======
 
-the pluggable python framework for IRC bots and Twitch bots
+|Supported Python versions| |Package License| |PyPI package format|
+|Package development status| |With love from tilde.town| the pluggable
+python framework for IRC bots and Twitch bots
 
 Tutorial
 --------
@@ -11,7 +13,7 @@ Installation
 
 ::
 
-    $ pip install pinhook
+   $ pip install pinhook
 
 Creating an IRC Bot
 ~~~~~~~~~~~~~~~~~~~
@@ -20,14 +22,14 @@ To create the bot, just create a python file with the following:
 
 .. code:: python
 
-    from pinhook.bot import Bot
+   from pinhook.bot import Bot
 
-    bot = Bot(
-        channels=['#foo', '#bar'],
-        nickname='ph-bot',
-        server='irc.freenode.net'
-    )
-    bot.start()
+   bot = Bot(
+       channels=['#foo', '#bar'],
+       nickname='ph-bot',
+       server='irc.freenode.net'
+   )
+   bot.start()
 
 This will start a basic bot and look for plugins in the 'plugins'
 directory to add functionality.
@@ -53,14 +55,14 @@ Pinhook has a baked in way to connect directly to a twitch channel
 
 .. code:: python
 
-    from pinhook.bot import TwitchBot
+   from pinhook.bot import TwitchBot
 
-    bot = TwitchBot(
-        nickname='ph-bot',
-        channel='#channel',
-        token='super-secret-oauth-token'
-    )
-    bot.start()
+   bot = TwitchBot(
+       nickname='ph-bot',
+       channel='#channel',
+       token='super-secret-oauth-token'
+   )
+   bot.start()
 
 This function has far less options, as the server, port, and ssl are
 already handled by twitch.
@@ -84,12 +86,12 @@ The function will need to be structured as such:
 
 .. code:: python
 
-    import pinhook.plugin
+   import pinhook.plugin
 
-    @pinhook.plugin.register('!test')
-    def test_plugin(msg):
-        message = '{}: this is a test!'.format(msg.nick)
-        return pinhook.plugin.message(message)
+   @pinhook.plugin.register('!test')
+   def test_plugin(msg):
+       message = '{}: this is a test!'.format(msg.nick)
+       return pinhook.plugin.message(message)
 
 The function will need to accept a single argument in order to accept a
 ``Message`` object from the bot.
@@ -121,3 +123,14 @@ repository.
 
 For a live and maintained bot running the current version of pinhook see
 `pinhook-tilde <https://github.com/archangelic/pinhook-tilde>`__.
+
+.. |Supported Python versions| image:: https://img.shields.io/pypi/pyversions/pinhook.svg
+   :target: https://pypi.org/project/pinhook
+.. |Package License| image:: https://img.shields.io/pypi/l/pinhook.svg
+   :target: https://github.com/archangelic/pinhook/blob/master/LICENSE
+.. |PyPI package format| image:: https://img.shields.io/pypi/format/pinhook.svg
+   :target: https://pypi.org/project/pinhook
+.. |Package development status| image:: https://img.shields.io/pypi/status/pinhook.svg
+   :target: https://pypi.org/project/pinhook
+.. |With love from tilde.town| image:: https://img.shields.io/badge/with%20love%20from-tilde%20town-e0b0ff.svg
+   :target: https://tilde.town
