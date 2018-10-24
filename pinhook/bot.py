@@ -27,13 +27,16 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.load_plugins()
 
     class Message:
-        def __init__(self, channel, nick, botnick, ops, logger, cmd=None, arg=None, text=None, nick_list=None):
+        def __init__(self, channel, nick, botnick, ops, logger, action, privmsg, notice, cmd=None, arg=None, text=None, nick_list=None):
             self.channel = channel
             self.nick = nick
             self.nick_list = nick_list
             self.botnick = botnick
             self.ops = ops
             self.logger = logger
+            self.action = action
+            self.privmsg = privmsg
+            self.notice = notice
             if cmd:
                 self.cmd = cmd
                 self.arg = arg
@@ -128,6 +131,11 @@ class Bot(irc.bot.SingleServerIRCBot):
     def on_action(self, c, e):
         self.process_event(c, e)
 
+    def call_help(self):
+        helplist = sorted([i for i in pinhook.plugin.cmds])
+        msg = ', '.join(helplist)
+        return self.output_message('Available commands: {}'.format(msg))
+
     def call_internal_commands(self, channel, nick, cmd, text, arg, c):
         output = None
         if nick in self.ops:
@@ -143,16 +151,14 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.quit("See y'all later!")
             quit()
         elif cmd == '!help':
-            helplist = sorted([i for i in pinhook.plugin.cmds])
-            msg = ', '.join(helplist)
-            output = self.output_message('Available commands: {}'.format(msg))
+            output = self.call_help()
         elif cmd == '!reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             self.load_plugins()
             output = self.output_message('Plugins reloaded')
         return output
 
-    def call_plugins(self, chan, cmd, text, nick_list, nick, arg):
+    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, arg):
         output = None
         if cmd in pinhook.plugin.cmds:
             try:
@@ -162,6 +168,9 @@ class Bot(irc.bot.SingleServerIRCBot):
                     nick_list=nick_list,
                     nick=nick,
                     arg=arg,
+                    privmsg=privmsg,
+                    action=action,
+                    notice=notice,
                     botnick=self.bot_nick,
                     ops=self.ops,
                     logger=self.logger
@@ -176,6 +185,9 @@ class Bot(irc.bot.SingleServerIRCBot):
                         text=text,
                         nick_list=nick_list,
                         nick=nick,
+                        privmsg=privmsg,
+                        action=action,
+                        notice=notice,
                         botnick=self.bot_nick,
                         ops=self.ops,
                         logger=self.logger
@@ -212,7 +224,10 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'text': text,
                 'nick_list': nick_list,
                 'nick': nick,
-                'arg': arg
+                'arg': arg,
+                'privmsg': c.privmsg,
+                'action': c.action,
+                'notice': c.notice,
             }
             output = self.call_plugins(**plugin_info)
         if output:
