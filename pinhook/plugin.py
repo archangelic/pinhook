@@ -30,8 +30,11 @@ def message(msg):
     return Output(OutputType.Message, msg)
 
 
-def _add_plugin(command, func):
-    cmds[command] = func
+def _add_plugin(command, help_text, func):
+    cmds[command] = {
+        'run': func,
+        'help': help_text
+    }
 
 
 def _add_listener(name, func):
@@ -43,9 +46,9 @@ def clear_plugins():
     lstnrs.clear()
 
 
-def register(command):
+def register(command, help_text=None):
     def register_for_command(func):
-        _add_plugin(command, func)
+        _add_plugin(command, help_text, func)
         return func
     return register_for_command
 
