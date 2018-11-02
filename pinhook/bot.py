@@ -162,7 +162,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         output = None
         if cmd in pinhook.plugin.cmds:
             try:
-                output = pinhook.plugin.cmds[cmd](self.Message(
+                output = pinhook.plugin.cmds[cmd]['run'](self.Message(
                     channel=chan,
                     cmd=cmd,
                     nick_list=nick_list,
