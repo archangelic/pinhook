@@ -57,7 +57,9 @@ Optional aguments are:
 These options are the same for both IRC and Twitch
 
 ### Creating plugins
-In your chosen plugins directory ("plugins" by default) make a python file with a function. You can use the `@pinhook.plugin.register` decorator to tell the bot the command to activate the function.
+There are two types of plugins, commands and listeners. Commands only activate if a message starts with the command word, while listeners receive all messages and are parsed by the plugin for maximum flexibility.
+
+In your chosen plugins directory ("plugins" by default) make a python file with a function. You use the `@pinhook.plugin.register` decorator to create command plugins, or `@pinhook.plugin.listener` to create listeners.
 
 The function will need to be structured as such:
 ```python
@@ -94,4 +96,6 @@ The plugin function can return one of the following in order to give a response 
 ## Examples
 There are some basic examples in the `examples` directory in this repository.
 
-For a live and maintained bot running the current version of pinhook see [pinhook-tilde](https://github.com/archangelic/pinhook-tilde).
+Here is a list of live bots using pinhook:
+* [pinhook-tilde](https://github.com/archangelic/pinhook-tilde) - fun bot for tilde.town
+* [adminbot](https://github.com/tildetown/adminbot) - admin helper bot for tilde.town, featuring some of the ways you can change the Bot class to suit your needs
