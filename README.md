@@ -80,7 +80,14 @@ The `Message` object has the following attributes:
 * `botnick`: the nickname of the bot
 * `logger`: instance of `Bot`'s logger
 
-The plugin function **must** return one of the following in order to give a response to the command:
+It also contains the following IRC functions:
+* `privmsg`: send a message to an arbitrary channel or user
+* `action`: same as privmsg, but does a CTCP action. (i.e., `/me does a thing`)
+* `notice`: send a notice
+
+**OR**
+
+The plugin function can return one of the following in order to give a response to the command:
 * `pinhook.plugin.message`: basic message in channel where command was triggered
 * `pinhook.plugin.action`: CTCP action in the channel where command was triggered (basically like using `/me does a thing`)
 
