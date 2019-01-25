@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import imp
 import logging
 import os
@@ -28,6 +29,8 @@ class Bot(irc.bot.SingleServerIRCBot):
 
     class Message:
         def __init__(self, channel, nick, botnick, ops, logger, action, privmsg, notice, cmd=None, arg=None, text=None, nick_list=None):
+            self.datetime = datetime.now(timezone.utc)
+            self.timestamp = self.datetime.timestamp()
             self.channel = channel
             self.nick = nick
             self.nick_list = nick_list

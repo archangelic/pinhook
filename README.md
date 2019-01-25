@@ -74,13 +74,16 @@ def test_plugin(msg):
 The function will need to accept a single argument in order to accept a `Message` object from the bot.
 
 The `Message` object has the following attributes:
-* `cmd`: the command that triggered the function
+* `cmd`: (for command plugins) the command that triggered the function
 * `nick`: the user who triggered the command
-* `arg`: all the trailing text after the command. This is what you will use to get optional information for the command
+* `arg`: (for command plugins) all the trailing text after the command. This is what you will use to get optional information for the command
+* `text`: (for listener plugins) the entire text of the message
 * `channel`: the channel where the command was initiated
 * `ops`: the list of bot operators
 * `botnick`: the nickname of the bot
 * `logger`: instance of `Bot`'s logger
+* `datetime`: aware `datetime.datetime` object when the `Message` object was created
+* `timestamp`: float for the unix timestamp when the `Message` object was created
 
 It also contains the following IRC functions:
 * `privmsg`: send a message to an arbitrary channel or user
