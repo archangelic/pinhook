@@ -90,6 +90,17 @@ It also contains the following IRC functions:
 * `action`: same as privmsg, but does a CTCP action. (i.e., `/me does a thing`)
 * `notice`: send a notice
 
+You can optionally use the `@pinhook.plugin.ops` decorator to denote that a command should only be executable by a bot op.
+* If you specify the optional second argument, it will be displayed when a  non-op attempts to execute the command
+
+The function will need to be structured as such:
+```python
+@pinhook.plugin.register('!test')
+@pinhook.plugin.ops('!test', 'Only ops can run this command!')
+def test_plugin(msg):
+    return pinhook.plugin.message('This was run by an op!')
+```
+
 **OR**
 
 The plugin function can return one of the following in order to give a response to the command:

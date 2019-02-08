@@ -11,7 +11,6 @@ import irc.bot
 
 irc.client.ServerConnection.buffer_class.errors = 'replace'
 
-print('LOADED LOCAL!')
 
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
@@ -136,7 +135,6 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.process_event(c, e)
 
     def call_help(self, op):
-        print('HELP', pinhook.plugin.cmds)
         helplist = sorted([i for i in pinhook.plugin.cmds if op or not ('ops' in pinhook.plugin.cmds[i] and pinhook.plugin.cmds[i]['ops'])])
         msg = ', '.join(helplist)
         return self.output_message('Available commands: {}'.format(msg))
