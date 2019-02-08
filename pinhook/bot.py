@@ -237,6 +237,8 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.process_output(c, chan, output)
 
     def process_output(self, c, chan, output):
+        if not output.msg:
+            return
         for msg in output.msg:
             if len(msg.encode('UTF-8')) > 512:
                 self.logger.error('output message too long: {}'.format(msg))
