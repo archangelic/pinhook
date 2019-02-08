@@ -1,4 +1,5 @@
 from enum import Enum
+from functools import wraps
 
 
 cmds = {}
@@ -31,10 +32,20 @@ def message(msg):
 
 
 def _add_plugin(command, help_text, func):
-    cmds[command] = {
+    if command not in cmds:
+        cmds[command] = {}
+    cmds[command].update({
         'run': func,
         'help': help_text
-    }
+    })
+
+def _ops_plugin(command, ops_msg, func):
+    if command not in cmds:
+        cmds[command] = {}
+    cmds[command].update({
+        'ops': True,
+        'ops_msg': ops_msg,
+    })
 
 
 def _add_listener(name, func):
@@ -47,6 +58,7 @@ def clear_plugins():
 
 
 def register(command, help_text=None):
+    @wraps(command)
     def register_for_command(func):
         _add_plugin(command, help_text, func)
         return func
@@ -58,3 +70,10 @@ def listener(name):
         _add_listener(name, func)
         return func
     return register_as_listener
+
+def ops(command, msg=None):
+    @wraps(command)
+    def register_ops_command(func):
+        _ops_plugin(command, msg, func)
+        return func
+    return register_ops_command
