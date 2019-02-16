@@ -14,7 +14,16 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
-        self.set_kwargs(**kwargs)
+        self.port = kwargs.get('port', 6667)
+        self.ops = kwargs.get('ops', [])
+        self.plugin_dir = kwargs.get('plugin_dir', 'plugins')
+        self.ssl_required = kwargs.get('ssl_required', False)
+        self.ns_pass = kwargs.get('ns_pass', None)
+        self.nickserv = kwargs.get('nickserv', 'NickServ')
+        self.log_level = kwargs.get('log_level', 'info')
+        self.server_pass = kwargs.get('server_pass', None)
+        self.cmd_prefix = kwargs.get('cmd_prefix', '!')
+        self.use_prefix_for_plugins('use_prefix_for_plugins', False)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
@@ -47,23 +56,6 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.text = text
             if not (cmd or text):
                 raise TypeError('missing cmd or text parameter')
-
-    def set_kwargs(self, **kwargs):
-        kwarguments = {
-            'port': 6667,
-            'ops': [],
-            'plugin_dir': 'plugins',
-            'ssl_required': False,
-            'ns_pass': None,
-            'nickserv': 'NickServ',
-            'log_level': 'info',
-            'server_pass': None,
-        }
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-        for a in kwarguments:
-            if a not in kwargs:
-                setattr(self, a, kwarguments[a])
 
     def start_logging(self, level):
         if level == 'error':
@@ -112,6 +104,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                 except Exception as e:
                     self.logger.exception('could not load plugin')
         # gather all commands and listeners
+        if self.use_prefix_for_plugins: # use prefixes if needed
+            pinhook.plugin.cmds = {self.cmd_prefix + k: v for k,v in pinhook.plugin.cmds.items()}
         for cmd in pinhook.plugin.cmds:
             self.logger.debug('adding command {}'.format(cmd))
         for lstnr in pinhook.plugin.lstnrs:
@@ -145,17 +139,17 @@ class Bot(irc.bot.SingleServerIRCBot):
             op = True
         else:
             op = False
-        if cmd == '!join' and op:
+        if cmd == self.cmd_prefix + 'join' and op:
             c.join(*arg.split())
             self.logger.info('joining {} per request of {}'.format(arg, nick))
             output = self.output_message('{}: joined {}'.format(nick, arg.split()[0]))
-        elif cmd == '!quit' and op:
+        elif cmd == self.cmd_prefix + 'quit' and op:
             self.logger.info('quitting per request of {}'.format(nick))
             c.quit("See y'all later!")
             quit()
-        elif cmd == '!help':
+        elif cmd == self.cmd_prefix + 'help':
             output = self.call_help()
-        elif cmd == '!reload' and op:
+        elif cmd == self.cmd_prefix + 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             self.load_plugins()
             output = self.output_message('Plugins reloaded')
