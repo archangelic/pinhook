@@ -128,8 +128,8 @@ class Bot(irc.bot.SingleServerIRCBot):
     def on_action(self, c, e):
         self.process_event(c, e)
 
-    def call_help(self):
-        helplist = sorted([i for i in pinhook.plugin.cmds])
+    def call_help(self, op):
+        helplist = sorted([i for i in pinhook.plugin.cmds if op or not ('ops' in pinhook.plugin.cmds[i] and pinhook.plugin.cmds[i]['ops'])])
         msg = ', '.join(helplist)
         return self.output_message('Available commands: {}'.format(msg))
 
@@ -159,19 +159,23 @@ class Bot(irc.bot.SingleServerIRCBot):
         output = None
         if cmd in pinhook.plugin.cmds:
             try:
-                output = pinhook.plugin.cmds[cmd]['run'](self.Message(
-                    channel=chan,
-                    cmd=cmd,
-                    nick_list=nick_list,
-                    nick=nick,
-                    arg=arg,
-                    privmsg=privmsg,
-                    action=action,
-                    notice=notice,
-                    botnick=self.bot_nick,
-                    ops=self.ops,
-                    logger=self.logger
-                ))
+                if 'ops' in pinhook.plugin.cmds[cmd] and nick not in self.ops:
+                    if pinhook.plugin.cmds[cmd]['ops_msg']:
+                        output =  self.output_message(pinhook.plugin.cmds[cmd]['ops_msg'])
+                else:
+                    output = pinhook.plugin.cmds[cmd]['run'](self.Message(
+                        channel=chan,
+                        cmd=cmd,
+                        nick_list=nick_list,
+                        nick=nick,
+                        arg=arg,
+                        privmsg=privmsg,
+                        action=action,
+                        notice=notice,
+                        botnick=self.bot_nick,
+                        ops=self.ops,
+                        logger=self.logger
+                    ))
             except Exception as e:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
