@@ -148,7 +148,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.quit("See y'all later!")
             quit()
         elif cmd == self.cmd_prefix + 'help':
-            output = self.call_help()
+            output = self.call_help(op)
         elif cmd == self.cmd_prefix + 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             self.load_plugins()
