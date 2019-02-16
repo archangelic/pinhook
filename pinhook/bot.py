@@ -23,7 +23,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.log_level = kwargs.get('log_level', 'info')
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
-        self.use_prefix_for_plugins('use_prefix_for_plugins', False)
+        self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
