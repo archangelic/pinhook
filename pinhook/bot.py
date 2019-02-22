@@ -163,7 +163,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     if pinhook.plugin.cmds[cmd]['ops_msg']:
                         output =  self.output_message(pinhook.plugin.cmds[cmd]['ops_msg'])
                 else:
-                    logger.debug('executing {}'.format(cmd))
+                    self.logger.debug('executing {}'.format(cmd))
                     output = pinhook.plugin.cmds[cmd]['run'](self.Message(
                         channel=chan,
                         cmd=cmd,
@@ -177,13 +177,13 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger
                     ))
-                    logger.debug(output)
+                    self.logger.debug(output)
             except Exception as e:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
             for lstnr in pinhook.plugin.lstnrs:
                 try:
-                    logger.debug('whispering to listener: {}'.format(lstnr))
+                    self.logger.debug('whispering to listener: {}'.format(lstnr))
                     output = pinhook.plugin.lstnrs[lstnr](self.Message(
                         channel=chan,
                         text=text,
@@ -196,7 +196,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger
                     ))
-                    logger.debug(output)
+                    self.logger.debug(output)
                 except Exception as e:
                     self.logger.exception('issue with listener {}'.format(lstnr))
         return output
