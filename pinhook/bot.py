@@ -196,9 +196,9 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger
                     ))
-                    self.logger.debug(output.msg_type)
-                    self.logger.debug(output.msg_type == pinhook.plugin.OutputType.Action)
-                    self.logger.debug(output.msg)
+                    self.logger.debug(listen_output.msg_type)
+                    self.logger.debug(listen_output.msg_type == pinhook.plugin.OutputType.Action)
+                    self.logger.debug(listen_output.msg)
                     if listen_output:
                         output = listen_output
                 except Exception as e:
