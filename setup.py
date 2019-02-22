@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Note: To use the 'upload' functionality of this file, you must:
@@ -73,7 +73,7 @@ class UploadCommand(Command):
 # Where the magic happens:
 setup(
     name=NAME,
-    version='1.6.0',
+    version='1.6.1',
     description=DESCRIPTION,
     long_description=long_description,
     long_description_content_type='text/markdown',
