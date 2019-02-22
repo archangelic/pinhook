@@ -177,7 +177,6 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger
                     ))
-                    self.logger.debug(output)
             except Exception as e:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
@@ -196,7 +195,6 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger
                     ))
-                    self.logger.debug(listen_output.msg)
                     if listen_output:
                         output = listen_output
                 except Exception as e:
