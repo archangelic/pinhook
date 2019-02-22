@@ -196,7 +196,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger
                     ))
-                    self.logger.debug(output.event_type)
+                    self.logger.debug(output.msg_type)
                     self.logger.debug(output.msg)
                 except Exception as e:
                     self.logger.exception('issue with listener {}'.format(lstnr))
