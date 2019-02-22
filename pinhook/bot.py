@@ -201,7 +201,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                         output = listen_output
                 except Exception as e:
                     self.logger.exception('issue with listener {}'.format(lstnr))
-        self.logger.debug(f'returning output: {output.msg}')
+        if output:
+            self.logger.debug(f'returning output: {output.msg}')
         return output
 
     def process_event(self, c, e):
