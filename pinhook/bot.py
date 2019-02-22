@@ -184,7 +184,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             for lstnr in pinhook.plugin.lstnrs:
                 try:
                     self.logger.debug('whispering to listener: {}'.format(lstnr))
-                    output = pinhook.plugin.lstnrs[lstnr](self.Message(
+                    listen_output = pinhook.plugin.lstnrs[lstnr](self.Message(
                         channel=chan,
                         text=text,
                         nick_list=nick_list,
@@ -199,6 +199,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                     self.logger.debug(output.msg_type)
                     self.logger.debug(output.msg_type == pinhook.plugin.OutputType.Action)
                     self.logger.debug(output.msg)
+                    if listen_output:
+                        output = listen_output
                 except Exception as e:
                     self.logger.exception('issue with listener {}'.format(lstnr))
         self.logger.debug(f'returning output: {output.msg}')
