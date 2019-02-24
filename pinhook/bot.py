@@ -114,6 +114,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     if name in self.whitelist and name not in self.blacklist:
                         pass
                     if name in self.blacklist and name not in self.whitelist:
+                        self.logger.info('not loading blacklisted plugin {}'.format(name))
                         continue
                     if name not in self.whitelist and name not in self.blacklist:
                         self.whitelist.append(name)
