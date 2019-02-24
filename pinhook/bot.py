@@ -14,7 +14,6 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
-        print('local bot initialized')
         self.set_kwargs(**kwargs)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
