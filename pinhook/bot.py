@@ -37,7 +37,8 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.load_plugins()
 
     class Message:
-        def __init__(self, channel, nick, botnick, ops, logger, action, privmsg, notice, cmd=None, arg=None, text=None, nick_list=None):
+        def __init__(self, bot, channel, nick, botnick, ops, logger, action, privmsg, notice, cmd=None, arg=None, text=None, nick_list=None):
+            self.bot = bot
             self.datetime = datetime.now(timezone.utc)
             self.timestamp = self.datetime.timestamp()
             self.channel = channel
@@ -165,6 +166,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 else:
                     self.logger.debug('executing {}'.format(cmd))
                     output = pinhook.plugin.cmds[cmd]['run'](self.Message(
+                        bot=self,
                         channel=chan,
                         cmd=cmd,
                         nick_list=nick_list,
@@ -184,6 +186,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 try:
                     self.logger.debug('whispering to listener: {}'.format(lstnr))
                     listen_output = pinhook.plugin.lstnrs[lstnr](self.Message(
+                        bot=self,
                         channel=chan,
                         text=text,
                         nick_list=nick_list,
