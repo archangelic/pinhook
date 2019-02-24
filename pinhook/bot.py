@@ -14,6 +14,7 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
+        print('local bot initialized')
         self.set_kwargs(**kwargs)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
@@ -25,6 +26,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.start_logging(self.log_level)
         self.output_message = pinhook.plugin.message
         self.output_action = pinhook.plugin.action
+        self.plugins = []
         self.load_plugins()
 
     class Message:
@@ -58,6 +60,8 @@ class Bot(irc.bot.SingleServerIRCBot):
             'nickserv': 'NickServ',
             'log_level': 'info',
             'server_pass': None,
+            'whitelist': [],
+            'blacklist': [],
         }
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -106,6 +110,13 @@ class Bot(irc.bot.SingleServerIRCBot):
             if m.endswith('.py'):
                 try:
                     name = m[:-3]
+                    self.plugins.append(name)
+                    if name in self.whitelist and name not in self.blacklist:
+                        pass
+                    if name in self.blacklist and name not in self.whitelist:
+                        continue
+                    if name not in self.whitelist and name not in self.blacklist:
+                        self.whitelist.append(name)
                     self.logger.info('loading plugin {}'.format(name))
                     fp, pathname, description = imp.find_module(name, [self.plugin_dir])
                     imp.load_module(name, fp, pathname, description)
@@ -139,6 +150,32 @@ class Bot(irc.bot.SingleServerIRCBot):
         msg = ', '.join(helplist)
         return self.output_message('Available commands: {}'.format(msg))
 
+    def select_plugins(self, activate, arg):
+        args = arg.split()
+        if activate:
+            if (args):
+                for a in args:
+                    if a not in self.plugins:
+                        continue
+                    if a in self.blacklist:
+                        self.blacklist.remove(a)
+                    if a not in self.whitelist:
+                        self.whitelist.append(a)
+                self.load_plugins()
+            return self.output_message("Active plugins: {}".format(', '.join(self.whitelist)))
+        else:
+            if (args):
+                for a in args:
+                    if a not in self.plugins:
+                        continue
+                    if a in self.whitelist:
+                        self.whitelist.remove(a)
+                    if a not in self.blacklist:
+                        self.blacklist.append(a)
+                self.load_plugins()
+            return self.output_message("Inactive plugins: {}".format(', '.join(self.blacklist)))
+
+
     def call_internal_commands(self, channel, nick, cmd, text, arg, c):
         output = None
         if nick in self.ops:
@@ -155,6 +192,10 @@ class Bot(irc.bot.SingleServerIRCBot):
             quit()
         elif cmd == '!help':
             output = self.call_help()
+        elif cmd == '!whitelist' and op:
+            output = self.select_plugins(True, arg)
+        elif cmd == '!blacklist' and op:
+            output = self.select_plugins(False, arg)
         elif cmd == '!reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             self.load_plugins()
