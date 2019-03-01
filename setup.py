@@ -17,6 +17,7 @@ DESCRIPTION = 'a pluggable irc bot framework in python'
 URL = 'https://github.com/archangelic/pinhook'
 EMAIL = 'mhancock@archangelic.space'
 AUTHOR = 'M. Hancock'
+VERSION = None
 
 # What packages are required for this module to be executed?
 REQUIRED = [
@@ -35,6 +36,15 @@ here = os.path.abspath(os.path.dirname(__file__))
 # Note: this will only work if 'README.rst' is present in your MANIFEST.in file!
 with io.open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = '\n' + f.read()
+
+# Load the package's __version__.py module as a dictionary.
+about = {}
+if not VERSION:
+    project_slug = NAME.lower().replace("-", "_").replace(" ", "_")
+    with open(os.path.join(here, project_slug, '__version__.py')) as f:
+        exec(f.read(), about)
+else:
+    about['__version__'] = VERSION
 
 
 class UploadCommand(Command):
@@ -73,7 +83,7 @@ class UploadCommand(Command):
 # Where the magic happens:
 setup(
     name=NAME,
-    version='1.6.2',
+    version=about['__version__'],
     description=DESCRIPTION,
     long_description=long_description,
     long_description_content_type='text/markdown',
