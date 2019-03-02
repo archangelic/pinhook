@@ -256,9 +256,9 @@ class Bot(irc.bot.SingleServerIRCBot):
                     self.logger.error('output message too long: {}'.format(msg))
             elif output.msg_type == pinhook.plugin.OutputType.Action:
                 self.logger.debug('output action: {}'.format(msg))
-		try:
+                try:
                     c.action(chan, msg)
-		except c.MessageTooLong:
+                except c.MessageTooLong:
                     self.logger.error('output message too long: {}'.format(msg))
             else:
                 self.logger.warning("Unsupported output type '{}'".format(output.msg_type))
