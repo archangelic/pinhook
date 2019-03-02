@@ -248,14 +248,20 @@ class Bot(irc.bot.SingleServerIRCBot):
         if not output.msg:
             return
         for msg in output.msg:
-            if len(msg.encode('UTF-8')) > 512:
-                self.logger.error('output message too long: {}'.format(msg))
-            elif output.msg_type == pinhook.plugin.OutputType.Message:
+            if output.msg_type == pinhook.plugin.OutputType.Message:
                 self.logger.debug('output message: {}'.format(msg))
-                c.privmsg(chan, msg)
+                try:
+                    c.privmsg(chan, msg)
+                except irc.client.MessageTooLong:
+                    self.logger.error('output message too long: {}'.format(msg))
+                    break
             elif output.msg_type == pinhook.plugin.OutputType.Action:
                 self.logger.debug('output action: {}'.format(msg))
-                c.action(chan, msg)
+                try:
+                    c.action(chan, msg)
+                except irc.client.MessageTooLong:
+                    self.logger.error('output message too long: {}'.format(msg))
+                    break
             else:
                 self.logger.warning("Unsupported output type '{}'".format(output.msg_type))
             time.sleep(.5)
