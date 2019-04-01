@@ -143,8 +143,6 @@ The function will need to be structured as such:
     def test_plugin(msg):
         return pinhook.plugin.message('This was run by an op!')
 
-**OR**
-
 The plugin function can return one of the following in order to give a
 response to the command:
 

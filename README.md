@@ -101,8 +101,6 @@ def test_plugin(msg):
     return pinhook.plugin.message('This was run by an op!')
 ```
 
-**OR**
-
 The plugin function can return one of the following in order to give a response to the command:
 * `pinhook.plugin.message`: basic message in channel where command was triggered
 * `pinhook.plugin.action`: CTCP action in the channel where command was triggered (basically like using `/me does a thing`)
