@@ -91,6 +91,10 @@ setup(
     author_email=EMAIL,
     url=URL,
     packages=['pinhook'],
+    entry_points={
+        'console_scripts':
+            ['pinhook=pinhook.cli:cli']
+    },
     install_requires=REQUIRED,
     include_package_data=True,
     license='MIT',
