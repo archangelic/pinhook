@@ -23,6 +23,8 @@ VERSION = None
 REQUIRED = [
     'irc',
     'enum34',
+    'click',
+    'marshmallow',
 ]
 
 # The rest you shouldn't have to touch too much :)
