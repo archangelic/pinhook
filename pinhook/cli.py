@@ -17,7 +17,7 @@ class Config(Schema):
     class Meta:
         unknown = INCLUDE
 
-def read_conf(config):
+def read_conf(config, conf_format):
     schema = Config()
     if not conf_format:
         if config.name.endswith('.json'):
@@ -53,7 +53,7 @@ def read_conf(config):
 @click.command()
 @click.argument('config', type=click.File('rb'))
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml', 'toml']))
-def cli(config):
+def cli(config, conf_format):
     config = read_conf(config, conf_format)
     bot = Bot(**config)
     bot.start()
