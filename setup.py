@@ -27,6 +27,11 @@ REQUIRED = [
     'marshmallow',
 ]
 
+EXTRAS = {
+    'toml': ['toml'],
+    'yaml': ['pyyaml']
+}
+
 # The rest you shouldn't have to touch too much :)
 # ------------------------------------------------
 # Except, perhaps the License and Trove Classifiers!
@@ -98,6 +103,7 @@ setup(
             ['pinhook=pinhook.cli:cli']
     },
     install_requires=REQUIRED,
+    extras_require=EXTRAS,
     include_package_data=True,
     license='MIT',
     classifiers=[

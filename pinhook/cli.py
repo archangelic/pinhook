@@ -1,5 +1,3 @@
-import json
-
 import click
 from .bot import Bot
 from marshmallow import Schema, fields, validate, INCLUDE
@@ -21,17 +19,42 @@ class Config(Schema):
 
 def read_conf(config):
     schema = Config()
-    if config.name.endswith('.json'):
+    if not conf_format:
+        if config.name.endswith('.json'):
+            conf_format = 'json'
+        elif config.name.endswith(('.yaml', '.yml')):
+            conf_format = 'yaml'
+        elif config.name.endswith(('.toml', '.tml')):
+            conf_format = 'toml'
+        else:
+            click.echo('Could not detect file format, please supply using --format option', err=True)
+    if conf_type == 'json':
+        import json
         to_json = json.loads(config.read())
         output = schema.load(to_json)
-        return output
-    else:
-        raise click.BadArgumentUsage("Only json files at this time")
+    elif conf_type == 'yaml':
+        try:
+            import yaml
+        except ImportError:
+            click.echo('yaml not installed, please use `pip3 install pinhook[yaml]` to install', err=True)
+        else:
+            to_yaml = yaml.load(config.read())
+            output = schema.load(to_yaml)
+    elif conf_type = 'toml':
+        try:
+            import toml
+        except ImportError:
+            click.echo('toml not installed, please use `pip3 install pinhook[toml]` to install', err=True)
+        else:
+            to_toml = toml.loads(config.read())
+            output = schema.loads(to_toml)
+    return output
 
 @click.command()
 @click.argument('config', type=click.File('rb'))
+@click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml', 'toml']))
 def cli(config):
-    config = read_conf(config)
+    config = read_conf(config, conf_format)
     bot = Bot(**config)
     bot.start()
 
