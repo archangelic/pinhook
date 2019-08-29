@@ -38,7 +38,7 @@ def read_conf(config, conf_format):
         except ImportError:
             click.echo('yaml not installed, please use `pip3 install pinhook[yaml]` to install', err=True)
         else:
-            to_yaml = yaml.load(config.read())
+            to_yaml = yaml.load(config.read(), Loader=yaml.FullLoader)
             output = schema.load(to_yaml)
     elif conf_format == 'toml':
         try:
