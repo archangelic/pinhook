@@ -28,11 +28,11 @@ def read_conf(config, conf_format):
             conf_format = 'toml'
         else:
             click.echo('Could not detect file format, please supply using --format option', err=True)
-    if conf_type == 'json':
+    if conf_format == 'json':
         import json
         to_json = json.loads(config.read())
         output = schema.load(to_json)
-    elif conf_type == 'yaml':
+    elif conf_format == 'yaml':
         try:
             import yaml
         except ImportError:
@@ -40,7 +40,7 @@ def read_conf(config, conf_format):
         else:
             to_yaml = yaml.load(config.read())
             output = schema.load(to_yaml)
-    elif conf_type == 'toml':
+    elif conf_format == 'toml':
         try:
             import toml
         except ImportError:
