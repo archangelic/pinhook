@@ -40,7 +40,7 @@ def read_conf(config, conf_format):
         else:
             to_yaml = yaml.load(config.read())
             output = schema.load(to_yaml)
-    elif conf_type = 'toml':
+    elif conf_type == 'toml':
         try:
             import toml
         except ImportError:
