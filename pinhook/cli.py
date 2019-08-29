@@ -46,8 +46,8 @@ def read_conf(config, conf_format):
         except ImportError:
             click.echo('toml not installed, please use `pip3 install pinhook[toml]` to install', err=True)
         else:
-            to_toml = toml.loads(config.read())
-            output = schema.loads(to_toml)
+            to_toml = toml.load(config.name)
+            output = schema.load(to_toml)
     return output
 
 @click.command()
