@@ -4,66 +4,137 @@ pinhook
 |Supported Python versions| |Package License| |PyPI package format|
 |Package development status| |With love from tilde.town|
 
-the pluggable python framework for IRC bots and Twitch bots
+The pluggable python framework for IRC bots and Twitch bots
 
-Tutorial
---------
+-  `Installation <#installation>`__
+-  `Creating an IRC Bot <#creating-an-irc-bot>`__
+
+   -  `From Config File <#from-config-file>`__
+   -  `From Python File <#from-python-file>`__
+
+-  `Creating a Twitch Bot <#creating-a-twitch-bot>`__
+-  `Creating plugins <#creating-plugins>`__
+-  `Examples <#examples>`__
 
 Installation
-~~~~~~~~~~~~
+------------
 
-::
+Pinhook can be installed from PyPI:
 
-    $ pip install pinhook
+.. code:: bash
+
+   pip install pinhook
 
 Creating an IRC Bot
-~~~~~~~~~~~~~~~~~~~
+-------------------
+
+A pinhook bot can be initialized using the command line tool ``pinhook``
+with a config file, or by importing it into a python file to extend the
+base class.
+
+From Config File
+~~~~~~~~~~~~~~~~
+
+Pinhook supports configuration files in YAML, TOML, and JSON formats.
+
+Example YAML config:
+
+.. code:: YAML
+
+   nickname: "ph-bot"
+   server: "irc.somewhere.net"
+   channels:
+       - "#foo"
+       - "#bar"
+
+Required configuration keys:
+
+-  ``nickname``: (string) nickname for your bot
+-  ``server``: (string) server for the bot to connect
+-  ``channels``: (array of strings) list of channels to connect to once
+   connected
+
+Optional keys:
+
+-  ``port``: (default: ``6667``) choose a custom port to connect to the
+   server
+-  ``ops``: (default: empty list) list of operators who can do things
+   like make the bot join other channels or quit
+-  ``plugin_dir``: (default: ``"plugins"``) directory where the bot
+   should look for plugins
+-  ``log_level``: (default: ``"info"``) string indicating logging level.
+   Logging can be disabled by setting this to ``"off"``
+-  ``ns_pass``: this is the password to identify with nickserv
+-  ``server_pass``: password for the server
+-  ``ssl_required``: (default: ``False``) boolean to turn ssl on or off
+
+Once you have your configuration file ready and your plugins in place,
+you can start your bot from the command line:
+
+.. code:: bash
+
+   pinhook config.yaml
+
+Pinhook will try to detect the config format from the file extension,
+but the format can also be supplied using the ``--format`` option.
+
+.. code:: bash
+
+   $ pinhook --help
+   Usage: pinhook [OPTIONS] CONFIG
+
+   Options:
+     -f, --format [json|yaml|toml]
+     --help                         Show this message and exit.
+
+From Python File
+~~~~~~~~~~~~~~~~
 
 To create the bot, just create a python file with the following:
 
 .. code:: python
 
-    from pinhook.bot import Bot
+   from pinhook.bot import Bot
 
-    bot = Bot(
-        channels=['#foo', '#bar'],
-        nickname='ph-bot',
-        server='irc.freenode.net'
-    )
-    bot.start()
+   bot = Bot(
+       channels=['#foo', '#bar'],
+       nickname='ph-bot',
+       server='irc.freenode.net'
+   )
+   bot.start()
 
 This will start a basic bot and look for plugins in the 'plugins'
 directory to add functionality.
 
 Optional arguments are:
 
--  ``port``: choose a custom port to connect to the server (default:
-   6667)
--  ``ops``: list of operators who can do things like make the bot join
-   other channels or quit (default: empty list)
--  ``plugin_dir``: directory where the bot should look for plugins
-   (default: "plugins")
--  ``log_level``: string indicating logging level. Logging can be
-   disabled by setting this to "off". (default: "info")
+-  ``port``: (default: ``6667``) choose a custom port to connect to the
+   server
+-  ``ops``: (default: empty list) list of operators who can do things
+   like make the bot join other channels or quit
+-  ``plugin_dir``: (default: ``"plugins"``) directory where the bot
+   should look for plugins
+-  ``log_level``: (default: ``"info"``) string indicating logging level.
+   Logging can be disabled by setting this to ``"off"``
 -  ``ns_pass``: this is the password to identify with nickserv
 -  ``server_pass``: password for the server
--  ``ssl_required``: boolean to turn ssl on or off
+-  ``ssl_required``: (default: ``False``) boolean to turn ssl on or off
 
 Creating a Twitch Bot
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 
 Pinhook has a baked in way to connect directly to a twitch channel
 
 .. code:: python
 
-    from pinhook.bot import TwitchBot
+   from pinhook.bot import TwitchBot
 
-    bot = TwitchBot(
-        nickname='ph-bot',
-        channel='#channel',
-        token='super-secret-oauth-token'
-    )
-    bot.start()
+   bot = TwitchBot(
+       nickname='ph-bot',
+       channel='#channel',
+       token='super-secret-oauth-token'
+   )
+   bot.start()
 
 This function has far less options, as the server, port, and ssl are
 already handled by twitch.
@@ -77,7 +148,7 @@ Optional aguments are:
 These options are the same for both IRC and Twitch
 
 Creating plugins
-~~~~~~~~~~~~~~~~
+----------------
 
 There are two types of plugins, commands and listeners. Commands only
 activate if a message starts with the command word, while listeners
@@ -93,12 +164,12 @@ The function will need to be structured as such:
 
 .. code:: python
 
-    import pinhook.plugin
+   import pinhook.plugin
 
-    @pinhook.plugin.register('!test')
-    def test_plugin(msg):
-        message = '{}: this is a test!'.format(msg.nick)
-        return pinhook.plugin.message(message)
+   @pinhook.plugin.register('!test')
+   def test_plugin(msg):
+       message = '{}: this is a test!'.format(msg.nick)
+       return pinhook.plugin.message(message)
 
 The function will need to accept a single argument in order to accept a
 ``Message`` object from the bot.
@@ -120,6 +191,7 @@ The ``Message`` object has the following attributes:
    object was created
 -  ``timestamp``: float for the unix timestamp when the ``Message``
    object was created
+-  ``bot``: the initialized Bot class
 
 It also contains the following IRC functions:
 
@@ -138,10 +210,10 @@ The function will need to be structured as such:
 
 .. code:: python
 
-    @pinhook.plugin.register('!test')
-    @pinhook.plugin.ops('!test', 'Only ops can run this command!')
-    def test_plugin(msg):
-        return pinhook.plugin.message('This was run by an op!')
+   @pinhook.plugin.register('!test')
+   @pinhook.plugin.ops('!test', 'Only ops can run this command!')
+   def test_plugin(msg):
+       return pinhook.plugin.message('This was run by an op!')
 
 The plugin function can return one of the following in order to give a
 response to the command:
