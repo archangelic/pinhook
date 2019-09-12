@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from enum import Enum
 from functools import wraps
 
@@ -21,6 +22,35 @@ class Output:
             return msg.splitlines()
         except AttributeError:
             return msg
+
+
+class Command(ABC):
+    def __init__(self, **kwargs):
+        self.cmd = kwargs.get('cmd')
+        self.help = kwargs.get('help', '')
+        self.ops = kwargs.get('ops', False)
+        self.ops_msg = kwargs.get('ops_msg', '')
+        self.enabled = True
+        self.add_command()
+    
+    @abstractmethod
+    def run(self, msg):
+        pass
+
+    def add_command(self):
+        cmds[self.cmd] = {
+            'run': self.run,
+            'help': self.help,
+            'enabled': self.enabled,
+        }
+        if self.ops:
+            cmds[self.cmd].update({
+                'ops': self.ops,
+                'ops_msg': self.ops_msg,
+            })
+
+    def __str__(self):
+        return self.cmd
 
 
 def action(msg):
