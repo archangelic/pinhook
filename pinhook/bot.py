@@ -102,7 +102,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     self.logger.info('loading plugin {}'.format(name))
                     fp, pathname, description = imp.find_module(name, [self.plugin_dir])
                     imp.load_module(name, fp, pathname, description)
-                except Exception as e:
+                except Exception:
                     self.logger.exception('could not load plugin')
         # gather all commands and listeners
         if self.use_prefix_for_plugins: # use prefixes if needed
@@ -179,7 +179,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger
                     ))
-            except Exception as e:
+            except Exception:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
             for lstnr in pinhook.plugin.lstnrs:
@@ -200,7 +200,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     ))
                     if listen_output:
                         output = listen_output
-                except Exception as e:
+                except Exception:
                     self.logger.exception('issue with listener {}'.format(lstnr))
         if output:
             self.logger.debug(f'returning output: {output.msg}')
