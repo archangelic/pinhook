@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 from enum import Enum
 from functools import wraps
 
@@ -24,30 +23,34 @@ class Output:
             return msg
 
 
-class Command(ABC):
-    def __init__(self, **kwargs):
-        self.cmd = kwargs.get('cmd')
-        self.help = kwargs.get('help', '')
+class Command:
+    def __init__(self, cmd, **kwargs):
+        self.cmd = cmd
+        self.help_txt = kwargs.get('help_txt', '')
         self.ops = kwargs.get('ops', False)
         self.ops_msg = kwargs.get('ops_msg', '')
         self.enabled = True
-        self.add_command()
+        self.run = kwargs.get('run', self.run)
     
-    @abstractmethod
     def run(self, msg):
         pass
 
+    def enable_ops(self, ops_msg):
+        self.ops = True
+        self.ops_msg = ops_msg
+
+    def update_plugin(self, **kwargs):
+        self.help_text = kwargs.get('help_text')
+        self.run = kwargs.get('run', self.run)
+
     def add_command(self):
-        cmds[self.cmd] = {
-            'run': self.run,
-            'help': self.help,
-            'enabled': self.enabled,
-        }
-        if self.ops:
-            cmds[self.cmd].update({
-                'ops': self.ops,
-                'ops_msg': self.ops_msg,
-            })
+        cmds[self.cmd] = self
+
+    def enable(self):
+        self.enabled = True
+
+    def disable(self):
+        self.enabled = False
 
     def __str__(self):
         return self.cmd
@@ -61,21 +64,19 @@ def message(msg):
     return Output(OutputType.Message, msg)
 
 
-def _add_plugin(command, help_text, func):
+def _add_command(command, help_text, func):
     if command not in cmds:
-        cmds[command] = {}
-    cmds[command].update({
-        'run': func,
-        'help': help_text
-    })
+        cmds[command] = Command(command, help_txt=help_text, run=func)
+    else:
+        cmds[command].update_plugin(help_text=help_text, run=func)
+    print(cmds)
+
 
 def _ops_plugin(command, ops_msg, func):
     if command not in cmds:
-        cmds[command] = {}
-    cmds[command].update({
-        'ops': True,
-        'ops_msg': ops_msg,
-    })
+        cmds[command] = Command(command, ops=True, ops_msg=ops_msg)
+    else:
+        cmds[command].enable_ops(ops_msg)
 
 
 def _add_listener(name, func):
@@ -90,7 +91,7 @@ def clear_plugins():
 def register(command, help_text=None):
     @wraps(command)
     def register_for_command(func):
-        _add_plugin(command, help_text, func)
+        _add_command(command, help_text, func)
         return func
     return register_for_command
 

@@ -34,6 +34,11 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.start_logging(self.log_level)
         self.output_message = pinhook.plugin.message
         self.output_action = pinhook.plugin.action
+        self.internal_commands = {
+            self.cmd_prefix + 'join': 'join a channel',
+            self.cmd_prefix + 'quit': 'force the bot to quit',
+            self.cmd_prefix + 'reload': 'force bot to reload all plugins'
+        }
         self.load_plugins()
 
     class Message:
@@ -130,7 +135,12 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.process_event(c, e)
 
     def call_help(self, op):
-        helplist = sorted([i for i in pinhook.plugin.cmds if op or not ('ops' in pinhook.plugin.cmds[i] and pinhook.plugin.cmds[i]['ops'])])
+        cmds = [i for i in pinhook.plugin.cmds if not pinhook.plugin.cmds[i].ops]
+        cmds.append(self.cmd_prefix + 'help')
+        if op:
+            cmds += [i for i in pinhook.plugin.cmds if pinhook.plugin.cmds[i].ops]
+            cmds += [i for i in self.internal_commands]
+        helplist = sorted(cmds)
         msg = ', '.join(helplist)
         return self.output_message('Available commands: {}'.format(msg))
 
@@ -160,12 +170,12 @@ class Bot(irc.bot.SingleServerIRCBot):
         output = None
         if cmd in pinhook.plugin.cmds:
             try:
-                if 'ops' in pinhook.plugin.cmds[cmd] and nick not in self.ops:
-                    if pinhook.plugin.cmds[cmd]['ops_msg']:
-                        output =  self.output_message(pinhook.plugin.cmds[cmd]['ops_msg'])
+                if pinhook.plugin.cmds[cmd].ops and nick not in self.ops:
+                    if pinhook.plugin.cmds[cmd].ops_msg:
+                        output =  self.output_message(pinhook.plugin.cmds[cmd].ops_msg)
                 else:
                     self.logger.debug('executing {}'.format(cmd))
-                    output = pinhook.plugin.cmds[cmd]['run'](self.Message(
+                    output = pinhook.plugin.cmds[cmd].run(self.Message(
                         bot=self,
                         channel=chan,
                         cmd=cmd,
