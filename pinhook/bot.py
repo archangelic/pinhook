@@ -147,6 +147,8 @@ class Bot(irc.bot.SingleServerIRCBot):
         helpout = OrderedDict(sorted(cmds.items()))
         for h in helpout:
             self.connection.privmsg(nick, '{} -- {}'.format(h, helpout[h]))
+            time.sleep(.5)
+        self.connection.privmsg(nick, 'List of listeners: {}'.format(', '.join([l for l in plugin.lstnrs])))
         return None
 
     def call_internal_commands(self, channel, nick, cmd, text, arg, c):

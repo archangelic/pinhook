@@ -89,7 +89,6 @@ def _add_command(command, help_text, func):
         Command(command, help_text=help_text, run=func).add_command()
     else:
         cmds[command].update_plugin(help_text=help_text, run=func)
-    print(cmds)
 
 
 def _ops_plugin(command, ops_msg, func):
