@@ -1,10 +1,11 @@
+from collections import OrderedDict
 from datetime import datetime, timezone
 import imp
 import logging
 import os
 import ssl
 import time
-import pinhook.plugin
+from . import plugin
 
 import irc.bot
 
@@ -32,13 +33,16 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.chanlist = channels
         self.bot_nick = nickname
         self.start_logging(self.log_level)
-        self.output_message = pinhook.plugin.message
-        self.output_action = pinhook.plugin.action
+        self.output_message = plugin.message
+        self.output_action = plugin.action
         self.internal_commands = {
-            self.cmd_prefix + 'join': 'join a channel',
-            self.cmd_prefix + 'quit': 'force the bot to quit',
-            self.cmd_prefix + 'reload': 'force bot to reload all plugins'
+            'join': 'join a channel',
+            'quit': 'force the bot to quit',
+            'reload': 'force bot to reload all plugins',
+            'enable': 'enable a plugin',
+            'disable': 'disable a plugin'
         }
+        self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         self.load_plugins()
 
     class Message:
@@ -93,7 +97,7 @@ class Bot(irc.bot.SingleServerIRCBot):
     def load_plugins(self):
         # clear plugin list to ensure no old plugins remain
         self.logger.info('clearing plugin cache')
-        pinhook.plugin.clear_plugins()
+        plugin.clear_plugins()
         # ensure plugin folder exists
         self.logger.info('checking plugin directory')
         if not os.path.exists(self.plugin_dir):
@@ -111,10 +115,10 @@ class Bot(irc.bot.SingleServerIRCBot):
                     self.logger.exception('could not load plugin')
         # gather all commands and listeners
         if self.use_prefix_for_plugins: # use prefixes if needed
-            pinhook.plugin.cmds = {self.cmd_prefix + k: v for k,v in pinhook.plugin.cmds.items()}
-        for cmd in pinhook.plugin.cmds:
+            plugin.cmds = {self.cmd_prefix + k: v for k,v in plugin.cmds.items()}
+        for cmd in plugin.cmds:
             self.logger.debug('adding command {}'.format(cmd))
-        for lstnr in pinhook.plugin.lstnrs:
+        for lstnr in plugin.lstnrs:
             self.logger.debug('adding listener {}'.format(lstnr))
 
     def on_welcome(self, c, e):
@@ -134,15 +138,16 @@ class Bot(irc.bot.SingleServerIRCBot):
     def on_action(self, c, e):
         self.process_event(c, e)
 
-    def call_help(self, op):
-        cmds = [i for i in pinhook.plugin.cmds if not pinhook.plugin.cmds[i].ops]
-        cmds.append(self.cmd_prefix + 'help')
+    def call_help(self, nick, op):
+        cmds = {k:v.help_text for k,v in plugin.cmds.items() if not plugin.cmds[k].ops}
+        cmds.update({self.cmd_prefix + 'help': 'returns this output to private message'})
         if op:
-            cmds += [i for i in pinhook.plugin.cmds if pinhook.plugin.cmds[i].ops]
-            cmds += [i for i in self.internal_commands]
-        helplist = sorted(cmds)
-        msg = ', '.join(helplist)
-        return self.output_message('Available commands: {}'.format(msg))
+            cmds.update({k:v.help_text for k,v in plugin.cmds.items() if plugin.cmds[k].ops})
+            cmds.update({k:v for k,v in self.internal_commands.items()})
+        helpout = OrderedDict(sorted(cmds.items()))
+        for h in helpout:
+            self.connection.privmsg(nick, '{} -- {}'.format(h, helpout[h]))
+        return None
 
     def call_internal_commands(self, channel, nick, cmd, text, arg, c):
         output = None
@@ -159,23 +164,39 @@ class Bot(irc.bot.SingleServerIRCBot):
             c.quit("See y'all later!")
             quit()
         elif cmd == self.cmd_prefix + 'help':
-            output = self.call_help(op)
+            self.call_help(nick, op)
         elif cmd == self.cmd_prefix + 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             self.load_plugins()
             output = self.output_message('Plugins reloaded')
+        elif cmd == self.cmd_prefix + 'enable' and op:
+            if arg in plugin.plugins:
+                if plugin.plugins[arg].enabled:
+                    output = self.output_message("{}: '{}' already enabled".format(nick, arg))
+                else:
+                    plugin.plugins[arg].enable()
+                    output = self.output_message("{}: '{}' enabled!".format(nick, arg))
+            else:
+                output = self.output_message("{}: '{}' not found".format(nick, arg))
+        elif cmd == self.cmd_prefix + 'disable' and op:
+            if arg in plugin.plugins:
+                if not plugin.plugins[arg].enabled:
+                    output = self.output_message("{}: '{}' already disabled".format(nick, arg))
+                else:
+                    plugin.plugins[arg].disable()
+                    output = self.output_message("{}: '{}' disabled!".format(nick, arg))
         return output
 
     def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, arg):
         output = None
-        if cmd in pinhook.plugin.cmds:
+        if cmd in plugin.cmds:
             try:
-                if pinhook.plugin.cmds[cmd].ops and nick not in self.ops:
-                    if pinhook.plugin.cmds[cmd].ops_msg:
-                        output =  self.output_message(pinhook.plugin.cmds[cmd].ops_msg)
-                else:
+                if plugin.cmds[cmd].ops and nick not in self.ops:
+                    if plugin.cmds[cmd].ops_msg:
+                        output =  self.output_message(plugin.cmds[cmd].ops_msg)
+                elif plugin.cmds[cmd].enabled:
                     self.logger.debug('executing {}'.format(cmd))
-                    output = pinhook.plugin.cmds[cmd].run(self.Message(
+                    output = plugin.cmds[cmd].run(self.Message(
                         bot=self,
                         channel=chan,
                         cmd=cmd,
@@ -192,26 +213,27 @@ class Bot(irc.bot.SingleServerIRCBot):
             except Exception:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
-            for lstnr in pinhook.plugin.lstnrs:
-                try:
-                    self.logger.debug('whispering to listener: {}'.format(lstnr))
-                    listen_output = pinhook.plugin.lstnrs[lstnr](self.Message(
-                        bot=self,
-                        channel=chan,
-                        text=text,
-                        nick_list=nick_list,
-                        nick=nick,
-                        privmsg=privmsg,
-                        action=action,
-                        notice=notice,
-                        botnick=self.bot_nick,
-                        ops=self.ops,
-                        logger=self.logger
-                    ))
-                    if listen_output:
-                        output = listen_output
-                except Exception:
-                    self.logger.exception('issue with listener {}'.format(lstnr))
+            for lstnr in plugin.lstnrs:
+                if plugin.lstnrs[lstnr].enabled:
+                    try:
+                        self.logger.debug('whispering to listener: {}'.format(lstnr))
+                        listen_output = plugin.lstnrs[lstnr].run(self.Message(
+                            bot=self,
+                            channel=chan,
+                            text=text,
+                            nick_list=nick_list,
+                            nick=nick,
+                            privmsg=privmsg,
+                            action=action,
+                            notice=notice,
+                            botnick=self.bot_nick,
+                            ops=self.ops,
+                            logger=self.logger
+                        ))
+                        if listen_output:
+                            output = listen_output
+                    except Exception:
+                        self.logger.exception('issue with listener {}'.format(lstnr))
         if output:
             self.logger.debug(f'returning output: {output.msg}')
         return output
@@ -258,14 +280,14 @@ class Bot(irc.bot.SingleServerIRCBot):
         if not output.msg:
             return
         for msg in output.msg:
-            if output.msg_type == pinhook.plugin.OutputType.Message:
+            if output.msg_type == plugin.OutputType.Message:
                 self.logger.debug('output message: {}'.format(msg))
                 try:
                     c.privmsg(chan, msg)
                 except irc.client.MessageTooLong:
                     self.logger.error('output message too long: {}'.format(msg))
                     break
-            elif output.msg_type == pinhook.plugin.OutputType.Action:
+            elif output.msg_type == plugin.OutputType.Action:
                 self.logger.debug('output action: {}'.format(msg))
                 try:
                     c.action(chan, msg)
