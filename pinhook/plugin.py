@@ -1,10 +1,11 @@
 from enum import Enum
 from functools import wraps
 
+from .log import logger
+
 plugins = {}
 cmds = {}
 lstnrs = {}
-
 
 class OutputType(Enum):
     Message = 'message'
@@ -24,6 +25,7 @@ class Output:
 
 class _BasePlugin:
     enabled = True
+    logger = logger
 
     def enable(self):
         self.enabled = True
@@ -79,10 +81,8 @@ class Command(_BasePlugin):
 def action(msg):
     return Output(OutputType.Action, msg)
 
-
 def message(msg):
     return Output(OutputType.Message, msg)
-
 
 def _add_command(command, help_text, func):
     if command not in cmds:
@@ -90,30 +90,33 @@ def _add_command(command, help_text, func):
     else:
         cmds[command].update_plugin(help_text=help_text, run=func)
 
-
 def _ops_plugin(command, ops_msg, func):
     if command not in cmds:
         Command(command, ops=True, ops_msg=ops_msg).add_command()
     else:
         cmds[command].enable_ops(ops_msg)
 
-
 def _add_listener(name, func):
     Listener(name, run=func).add_listener()
-
 
 def clear_plugins():
     cmds.clear()
     lstnrs.clear()
 
-
-def register(command, help_text='N/A'):
+def command(command, help_text='N/A'):
     @wraps(command)
     def register_for_command(func):
         _add_command(command, help_text, func)
         return func
     return register_for_command
 
+def register(command, help_text='N/A'):
+    logger.warn('@register decorator has been deprecated in favor of @command. This will cause errors in future versions.')
+    @wraps(command)
+    def register_for_command(func):
+        _add_command(command, help_text, func)
+        return func
+    return register_for_command
 
 def listener(name):
     def register_as_listener(func):
