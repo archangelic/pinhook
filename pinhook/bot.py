@@ -5,6 +5,8 @@ import logging
 import os
 import ssl
 import time
+
+from . import log
 from . import plugin
 
 import irc.bot
@@ -22,6 +24,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.ns_pass = kwargs.get('ns_pass', None)
         self.nickserv = kwargs.get('nickserv', 'NickServ')
         self.log_level = kwargs.get('log_level', 'info')
+        self.log_file = kwargs.get('log_file', None)
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
@@ -32,7 +35,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname)
         self.chanlist = channels
         self.bot_nick = nickname
-        self.start_logging(self.log_level)
+        self.start_logging()
         self.output_message = plugin.message
         self.output_action = plugin.action
         self.internal_commands = {
@@ -67,31 +70,23 @@ class Bot(irc.bot.SingleServerIRCBot):
             if not (cmd or text):
                 raise TypeError('missing cmd or text parameter')
 
-    def start_logging(self, level):
-        if level == 'error':
+    def start_logging(self):
+        self.logger = log.logger
+        if self.log_file:
+            log.set_log_file(self.log_file)
+        else:
+            log.set_log_file('{}.log'.format(self.bot_nick))
+        if self.log_level == 'error':
             level = logging.ERROR
-        elif level == 'warning':
+        elif self.log_level == 'warning':
             level = logging.WARNING
-        elif level == 'info':
+        elif self.log_level == 'info':
             level = logging.INFO
-        elif level == 'debug':
+        elif self.log_level == 'debug':
             level = logging.DEBUG
-        self.logger = logging.getLogger(self.bot_nick)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s - %(message)s')
-        # Set console logger
-        ch = logging.StreamHandler()
-        ch.setFormatter(formatter)
-        # Set file logger
-        fh = logging.FileHandler('{}.log'.format(self.bot_nick))
-        fh.setFormatter(formatter)
         # Set levels
-        if level != "off":
+        if self.log_level != "off":
             self.logger.setLevel(level)
-            ch.setLevel(level)
-            fh.setLevel(level)
-        # Add handlers
-        self.logger.addHandler(ch)
-        self.logger.addHandler(fh)
         self.logger.info('Logging started!')
 
     def load_plugins(self):
@@ -304,7 +299,8 @@ class Bot(irc.bot.SingleServerIRCBot):
 class TwitchBot(Bot):
     def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='info', ops=[]):
         self.bot_nick = nickname
-        self.start_logging(log_level)
+        self.log_level = log_level
+        self.start_logging()
         self.channel = channel
         self.plugin_dir = plugin_dir
         self.ops = ops
