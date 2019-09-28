@@ -1,5 +1,7 @@
 from enum import Enum
 from functools import wraps
+import importlib
+import os
 
 from .log import logger
 
@@ -23,6 +25,7 @@ class Output:
         except AttributeError:
             return msg
 
+
 class _BasePlugin:
     enabled = True
     logger = logger
@@ -39,6 +42,7 @@ class Listener(_BasePlugin):
         self.name = name
         if run:
             self.run = run
+        self._add_listener()
 
     def __str__(self):
         return self.name
@@ -46,7 +50,7 @@ class Listener(_BasePlugin):
     def run(self):
         pass
 
-    def add_listener(self):
+    def _add_listener(self):
         lstnrs[self.name] = self
         plugins[self.name] = self
 
@@ -58,6 +62,7 @@ class Command(_BasePlugin):
         self.ops = kwargs.get('ops', False)
         self.ops_msg = kwargs.get('ops_msg', '')
         self.run = kwargs.get('run', self.run)
+        self._add_command()
 
     def __str__(self):
         return self.cmd
@@ -65,15 +70,15 @@ class Command(_BasePlugin):
     def run(self, msg):
         pass
 
-    def enable_ops(self, ops_msg):
+    def _enable_ops(self, ops_msg):
         self.ops = True
         self.ops_msg = ops_msg
 
-    def update_plugin(self, **kwargs):
+    def _update_plugin(self, **kwargs):
         self.help_text = kwargs.get('help_text', 'N/A')
         self.run = kwargs.get('run', self.run)
 
-    def add_command(self):
+    def _add_command(self):
         cmds[self.cmd] = self
         plugins[self.cmd] = self
 
@@ -86,22 +91,59 @@ def message(msg):
 
 def _add_command(command, help_text, func):
     if command not in cmds:
-        Command(command, help_text=help_text, run=func).add_command()
+        Command(command, help_text=help_text, run=func)
     else:
-        cmds[command].update_plugin(help_text=help_text, run=func)
+        cmds[command]._update_plugin(help_text=help_text, run=func)
 
 def _ops_plugin(command, ops_msg, func):
     if command not in cmds:
-        Command(command, ops=True, ops_msg=ops_msg).add_command()
+        Command(command, ops=True, ops_msg=ops_msg)
     else:
-        cmds[command].enable_ops(ops_msg)
+        cmds[command]._enable_ops(ops_msg)
 
 def _add_listener(name, func):
-    Listener(name, run=func).add_listener()
+    Listener(name, run=func)
 
 def clear_plugins():
     cmds.clear()
     lstnrs.clear()
+
+def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
+    # i'm not sure why i need this but i do
+    global cmds
+    global plugins
+    global lstnrs
+    #check for all the disabled plugins so that we don't re-enable them
+    disabled_plugins = [i for i in plugins if not plugins[i].enabled]
+    logger.debug(disabled_plugins)
+    # clear plugin list to ensure no old plugins remain
+    logger.info('clearing plugin cache')
+    clear_plugins()
+    # ensure plugin folder exists
+    logger.info('checking plugin directory')
+    if not os.path.exists(plugin_dir):
+        logger.info('plugin directory {} not found, creating'.format(plugin_dir))
+        os.makedirs(plugin_dir)
+    # load all plugins
+    for m in os.listdir(plugin_dir):
+        if m.endswith('.py'):
+            try:
+                name = m[:-3]
+                logger.info('loading plugin {}'.format(name))
+                spec = importlib.machinery.PathFinder().find_spec(name, [plugin_dir])
+                spec.loader.load_module()
+            except Exception:
+                logger.exception('could not load plugin')
+    # gather all commands and listeners
+    if use_prefix: # use prefixes if needed
+        cmds = {cmd_prefix + k: v for k,v in cmds.items()}
+    for p in plugins:
+        if p in disabled_plugins:
+            plugins[p].disable()
+    for cmd in cmds:
+        logger.debug('adding command {}'.format(cmd))
+    for lstnr in lstnrs:
+        logger.debug('adding listener {}'.format(lstnr))
 
 def command(command, help_text='N/A'):
     @wraps(command)

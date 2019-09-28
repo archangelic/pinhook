@@ -1,8 +1,6 @@
 from collections import OrderedDict
 from datetime import datetime, timezone
-import imp
 import logging
-import os
 import ssl
 import time
 
@@ -46,7 +44,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             'disable': 'disable a plugin'
         }
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
-        self.load_plugins()
+        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
 
     class Message:
         def __init__(self, bot, channel, nick, botnick, ops, logger, action, privmsg, notice, cmd=None, arg=None, text=None, nick_list=None):
@@ -89,33 +87,6 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.logger.setLevel(level)
         self.logger.info('Logging started!')
 
-    def load_plugins(self):
-        # clear plugin list to ensure no old plugins remain
-        self.logger.info('clearing plugin cache')
-        plugin.clear_plugins()
-        # ensure plugin folder exists
-        self.logger.info('checking plugin directory')
-        if not os.path.exists(self.plugin_dir):
-            self.logger.info('plugin directory {} not found, creating'.format(self.plugin_dir))
-            os.makedirs(self.plugin_dir)
-        # load all plugins
-        for m in os.listdir(self.plugin_dir):
-            if m.endswith('.py'):
-                try:
-                    name = m[:-3]
-                    self.logger.info('loading plugin {}'.format(name))
-                    fp, pathname, description = imp.find_module(name, [self.plugin_dir])
-                    imp.load_module(name, fp, pathname, description)
-                except Exception:
-                    self.logger.exception('could not load plugin')
-        # gather all commands and listeners
-        if self.use_prefix_for_plugins: # use prefixes if needed
-            plugin.cmds = {self.cmd_prefix + k: v for k,v in plugin.cmds.items()}
-        for cmd in plugin.cmds:
-            self.logger.debug('adding command {}'.format(cmd))
-        for lstnr in plugin.lstnrs:
-            self.logger.debug('adding listener {}'.format(lstnr))
-
     def on_welcome(self, c, e):
         if self.ns_pass:
             self.logger.info('identifying with nickserv')
@@ -142,7 +113,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         helpout = OrderedDict(sorted(cmds.items()))
         for h in helpout:
             self.connection.privmsg(nick, '{} -- {}'.format(h, helpout[h]))
-            time.sleep(.5)
+            time.sleep(.1)
         self.connection.privmsg(nick, 'List of listeners: {}'.format(', '.join([l for l in plugin.lstnrs])))
         return None
 
@@ -164,7 +135,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.call_help(nick, op)
         elif cmd == self.cmd_prefix + 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
-            self.load_plugins()
+            plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
             output = self.output_message('Plugins reloaded')
         elif cmd == self.cmd_prefix + 'enable' and op:
             if arg in plugin.plugins:
@@ -308,7 +279,7 @@ class TwitchBot(Bot):
         port = 6667
         self.logger.info('Joining Twitch Server')
         irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], nickname, nickname)
-        self.load_plugins()
+        plugin.load_plugins(self.plugin_dir)
 
     def on_welcome(self, c, e):
         self.logger.info('requesting permissions')
