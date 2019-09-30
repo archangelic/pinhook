@@ -125,12 +125,17 @@ class Bot(irc.bot.SingleServerIRCBot):
         else:
             op = False
         if cmd == self.cmd_prefix + 'join' and op:
-            c.join(*arg.split())
-            self.logger.info('joining {} per request of {}'.format(arg, nick))
-            output = self.output_message('{}: joined {}'.format(nick, arg.split()[0]))
+            try:
+                c.join(*arg.split())
+                self.logger.info('joining {} per request of {}'.format(arg, nick))
+                output = self.output_message('{}: joined {}'.format(nick, arg.split()[0]))
+            except:
+                self.logger.exception('issue with join command: {}join #channel <channel key>'.format(self.cmd_prefix))
         elif cmd == self.cmd_prefix + 'quit' and op:
             self.logger.info('quitting per request of {}'.format(nick))
-            c.quit("See y'all later!")
+            if not arg:
+                arg = "See y'all later!"
+            c.quit(arg)
             quit()
         elif cmd == self.cmd_prefix + 'help':
             self.call_help(nick, op)
