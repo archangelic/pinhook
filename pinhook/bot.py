@@ -26,6 +26,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
+        self.disable_help = kwargs.get('disable_help', False)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
@@ -137,7 +138,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 arg = "See y'all later!"
             c.quit(arg)
             quit()
-        elif cmd == self.cmd_prefix + 'help':
+        elif cmd == self.cmd_prefix + 'help' and not self.disable_help:
             self.call_help(nick, op)
         elif cmd == self.cmd_prefix + 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
