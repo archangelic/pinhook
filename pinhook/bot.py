@@ -47,7 +47,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
 
     class Message:
-        def __init__(self, bot, channel, nick, botnick, ops, logger, action, privmsg, notice, cmd=None, arg=None, text=None, nick_list=None):
+        def __init__(self, bot, channel, nick, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None):
             self.bot = bot
             self.datetime = datetime.now(timezone.utc)
             self.timestamp = self.datetime.timestamp()
@@ -60,6 +60,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.action = action
             self.privmsg = privmsg
             self.notice = notice
+            self.msg_type = msg_type
             if cmd:
                 self.cmd = cmd
                 self.arg = arg
@@ -155,7 +156,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     output = self.output_message("{}: '{}' disabled!".format(nick, arg))
         return output
 
-    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, arg):
+    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, arg, msg_type):
         output = None
         if cmd in plugin.cmds:
             try:
@@ -176,7 +177,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                         notice=notice,
                         botnick=self.bot_nick,
                         ops=self.ops,
-                        logger=self.logger
+                        logger=self.logger,
+                        msg_type=msg_type
                     ))
             except Exception:
                 self.logger.exception('issue with command {}'.format(cmd))
@@ -196,7 +198,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                             notice=notice,
                             botnick=self.bot_nick,
                             ops=self.ops,
-                            logger=self.logger
+                            logger=self.logger,
+                            msg_type=msg_type
                         ))
                         if listen_output:
                             output = listen_output
@@ -209,6 +212,10 @@ class Bot(irc.bot.SingleServerIRCBot):
     def process_event(self, c, e):
         nick = e.source.nick
         text = e.arguments[0]
+        if e.type == 'privmsg' or e.type == 'pubmsg':
+            msg_type = 'message'
+        else:
+            msg_type = e.type
         if e.target == self.bot_nick:
             chan = nick
             nick_list = [nick]
@@ -238,6 +245,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'privmsg': c.privmsg,
                 'action': c.action,
                 'notice': c.notice,
+                'msg_type': msg_type
             }
             output = self.call_plugins(**plugin_info)
         if output:
