@@ -42,7 +42,10 @@ class Bot(irc.bot.SingleServerIRCBot):
             'quit': 'force the bot to quit',
             'reload': 'force bot to reload all plugins',
             'enable': 'enable a plugin',
-            'disable': 'disable a plugin'
+            'disable': 'disable a plugin',
+            'op': 'add a user as bot operator',
+            'deop': 'remove a user as bot operator',
+            'ops': 'list all ops'
         }
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
@@ -160,6 +163,16 @@ class Bot(irc.bot.SingleServerIRCBot):
                 else:
                     plugin.plugins[arg].disable()
                     output = self.output_message("{}: '{}' disabled!".format(nick, arg))
+        elif cmd == self.cmd_prefix + 'op' and op:
+            for o in arg.split(' '):
+                self.ops.append(o)
+            output = self.output_message('{}: {} added as op'.format(nick, arg))
+        elif cmd == self.cmd_prefix + 'deop' and op:
+            for o in arg.split(' '):
+                self.ops = [i for i in self.ops if i != o]
+            output = self.output_message('{}: {} removed as op'.format(nick, arg))
+        elif cmd == self.cmd_prefix + 'ops' and op:
+            output = self.output_message('current ops: {}'.format(', '.join(self.ops)))
         return output
 
     def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, arg, msg_type):
