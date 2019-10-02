@@ -27,6 +27,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
         self.disable_help = kwargs.get('disable_help', False)
+        self.banned_users = kwargs.get('banned_users', [])
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
@@ -45,7 +46,10 @@ class Bot(irc.bot.SingleServerIRCBot):
             'disable': 'disable a plugin',
             'op': 'add a user as bot operator',
             'deop': 'remove a user as bot operator',
-            'ops': 'list all ops'
+            'ops': 'list all ops',
+            'ban': 'ban a user from using the bot',
+            'unban': 'remove bot ban for user',
+            'banlist': 'currently banned nicks'
         }
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
@@ -128,26 +132,27 @@ class Bot(irc.bot.SingleServerIRCBot):
             op = True
         else:
             op = False
-        if cmd == self.cmd_prefix + 'join' and op:
+        cmd = cmd.lstrip(self.cmd_prefix)
+        if cmd == 'join' and op:
             try:
                 c.join(*arg.split())
                 self.logger.info('joining {} per request of {}'.format(arg, nick))
                 output = self.output_message('{}: joined {}'.format(nick, arg.split()[0]))
             except:
                 self.logger.exception('issue with join command: {}join #channel <channel key>'.format(self.cmd_prefix))
-        elif cmd == self.cmd_prefix + 'quit' and op:
+        elif cmd == 'quit' and op:
             self.logger.info('quitting per request of {}'.format(nick))
             if not arg:
                 arg = "See y'all later!"
             c.quit(arg)
             quit()
-        elif cmd == self.cmd_prefix + 'help' and not self.disable_help:
+        elif cmd == 'help' and not self.disable_help:
             self.call_help(nick, op)
-        elif cmd == self.cmd_prefix + 'reload' and op:
+        elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
             output = self.output_message('Plugins reloaded')
-        elif cmd == self.cmd_prefix + 'enable' and op:
+        elif cmd == 'enable' and op:
             if arg in plugin.plugins:
                 if plugin.plugins[arg].enabled:
                     output = self.output_message("{}: '{}' already enabled".format(nick, arg))
@@ -156,23 +161,33 @@ class Bot(irc.bot.SingleServerIRCBot):
                     output = self.output_message("{}: '{}' enabled!".format(nick, arg))
             else:
                 output = self.output_message("{}: '{}' not found".format(nick, arg))
-        elif cmd == self.cmd_prefix + 'disable' and op:
+        elif cmd == 'disable' and op:
             if arg in plugin.plugins:
                 if not plugin.plugins[arg].enabled:
                     output = self.output_message("{}: '{}' already disabled".format(nick, arg))
                 else:
                     plugin.plugins[arg].disable()
                     output = self.output_message("{}: '{}' disabled!".format(nick, arg))
-        elif cmd == self.cmd_prefix + 'op' and op:
+        elif cmd == 'op' and op:
             for o in arg.split(' '):
                 self.ops.append(o)
             output = self.output_message('{}: {} added as op'.format(nick, arg))
-        elif cmd == self.cmd_prefix + 'deop' and op:
+        elif cmd == 'deop' and op:
             for o in arg.split(' '):
                 self.ops = [i for i in self.ops if i != o]
             output = self.output_message('{}: {} removed as op'.format(nick, arg))
-        elif cmd == self.cmd_prefix + 'ops' and op:
+        elif cmd == 'ops' and op:
             output = self.output_message('current ops: {}'.format(', '.join(self.ops)))
+        elif cmd == 'ban' and op:
+            for o in arg.split(' '):
+                self.banned_users.append(o)
+            output = self.output_message('{}: banned {}'.format(nick, arg))
+        elif cmd == 'unban' and op:
+            for o in arg.split(' '):
+                self.banned_users = [i for i in self.banned_users if i != o]
+            output = self.output_message('{}: removed ban for {}'.format(nick, arg))
+        elif cmd == 'banlist':
+            output = self.output_message('currently banned: {}'.format(', '.join(self.banned_users)))
         return output
 
     def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, arg, msg_type):
