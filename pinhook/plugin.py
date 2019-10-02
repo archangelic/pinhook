@@ -89,9 +89,9 @@ def action(msg):
 def message(msg):
     return Output(OutputType.Message, msg)
 
-def _add_command(command, help_text, func):
+def _add_command(command, help_text, func,  ops=False, ops_msg=''):
     if command not in cmds:
-        Command(command, help_text=help_text, run=func)
+        Command(command, help_text=help_text, ops=ops, ops_msg=ops_msg, run=func)
     else:
         cmds[command]._update_plugin(help_text=help_text, run=func)
 
@@ -145,10 +145,10 @@ def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
     for lstnr in lstnrs:
         logger.debug('adding listener {}'.format(lstnr))
 
-def command(command, help_text='N/A'):
+def command(command, help_text='N/A', ops=False, ops_msg=''):
     @wraps(command)
     def register_for_command(func):
-        _add_command(command, help_text, func)
+        _add_command(command, help_text, func, ops=ops, ops_msg=ops_msg)
         return func
     return register_for_command
 
@@ -167,6 +167,7 @@ def listener(name):
     return register_as_listener
 
 def ops(command, msg=None):
+    logger.warn('use of the @ops decorator has been deprecated in favor of using the @command decorator with the ops and ops_msg options. Use will cause errors in future versions.')
     @wraps(command)
     def register_ops_command(func):
         _ops_plugin(command, msg, func)
