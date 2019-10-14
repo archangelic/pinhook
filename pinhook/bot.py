@@ -127,12 +127,15 @@ class Bot(irc.bot.SingleServerIRCBot):
         return None
 
     def call_internal_commands(self, channel, nick, cmd, text, arg, c):
+        if not cmd.startswith(self.cmd_prefix):
+            return None
+        else:
+            cmd = cmd[len(self.cmd_prefix):]
         output = None
         if nick in self.ops:
             op = True
         else:
             op = False
-        cmd = cmd.lstrip(self.cmd_prefix)
         if cmd == 'join' and op:
             try:
                 c.join(*arg.split())
