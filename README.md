@@ -127,14 +127,14 @@ These options are the same for both IRC and Twitch
 
 There are two types of plugins, commands and listeners. Commands only activate if a message starts with the command word, while listeners receive all messages and are parsed by the plugin for maximum flexibility.
 
-In your chosen plugins directory ("plugins" by default) make a python file with a function. You use the `@pinhook.plugin.register` decorator to create command plugins, or `@pinhook.plugin.listener` to create listeners.
+In your chosen plugins directory ("plugins" by default) make a python file with a function. You use the `@pinhook.plugin.command` decorator to create command plugins, or `@pinhook.plugin.listener` to create listeners.
 
 The function will need to be structured as such:
 
 ```python
 import pinhook.plugin
 
-@pinhook.plugin.register('!test')
+@pinhook.plugin.command('!test')
 def test_plugin(msg):
     message = '{}: this is a test!'.format(msg.nick)
     return pinhook.plugin.message(message)
@@ -162,15 +162,12 @@ It also contains the following IRC functions:
 * `action`: same as privmsg, but does a CTCP action. (i.e., `/me does a thing`)
 * `notice`: send a notice
 
-You can optionally use the `@pinhook.plugin.ops` decorator to denote that a command should only be executable by a bot op.
-
-* If you specify the optional second argument, it will be displayed when a  non-op attempts to execute the command
+You can optionally set a command to be used only by ops
 
 The function will need to be structured as such:
 
 ```python
-@pinhook.plugin.register('!test')
-@pinhook.plugin.ops('!test', 'Only ops can run this command!')
+@pinhook.plugin.command('!test', ops=True, ops_msg='This command can only be run by an op')
 def test_plugin(msg):
     return pinhook.plugin.message('This was run by an op!')
 ```
