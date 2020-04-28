@@ -17,7 +17,7 @@ def build_output(rolls, modifier):
         output = start
     return output
 
-@pinhook.plugin.register('!roll')
+@pinhook.plugin.command('!roll')
 def roll(msg):
     matches = dicepattern.match(msg.arg)
     if matches:
