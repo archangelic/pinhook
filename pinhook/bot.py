@@ -14,6 +14,22 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
 class Bot(irc.bot.SingleServerIRCBot):
+    output_message = plugin.message
+    output_action = plugin.action
+    internal_commands = {
+        'join': 'join a channel',
+        'quit': 'force the bot to quit',
+        'reload': 'force bot to reload all plugins',
+        'enable': 'enable a plugin',
+        'disable': 'disable a plugin',
+        'op': 'add a user as bot operator',
+        'deop': 'remove a user as bot operator',
+        'ops': 'list all ops',
+        'ban': 'ban a user from using the bot',
+        'unban': 'remove bot ban for user',
+        'banlist': 'currently banned nicks'
+    }
+
     def __init__(self, channels, nickname, server, **kwargs):
         self.port = kwargs.get('port', 6667)
         self.ops = kwargs.get('ops', [])
@@ -36,21 +52,6 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.chanlist = channels
         self.bot_nick = nickname
         self.start_logging()
-        self.output_message = plugin.message
-        self.output_action = plugin.action
-        self.internal_commands = {
-            'join': 'join a channel',
-            'quit': 'force the bot to quit',
-            'reload': 'force bot to reload all plugins',
-            'enable': 'enable a plugin',
-            'disable': 'disable a plugin',
-            'op': 'add a user as bot operator',
-            'deop': 'remove a user as bot operator',
-            'ops': 'list all ops',
-            'ban': 'ban a user from using the bot',
-            'unban': 'remove bot ban for user',
-            'banlist': 'currently banned nicks'
-        }
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
 
@@ -313,18 +314,24 @@ class Bot(irc.bot.SingleServerIRCBot):
 
 
 class TwitchBot(Bot):
-    def __init__(self, nickname, channel, token, plugin_dir='plugins', log_level='info', ops=[]):
+    def __init__(self, nickname, channel, token, **kwargs):
+        self.port = kwargs.get('port', 6667)
+        self.ops = kwargs.get('ops', [])
+        self.plugin_dir = kwargs.get('plugin_dir', 'plugins')
+        self.log_level = kwargs.get('log_level', 'info')
+        self.log_file = kwargs.get('log_file', None)
+        self.server_pass = kwargs.get('server_pass', None)
+        self.cmd_prefix = kwargs.get('cmd_prefix', '!')
+        self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
+        self.disable_help = kwargs.get('disable_help', False)
+        self.banned_users = kwargs.get('banned_users', [])
         self.bot_nick = nickname
-        self.log_level = log_level
         self.start_logging()
         self.channel = channel
-        self.plugin_dir = plugin_dir
-        self.ops = ops
-        server = 'irc.twitch.tv'
-        port = 6667
         self.logger.info('Joining Twitch Server')
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, port, 'oauth:'+token)], nickname, nickname)
-        plugin.load_plugins(self.plugin_dir)
+        irc.bot.SingleServerIRCBot.__init__(self, [('irc.twitch.tv', 6667, 'oauth:'+token)], nickname, nickname)
+        self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
+        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
 
     def on_welcome(self, c, e):
         self.logger.info('requesting permissions')
@@ -333,4 +340,3 @@ class TwitchBot(Bot):
         c.cap('REQ', ':twitch.tv/commands')
         self.logger.info('Joining channel ' + self.channel)
         c.join(self.channel)
-
