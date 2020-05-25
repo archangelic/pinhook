@@ -249,6 +249,8 @@ class Bot(irc.bot.SingleServerIRCBot):
 
     def process_event(self, c, e):
         nick = e.source.nick
+        if nick == self.bot_nick:
+            pass
         text = e.arguments[0]
         if e.type == 'privmsg' or e.type == 'pubmsg':
             msg_type = 'message'
