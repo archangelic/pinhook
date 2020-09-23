@@ -14,7 +14,6 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
 class Bot(irc.bot.SingleServerIRCBot):
-    output_message = plugin.message
     internal_commands = {
         'join': 'join a channel',
         'quit': 'force the bot to quit',
