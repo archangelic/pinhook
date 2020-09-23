@@ -15,7 +15,6 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 class Bot(irc.bot.SingleServerIRCBot):
     output_message = plugin.message
-    output_action = plugin.action
     internal_commands = {
         'join': 'join a channel',
         'quit': 'force the bot to quit',
@@ -141,7 +140,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             try:
                 c.join(*arg.split())
                 self.logger.info('joining {} per request of {}'.format(arg, nick))
-                output = self.output_message('{}: joined {}'.format(nick, arg.split()[0]))
+                output = plugin.message('{}: joined {}'.format(nick, arg.split()[0]))
             except:
                 self.logger.exception('issue with join command: {}join #channel <channel key>'.format(self.cmd_prefix))
         elif cmd == 'quit' and op:
@@ -155,43 +154,43 @@ class Bot(irc.bot.SingleServerIRCBot):
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
-            output = self.output_message('Plugins reloaded')
+            output = plugin.message('Plugins reloaded')
         elif cmd == 'enable' and op:
             if arg in plugin.plugins:
                 if plugin.plugins[arg].enabled:
-                    output = self.output_message("{}: '{}' already enabled".format(nick, arg))
+                    output = plugin.message("{}: '{}' already enabled".format(nick, arg))
                 else:
                     plugin.plugins[arg].enable()
-                    output = self.output_message("{}: '{}' enabled!".format(nick, arg))
+                    output = plugin.message("{}: '{}' enabled!".format(nick, arg))
             else:
-                output = self.output_message("{}: '{}' not found".format(nick, arg))
+                output = plugin.message("{}: '{}' not found".format(nick, arg))
         elif cmd == 'disable' and op:
             if arg in plugin.plugins:
                 if not plugin.plugins[arg].enabled:
-                    output = self.output_message("{}: '{}' already disabled".format(nick, arg))
+                    output = plugin.message("{}: '{}' already disabled".format(nick, arg))
                 else:
                     plugin.plugins[arg].disable()
-                    output = self.output_message("{}: '{}' disabled!".format(nick, arg))
+                    output = plugin.message("{}: '{}' disabled!".format(nick, arg))
         elif cmd == 'op' and op:
             for o in arg.split(' '):
                 self.ops.append(o)
-            output = self.output_message('{}: {} added as op'.format(nick, arg))
+            output = plugin.message('{}: {} added as op'.format(nick, arg))
         elif cmd == 'deop' and op:
             for o in arg.split(' '):
                 self.ops = [i for i in self.ops if i != o]
-            output = self.output_message('{}: {} removed as op'.format(nick, arg))
+            output = plugin.message('{}: {} removed as op'.format(nick, arg))
         elif cmd == 'ops' and op:
-            output = self.output_message('current ops: {}'.format(', '.join(self.ops)))
+            output = plugin.message('current ops: {}'.format(', '.join(self.ops)))
         elif cmd == 'ban' and op:
             for o in arg.split(' '):
                 self.banned_users.append(o)
-            output = self.output_message('{}: banned {}'.format(nick, arg))
+            output = plugin.message('{}: banned {}'.format(nick, arg))
         elif cmd == 'unban' and op:
             for o in arg.split(' '):
                 self.banned_users = [i for i in self.banned_users if i != o]
-            output = self.output_message('{}: removed ban for {}'.format(nick, arg))
+            output = plugin.message('{}: removed ban for {}'.format(nick, arg))
         elif cmd == 'banlist':
-            output = self.output_message('currently banned: {}'.format(', '.join(self.banned_users)))
+            output = plugin.message('currently banned: {}'.format(', '.join(self.banned_users)))
         return output
 
     def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, arg, msg_type):
@@ -200,7 +199,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             try:
                 if plugin.cmds[cmd].ops and nick not in self.ops:
                     if plugin.cmds[cmd].ops_msg:
-                        output =  self.output_message(plugin.cmds[cmd].ops_msg)
+                        output =  plugin.message(plugin.cmds[cmd].ops_msg)
                 elif plugin.cmds[cmd].enabled:
                     self.logger.debug('executing {}'.format(cmd))
                     output = plugin.cmds[cmd].run(self.Message(
