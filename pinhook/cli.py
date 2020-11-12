@@ -27,7 +27,7 @@ def read_conf(config, conf_format):
         elif config.name.endswith(('.toml', '.tml')):
             conf_format = 'toml'
         else:
-            click.echo('Could not detect file format, please supply using --format option', err=True)
+            raise click.ClickException('Could not detect file format, please supply using --format option')
     if conf_format == 'json':
         import json
         to_json = json.loads(config.read())
@@ -36,7 +36,7 @@ def read_conf(config, conf_format):
         try:
             import yaml
         except ImportError:
-            click.echo('yaml not installed, please use `pip3 install pinhook[yaml]` to install', err=True)
+            raise click.ClickException('yaml not installed, please use `pip3 install pinhook[yaml]` to install')
         else:
             to_yaml = yaml.load(config.read(), Loader=yaml.FullLoader)
             output = schema.load(to_yaml)
@@ -44,7 +44,7 @@ def read_conf(config, conf_format):
         try:
             import toml
         except ImportError:
-            click.echo('toml not installed, please use `pip3 install pinhook[toml]` to install', err=True)
+            raise click.ClicKException('toml not installed, please use `pip3 install pinhook[toml]` to install')
         else:
             to_toml = toml.load(config.name)
             output = schema.load(to_toml)
