@@ -73,7 +73,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.arg = arg
             if text:
                 self.text = text
-            if not (cmd or text):
+            if not (cmd==None or text==None):
                 raise TypeError('missing cmd or text parameter')
 
     def start_logging(self):
