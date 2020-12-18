@@ -71,7 +71,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             if cmd:
                 self.cmd = cmd
                 self.arg = arg
-            if text:
+            if text != None:
                 self.text = text
             if not (cmd==None or text==None):
                 raise TypeError('missing cmd or text parameter')
