@@ -249,7 +249,10 @@ class Bot(irc.bot.SingleServerIRCBot):
         nick = e.source.nick
         if nick == self.bot_nick:
             pass
-        text = e.arguments[0]
+        if e.arguments:
+            text = e.arguments[0]
+        else:
+            text = ''
         if e.type == 'privmsg' or e.type == 'pubmsg':
             msg_type = 'message'
         else:
