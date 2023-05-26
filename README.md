@@ -185,4 +185,3 @@ Here is a list of live bots using pinhook:
 
 * [pinhook-tilde](https://github.com/archangelic/pinhook-tilde) - fun bot for tilde.town
 * [adminbot](https://github.com/tildetown/adminbot) - admin helper bot for tilde.town, featuring some of the ways you can change the Bot class to suit your needs
-* [lucibot](https://github.com/Lucidiot/lucibot)
