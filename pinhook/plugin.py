@@ -61,6 +61,7 @@ class Command(_BasePlugin):
         self.help_text = kwargs.get('help_text', 'N/A')
         self.ops = kwargs.get('ops', False)
         self.ops_msg = kwargs.get('ops_msg', '')
+        self.hide = kwargs.get('hide', False)
         self.run = kwargs.get('run', self.run)
         self._add_command()
 
@@ -89,9 +90,9 @@ def action(msg):
 def message(msg):
     return Output(OutputType.Message, msg)
 
-def _add_command(command, help_text, func,  ops=False, ops_msg=''):
+def _add_command(command, help_text, func,  ops=False, ops_msg='', hide=False):
     if command not in cmds:
-        Command(command, help_text=help_text, ops=ops, ops_msg=ops_msg, run=func)
+        Command(command, help_text=help_text, ops=ops, ops_msg=ops_msg, hide=hide, run=func)
     else:
         cmds[command]._update_plugin(help_text=help_text, run=func)
 
@@ -145,10 +146,10 @@ def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
     for lstnr in lstnrs:
         logger.debug('adding listener {}'.format(lstnr))
 
-def command(command, help_text='N/A', ops=False, ops_msg=''):
+def command(command, help_text='N/A', ops=False, ops_msg='', hide=False):
     @wraps(command)
     def register_for_command(func):
-        _add_command(command, help_text, func, ops=ops, ops_msg=ops_msg)
+        _add_command(command, help_text, func, ops=ops, ops_msg=ops_msg, hide=False)
         return func
     return register_for_command
 

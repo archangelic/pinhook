@@ -113,7 +113,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.process_event(c, e)
 
     def call_help(self, nick, op):
-        cmds = {k:v.help_text for k,v in plugin.cmds.items() if not plugin.cmds[k].ops}
+        cmds = {k:v.help_text for k,v in plugin.cmds.items() if not (plugin.cmds[k].ops or plugin.cmds[k].hide) }
         cmds.update({self.cmd_prefix + 'help': 'returns this output to private message'})
         if op:
             cmds.update({k:v.help_text for k,v in plugin.cmds.items() if plugin.cmds[k].ops})
