@@ -54,12 +54,13 @@ class Bot(irc.bot.SingleServerIRCBot):
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
 
     class Message:
-        def __init__(self, bot, channel, nick, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None):
+        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None):
             self.bot = bot
             self.datetime = datetime.now(timezone.utc)
             self.timestamp = self.datetime.timestamp()
             self.channel = channel
             self.nick = nick
+            self.user = user
             self.nick_list = nick_list
             self.botnick = botnick
             self.ops = ops
@@ -192,7 +193,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             output = plugin.message('currently banned: {}'.format(', '.join(self.banned_users)))
         return output
 
-    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, arg, msg_type):
+    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type):
         output = None
         if cmd in plugin.cmds:
             try:
@@ -207,6 +208,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                         cmd=cmd,
                         nick_list=nick_list,
                         nick=nick,
+                        user=user,
                         arg=arg,
                         privmsg=privmsg,
                         action=action,
@@ -229,6 +231,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                             text=text,
                             nick_list=nick_list,
                             nick=nick,
+                            user=user,
                             privmsg=privmsg,
                             action=action,
                             notice=notice,
@@ -247,6 +250,7 @@ class Bot(irc.bot.SingleServerIRCBot):
 
     def process_event(self, c, e):
         nick = e.source.nick
+        user = e.source.user
         if nick == self.bot_nick:
             pass
         if e.arguments:
@@ -282,6 +286,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'text': text,
                 'nick_list': nick_list,
                 'nick': nick,
+                'user': user,
                 'arg': arg,
                 'privmsg': c.privmsg,
                 'action': c.action,
