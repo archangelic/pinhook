@@ -43,7 +43,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.disable_help = kwargs.get('disable_help', False)
         self.banned_users = kwargs.get('banned_users', [])
         if self.ssl_required:
-            factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
+            factory = irc.connection.Factory(wrapper=ssl.SSLContext().wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
         else:
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname)
