@@ -27,6 +27,8 @@
 * When connecting fails the log says why (bad certificate, wrong port, server name typo, connection refused) instead of retrying silently
 * Unknown options are logged with a suggestion, e.g. `unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?`
 * TOML config files work without extra packages on Python 3.11+
+* Mistakes in a config file are listed plainly, instead of as a python traceback
+* A documentation site, at https://archangelic.github.io/pinhook/
 * Tests, and a workflow running them on Python 3.8 to 3.14 (closes #10)
 * Publishing to PyPI uses trusted publishing
 

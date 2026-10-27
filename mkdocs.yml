@@ -1,0 +1,65 @@
+site_name: pinhook
+site_description: the pluggable python framework for IRC bots and Twitch bots
+site_url: https://archangelic.github.io/pinhook/
+repo_url: https://github.com/archangelic/pinhook
+repo_name: archangelic/pinhook
+edit_uri: edit/master/docs/
+
+# installed from here, not part of the site
+exclude_docs: |
+  requirements.txt
+
+validation:
+  links:
+    anchors: warn
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Options: options.md
+  - Built-in commands: commands.md
+  - Writing plugins: plugins.md
+  - Bans and ops: bans-and-ops.md
+  - Twitch bots: twitch.md
+  - Troubleshooting: troubleshooting.md
+  - Upgrading to 1.11: upgrading.md
+  - Changelog: changelog.md
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+extra:
+  version:
+    provider: mike
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.tabbed:
+      alternate_style: true

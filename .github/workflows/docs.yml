@@ -1,0 +1,41 @@
+# Checks the docs build on every push and pull request, and publishes them
+# to the gh-pages branch when a release is published
+
+name: Docs
+
+on:
+  push:
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  docs:
+
+    runs-on: ubuntu-latest
+    permissions:
+      # lets mike push the built site to the gh-pages branch
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        # mike needs the gh-pages branch to add a version to it
+        fetch-depth: 0
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install docs tools
+      run: pip install -r docs/requirements.txt
+    - name: Check the docs build
+      run: mkdocs build --strict
+    - name: Publish docs for this release
+      if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        version=$(python -c "import re; print(re.search(r\"'(\d+\.\d+)\", open('pinhook/__version__.py').read()).group(1))")
+        mike deploy --push --update-aliases "$version" latest
+        mike set-default --push latest
