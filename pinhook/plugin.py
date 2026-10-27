@@ -1,7 +1,8 @@
 from enum import Enum
 from functools import wraps
-import importlib
+import importlib.util
 import os
+import sys
 
 from .log import logger
 
@@ -20,10 +21,12 @@ class Output:
         self.msg = self.sanitize(msg)
 
     def sanitize(self, msg):
-        try:
+        if isinstance(msg, str):
             return msg.splitlines()
-        except AttributeError:
-            return msg
+        if isinstance(msg, (list, tuple)):
+            # items in a list can have newlines too
+            return [line for m in msg for line in str(m).splitlines()]
+        return msg
 
 
 class _BasePlugin:
@@ -108,8 +111,9 @@ def _add_listener(name, func):
 def clear_plugins():
     cmds.clear()
     lstnrs.clear()
+    plugins.clear()
 
-def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
+def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!', logger=logger):
     # i'm not sure why i need this but i do
     global cmds
     global plugins
@@ -131,8 +135,11 @@ def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
             try:
                 name = m[:-3]
                 logger.info('loading plugin {}'.format(name))
-                spec = importlib.machinery.PathFinder().find_spec(name, [plugin_dir])
-                spec.loader.load_module()
+                # load under our own name so a plugin called json.py can't replace the real json module
+                spec = importlib.util.spec_from_file_location('pinhook_plugins.' + name, os.path.join(plugin_dir, m))
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[spec.name] = module
+                spec.loader.exec_module(module)
             except Exception:
                 logger.exception('could not load plugin')
     # gather all commands and listeners
@@ -149,12 +156,12 @@ def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
 def command(command, help_text='N/A', ops=False, ops_msg='', hide=False):
     @wraps(command)
     def register_for_command(func):
-        _add_command(command, help_text, func, ops=ops, ops_msg=ops_msg, hide=False)
+        _add_command(command, help_text, func, ops=ops, ops_msg=ops_msg, hide=hide)
         return func
     return register_for_command
 
 def register(command, help_text='N/A'):
-    logger.warn('@register decorator has been deprecated in favor of @command. This will cause errors in future versions.')
+    logger.warning('@register decorator has been deprecated in favor of @command. This will cause errors in future versions.')
     @wraps(command)
     def register_for_command(func):
         _add_command(command, help_text, func)
@@ -168,7 +175,7 @@ def listener(name):
     return register_as_listener
 
 def ops(command, msg=None):
-    logger.warn('use of the @ops decorator has been deprecated in favor of using the @command decorator with the ops and ops_msg options. Use will cause errors in future versions.')
+    logger.warning('use of the @ops decorator has been deprecated in favor of using the @command decorator with the ops and ops_msg options. Use will cause errors in future versions.')
     @wraps(command)
     def register_ops_command(func):
         _ops_plugin(command, msg, func)

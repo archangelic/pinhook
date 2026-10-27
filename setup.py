@@ -17,18 +17,18 @@ DESCRIPTION = 'a pluggable irc bot framework in python'
 URL = 'https://github.com/archangelic/pinhook'
 EMAIL = 'mhancock@archangelic.space'
 AUTHOR = 'M. Hancock'
+REQUIRES_PYTHON = '>=3.8'
 VERSION = None
 
 # What packages are required for this module to be executed?
 REQUIRED = [
     'irc',
-    'enum34',
     'click',
     'marshmallow',
 ]
 
 EXTRAS = {
-    'toml': ['toml'],
+    'toml': ['toml; python_version < "3.11"'],
     'yaml': ['pyyaml']
 }
 
@@ -97,6 +97,7 @@ setup(
     author=AUTHOR,
     author_email=EMAIL,
     url=URL,
+    python_requires=REQUIRES_PYTHON,
     packages=['pinhook'],
     entry_points={
         'console_scripts':
@@ -113,10 +114,13 @@ setup(
         'Development Status :: 5 - Production/Stable',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
     ],
     # $ setup.py publish support.
     cmdclass={
