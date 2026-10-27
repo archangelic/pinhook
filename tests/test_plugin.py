@@ -86,3 +86,9 @@ def test_reload_keeps_disabled_plugins_disabled(plugin_dir):
     plugin.plugins['!stays'].disable()
     plugin.load_plugins(path)
     assert not plugin.plugins['!stays'].enabled
+
+
+def test_deprecated_decorators_do_not_use_deprecated_logging(recwarn):
+    plugin.register('!old')(lambda msg: None)
+    plugin.ops('!old', 'ops only')(lambda msg: None)
+    assert not [w for w in recwarn if "'warn' method is deprecated" in str(w.message)]
