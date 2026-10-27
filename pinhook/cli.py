@@ -11,7 +11,7 @@ class Config(Schema):
     ssl_required = fields.Bool()
     plugin_dir = fields.Str()
     ns_pass = fields.Str()
-    log_level = fields.Str(validate=validate.OneOf(['debug', 'warn', 'info', 'off', 'error']))
+    log_level = fields.Str(validate=validate.OneOf(['off'] + list(Bot.log_levels)))
     server_pass = fields.Str()
 
     class Meta:

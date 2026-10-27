@@ -28,6 +28,14 @@ class Bot(irc.bot.SingleServerIRCBot):
         'unban': 'remove bot ban for user',
         'banlist': 'currently banned nicks'
     }
+    log_levels = {
+        'critical': logging.CRITICAL,
+        'error': logging.ERROR,
+        'warning': logging.WARNING,
+        'warn': logging.WARNING,
+        'info': logging.INFO,
+        'debug': logging.DEBUG,
+    }
 
     def __init__(self, channels, nickname, server, **kwargs):
         self.port = kwargs.get('port', 6667)
@@ -87,21 +95,18 @@ class Bot(irc.bot.SingleServerIRCBot):
 
     def start_logging(self):
         self.logger = log.logger
+        log_level = str(self.log_level).lower()
+        if log_level == 'off':
+            self.logger.disabled = True
+            return
+        if log_level not in self.log_levels:
+            raise ValueError("log_level must be one of: off, {}".format(', '.join(self.log_levels)))
+        self.logger.disabled = False
         if self.log_file:
             log.set_log_file(self.log_file)
         else:
             log.set_log_file('{}.log'.format(self.bot_nick))
-        if self.log_level == 'error':
-            level = logging.ERROR
-        elif self.log_level == 'warning':
-            level = logging.WARNING
-        elif self.log_level == 'info':
-            level = logging.INFO
-        elif self.log_level == 'debug':
-            level = logging.DEBUG
-        # Set levels
-        if self.log_level != "off":
-            self.logger.setLevel(level)
+        self.logger.setLevel(self.log_levels[log_level])
         self.logger.info('Logging started!')
 
     def on_welcome(self, c, e):

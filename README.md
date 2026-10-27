@@ -49,7 +49,7 @@ Optional keys:
 * `port`: (default: `6667`) choose a custom port to connect to the server
 * `ops`: (default: empty list) list of operators who can do things like make the bot join other channels or quit
 * `plugin_dir`: (default: `"plugins"`) directory where the bot should look for plugins
-* `log_level`: (default: `"info"`) string indicating logging level. Logging can be disabled by setting this to `"off"`
+* `log_level`: (default: `"info"`) one of `"debug"`, `"info"`, `"warning"`, `"error"` or `"critical"`. Logging can be disabled by setting this to `"off"`
 * `ns_pass`: this is the password to identify with nickserv
 * `server_pass`: password for the server
 * `ssl_required`: (default: `False`) boolean to turn ssl on or off
@@ -95,7 +95,7 @@ Optional arguments are:
 * `port`: (default: `6667`) choose a custom port to connect to the server
 * `ops`: (default: empty list) list of operators who can do things like make the bot join other channels or quit
 * `plugin_dir`: (default: `"plugins"`) directory where the bot should look for plugins
-* `log_level`: (default: `"info"`) string indicating logging level. Logging can be disabled by setting this to `"off"`
+* `log_level`: (default: `"info"`) one of `"debug"`, `"info"`, `"warning"`, `"error"` or `"critical"`. Logging can be disabled by setting this to `"off"`
 * `ns_pass`: this is the password to identify with nickserv
 * `server_pass`: password for the server
 * `ssl_required`: (default: `False`) boolean to turn ssl on or off

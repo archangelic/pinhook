@@ -1,6 +1,9 @@
+import logging
 import ssl
 from types import SimpleNamespace
 from unittest import mock
+
+import pytest
 
 from conftest import event
 
@@ -198,3 +201,32 @@ def test_failed_nick_change_after_connecting_keeps_nick(make_bot, conn):
     b = make_bot()
     b.on_nicknameinuse(conn, nick_in_use('othernick', target='pinbot'))
     conn.nick.assert_not_called()
+
+
+def test_log_level_is_case_insensitive(make_bot):
+    b = make_bot(log_level='INFO')
+    assert b.logger.level == logging.INFO
+
+
+def test_log_level_accepts_warn_and_warning(make_bot):
+    assert make_bot(log_level='warn').logger.level == logging.WARNING
+    assert make_bot(log_level='warning').logger.level == logging.WARNING
+
+
+def test_bad_log_level_gives_clear_error(make_bot):
+    with pytest.raises(ValueError, match='log_level must be one of'):
+        make_bot(log_level='verbose')
+
+
+def test_log_level_off_disables_logging(make_bot, tmp_path, caplog):
+    b = make_bot(log_level='off')
+    b.logger.error('should not appear')
+    assert 'should not appear' not in caplog.text
+    assert not (tmp_path / 'bot.log').exists()
+
+
+def test_logging_works_again_after_off(make_bot, caplog):
+    make_bot(log_level='off')
+    b = make_bot(log_level='info')
+    b.logger.error('should appear')
+    assert 'should appear' in caplog.text
