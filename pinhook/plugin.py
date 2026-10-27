@@ -20,10 +20,12 @@ class Output:
         self.msg = self.sanitize(msg)
 
     def sanitize(self, msg):
-        try:
+        if isinstance(msg, str):
             return msg.splitlines()
-        except AttributeError:
-            return msg
+        if isinstance(msg, (list, tuple)):
+            # items in a list can have newlines too
+            return [line for m in msg for line in str(m).splitlines()]
+        return msg
 
 
 class _BasePlugin:

@@ -19,3 +19,15 @@ def test_command_not_hidden_by_default(plugin_dir):
     ))
     plugin.load_plugins(path)
     assert not plugin.cmds['!visible'].hide
+
+
+def test_message_splits_string_lines():
+    assert plugin.message('one\ntwo').msg == ['one', 'two']
+
+
+def test_message_splits_lines_inside_list():
+    assert plugin.message(['one\ntwo', 'three']).msg == ['one', 'two', 'three']
+
+
+def test_action_splits_lines_inside_list():
+    assert plugin.action(('one\r\ntwo',)).msg == ['one', 'two']

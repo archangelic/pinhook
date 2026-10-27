@@ -141,3 +141,14 @@ def test_listener_returning_string_does_not_stop_others(make_bot, plugin_dir, co
     b.process_event(conn, event('mal', '#test', 'hello'))
     conn.privmsg.assert_called_once_with('#test', 'hello')
     assert 'issue with listener bad' in caplog.text
+
+
+def test_list_output_with_newline_sends_each_line(make_bot, plugin_dir, conn):
+    b = make_bot(plugin_dir('multi', (
+        "import pinhook.plugin as p\n"
+        "@p.command('!multi')\n"
+        "def multi(msg): return p.message(['one\\ntwo', 'three'])\n"
+    )))
+    b.process_event(conn, event('mal', '#test', '!multi'))
+    assert [c.args for c in conn.privmsg.call_args_list] == [
+        ('#test', 'one'), ('#test', 'two'), ('#test', 'three')]
