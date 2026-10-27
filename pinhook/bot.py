@@ -55,13 +55,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.banned_users = kwargs.get('banned_users', [])
         self.bot_mode = kwargs.get('bot_mode', True)
         if self.ssl_required:
-            context = ssl.create_default_context()
-            if not self.ssl_verify:
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-            wrapper = functools.partial(context.wrap_socket, server_hostname=server)
-            factory = irc.connection.Factory(wrapper=wrapper)
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
+            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=self.ssl_factory(server))
         else:
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname)
         self.chanlist = channels
@@ -93,6 +87,14 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.text = text
             if cmd is None and text is None:
                 raise TypeError('missing cmd or text parameter')
+
+    def ssl_factory(self, server):
+        context = ssl.create_default_context()
+        if not self.ssl_verify:
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+        wrapper = functools.partial(context.wrap_socket, server_hostname=server)
+        return irc.connection.Factory(wrapper=wrapper)
 
     @staticmethod
     def nick_in(nick, nicks):
@@ -375,8 +377,11 @@ class Bot(irc.bot.SingleServerIRCBot):
 
 
 class TwitchBot(Bot):
+    server = 'irc.chat.twitch.tv'
+
     def __init__(self, nickname, channel, token, **kwargs):
-        self.port = kwargs.get('port', 6667)
+        self.port = kwargs.get('port', 6697)
+        self.ssl_verify = True
         self.ops = kwargs.get('ops', [])
         self.plugin_dir = kwargs.get('plugin_dir', 'plugins')
         self.log_level = kwargs.get('log_level', 'info')
@@ -391,7 +396,8 @@ class TwitchBot(Bot):
         self.start_logging()
         self.channel = channel
         self.logger.info('Joining Twitch Server')
-        irc.bot.SingleServerIRCBot.__init__(self, [('irc.twitch.tv', 6667, 'oauth:'+token)], nickname, nickname)
+        # always use tls, the oauth token is a password
+        irc.bot.SingleServerIRCBot.__init__(self, [(self.server, self.port, 'oauth:'+token)], nickname, nickname, connect_factory=self.ssl_factory(self.server))
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
 

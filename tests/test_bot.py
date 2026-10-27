@@ -357,3 +357,13 @@ def test_ops_ignore_nick_case(make_bot, plugin_dir, conn):
     b.process_event(conn, event('mal', '#test', '!secret'))
     b.process_event(conn, event('MAL', '#test', '!ops'))
     assert [c.args[1] for c in conn.privmsg.call_args_list] == ['welcome op', 'current ops: Mal']
+
+
+def test_twitch_bot_uses_tls(tmp_path):
+    with mock.patch('irc.connection.Factory') as factory:
+        b = pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 't.log'))
+    server = b.servers.peek()
+    assert (server.host, server.port) == ('irc.chat.twitch.tv', 6697)
+    wrapper = factory.call_args.kwargs['wrapper']
+    assert wrapper.func.__self__.verify_mode == ssl.CERT_REQUIRED
+    assert wrapper.keywords['server_hostname'] == 'irc.chat.twitch.tv'
