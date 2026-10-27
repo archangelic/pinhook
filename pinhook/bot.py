@@ -206,22 +206,26 @@ class Bot(irc.bot.SingleServerIRCBot):
                     output = plugin.message("{}: '{}' disabled!".format(nick, arg))
             else:
                 output = plugin.message("{}: '{}' not found".format(nick, arg))
+        elif cmd in ('op', 'deop', 'ban', 'unban') and op and not arg.split():
+            output = plugin.message('{}: usage: {}{} <nick>'.format(nick, self.cmd_prefix, cmd))
         elif cmd == 'op' and op:
-            for o in arg.split(' '):
-                self.ops.append(o)
+            for o in arg.split():
+                if o not in self.ops:
+                    self.ops.append(o)
             output = plugin.message('{}: {} added as op'.format(nick, arg))
         elif cmd == 'deop' and op:
-            for o in arg.split(' '):
+            for o in arg.split():
                 self.ops = [i for i in self.ops if i != o]
             output = plugin.message('{}: {} removed as op'.format(nick, arg))
         elif cmd == 'ops' and op:
             output = plugin.message('current ops: {}'.format(', '.join(self.ops)))
         elif cmd == 'ban' and op:
-            for o in arg.split(' '):
-                self.banned_users.append(o)
+            for o in arg.split():
+                if o not in self.banned_users:
+                    self.banned_users.append(o)
             output = plugin.message('{}: banned {}'.format(nick, arg))
         elif cmd == 'unban' and op:
-            for o in arg.split(' '):
+            for o in arg.split():
                 self.banned_users = [i for i in self.banned_users if i != o]
             output = plugin.message('{}: removed ban for {}'.format(nick, arg))
         elif cmd == 'banlist':

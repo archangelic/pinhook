@@ -245,3 +245,23 @@ def test_disable_unknown_plugin_says_not_found(make_bot, conn):
     b = make_bot(ops=['mal'])
     b.process_event(conn, event('mal', '#test', '!disable nope'))
     conn.privmsg.assert_called_once_with('#test', "mal: 'nope' not found")
+
+
+def test_op_with_no_nick_shows_usage(make_bot, conn):
+    b = make_bot(ops=['mal'])
+    b.process_event(conn, event('mal', '#test', '!op'))
+    assert b.ops == ['mal']
+    conn.privmsg.assert_called_once_with('#test', 'mal: usage: !op <nick>')
+
+
+def test_ban_with_no_nick_shows_usage(make_bot, conn):
+    b = make_bot(ops=['mal'])
+    b.process_event(conn, event('mal', '#test', '!ban'))
+    assert b.banned_users == []
+    conn.privmsg.assert_called_once_with('#test', 'mal: usage: !ban <nick>')
+
+
+def test_op_ignores_extra_spaces_and_duplicates(make_bot, conn):
+    b = make_bot(ops=['mal'])
+    b.process_event(conn, event('mal', '#test', '!op  alice   mal'))
+    assert b.ops == ['mal', 'alice']
