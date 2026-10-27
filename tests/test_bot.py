@@ -5,6 +5,8 @@ from unittest import mock
 
 import pytest
 
+from pinhook import bot as pinhook_bot
+
 from conftest import event
 
 
@@ -265,3 +267,17 @@ def test_op_ignores_extra_spaces_and_duplicates(make_bot, conn):
     b = make_bot(ops=['mal'])
     b.process_event(conn, event('mal', '#test', '!op  alice   mal'))
     assert b.ops == ['mal', 'alice']
+
+
+MESSAGE_ARGS = dict(bot=None, channel='#test', nick='mal', user='user', botnick='pinbot', ops=[],
+                    logger=None, action=None, privmsg=None, notice=None, msg_type='message')
+
+
+def test_message_needs_cmd_or_text():
+    with pytest.raises(TypeError, match='missing cmd or text'):
+        pinhook_bot.Bot.Message(**MESSAGE_ARGS)
+
+
+def test_message_with_cmd_and_text_is_fine():
+    msg = pinhook_bot.Bot.Message(cmd='!ping', arg='', text='!ping', **MESSAGE_ARGS)
+    assert msg.cmd == '!ping' and msg.text == '!ping'
