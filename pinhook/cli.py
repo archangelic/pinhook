@@ -50,12 +50,17 @@ def read_conf(config, conf_format):
             output = schema.load(to_yaml)
     elif conf_format == 'toml':
         try:
-            import toml
+            # built in from python 3.11
+            import tomllib
         except ImportError:
-            raise click.ClickException('toml not installed, please use `pip3 install pinhook[toml]` to install')
-        else:
+            try:
+                import toml
+            except ImportError:
+                raise click.ClickException('toml not installed, please use `pip3 install pinhook[toml]` to install')
             to_toml = toml.load(config.name)
-            output = schema.load(to_toml)
+        else:
+            to_toml = tomllib.load(config)
+        output = schema.load(to_toml)
     return output
 
 @click.command()

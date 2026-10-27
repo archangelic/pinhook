@@ -1,6 +1,7 @@
 import json
 from unittest import mock
 
+import pytest
 from click.testing import CliRunner
 
 from pinhook.bot import Bot
@@ -36,7 +37,25 @@ def test_unknown_config_keys_are_passed_to_bot(tmp_path):
 
 
 def test_toml_config_without_toml_installed_gives_install_hint(tmp_path, monkeypatch):
-    monkeypatch.setitem(__import__('sys').modules, 'toml', None)  # makes "import toml" fail
+    # makes "import tomllib" and "import toml" fail
+    monkeypatch.setitem(__import__('sys').modules, 'tomllib', None)
+    monkeypatch.setitem(__import__('sys').modules, 'toml', None)
     result, bot = run_cli(tmp_path, 'nickname = "pinbot"\n', name='config.toml')
     assert result.exit_code != 0
     assert 'pip3 install pinhook[toml]' in result.output
+
+
+def test_toml_config_loads(tmp_path):
+    try:
+        import tomllib  # noqa: F401
+    except ImportError:
+        pytest.importorskip('toml')
+    result, bot = run_cli(tmp_path, (
+        'nickname = "pinbot"\n'
+        'server = "localhost"\n'
+        'channels = ["#test"]\n'
+        'bot_mode = false\n'
+    ), name='config.toml')
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.kwargs['nickname'] == 'pinbot'
+    assert bot.call_args.kwargs['bot_mode'] is False

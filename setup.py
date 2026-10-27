@@ -28,7 +28,7 @@ REQUIRED = [
 ]
 
 EXTRAS = {
-    'toml': ['toml'],
+    'toml': ['toml; python_version < "3.11"'],
     'yaml': ['pyyaml']
 }
 
