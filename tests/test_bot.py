@@ -281,3 +281,10 @@ def test_message_needs_cmd_or_text():
 def test_message_with_cmd_and_text_is_fine():
     msg = pinhook_bot.Bot.Message(cmd='!ping', arg='', text='!ping', **MESSAGE_ARGS)
     assert msg.cmd == '!ping' and msg.text == '!ping'
+
+
+def test_quit_command_disconnects_and_exits(make_bot, conn):
+    b = make_bot(ops=['mal'])
+    with pytest.raises(SystemExit):
+        b.process_event(conn, event('mal', '#test', '!quit bye'))
+    conn.quit.assert_called_once_with('bye')

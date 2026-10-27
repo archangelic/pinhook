@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import functools
 import logging
 import ssl
+import sys
 import time
 
 from . import log
@@ -181,7 +182,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             if not arg:
                 arg = "See y'all later!"
             c.quit(arg)
-            quit()
+            sys.exit()
         elif cmd == 'help' and not self.disable_help:
             self.call_help(nick, op)
         elif cmd == 'reload' and op:
