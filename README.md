@@ -53,6 +53,7 @@ Optional keys:
 * `ns_pass`: this is the password to identify with nickserv
 * `server_pass`: password for the server
 * `ssl_required`: (default: `False`) boolean to turn ssl on or off
+* `bot_mode`: (default: `True`) mark the bot as a bot on servers that support it (sets the user mode the server advertises as `BOT`)
 
 Once you have your configuration file ready and your plugins in place, you can start your bot from the command line:
 
@@ -97,6 +98,7 @@ Optional arguments are:
 * `ns_pass`: this is the password to identify with nickserv
 * `server_pass`: password for the server
 * `ssl_required`: (default: `False`) boolean to turn ssl on or off
+* `bot_mode`: (default: `True`) mark the bot as a bot on servers that support it (sets the user mode the server advertises as `BOT`)
 
 ## Creating a Twitch Bot
 

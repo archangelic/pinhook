@@ -42,6 +42,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
         self.disable_help = kwargs.get('disable_help', False)
         self.banned_users = kwargs.get('banned_users', [])
+        self.bot_mode = kwargs.get('bot_mode', True)
         if self.ssl_required:
             factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
@@ -103,6 +104,17 @@ class Bot(irc.bot.SingleServerIRCBot):
         for channel in self.chanlist:
             self.logger.info('joining channel {}'.format(channel.split()[0]))
             c.join(*channel.split())
+
+    def on_featurelist(self, c, e):
+        # servers that support bot mode advertise its letter as BOT=<mode>
+        # https://ircv3.net/specs/extensions/bot-mode
+        if not self.bot_mode:
+            return
+        for feature in e.arguments:
+            if feature.startswith('BOT='):
+                mode = feature[len('BOT='):]
+                self.logger.info('setting bot mode +{}'.format(mode))
+                c.mode(c.get_nickname(), '+' + mode)
 
     def on_pubmsg(self, c, e):
         self.process_event(c, e)
@@ -338,6 +350,7 @@ class TwitchBot(Bot):
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
         self.disable_help = kwargs.get('disable_help', False)
         self.banned_users = kwargs.get('banned_users', [])
+        self.bot_mode = kwargs.get('bot_mode', True)
         self.bot_nick = nickname
         self.start_logging()
         self.channel = channel

@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from conftest import event
 
 
@@ -87,3 +89,31 @@ def test_unbanned_user_can_use_plugins(make_bot, plugin_dir, conn):
     conn.reset_mock()
     b.process_event(conn, event('troll', '#test', '!ping'))
     conn.privmsg.assert_called_once_with('#test', 'pong')
+
+
+def featurelist(*features):
+    return SimpleNamespace(arguments=list(features) + ['are supported by this server'])
+
+
+def test_sets_bot_mode_from_server(make_bot, conn):
+    b = make_bot()
+    b.on_featurelist(conn, featurelist('CHANTYPES=#', 'BOT=B'))
+    conn.mode.assert_called_once_with('pinbot', '+B')
+
+
+def test_uses_server_bot_mode_letter(make_bot, conn):
+    b = make_bot()
+    b.on_featurelist(conn, featurelist('BOT=b'))
+    conn.mode.assert_called_once_with('pinbot', '+b')
+
+
+def test_no_bot_mode_when_server_does_not_support_it(make_bot, conn):
+    b = make_bot()
+    b.on_featurelist(conn, featurelist('CHANTYPES=#', 'NETWORK=Libera.Chat'))
+    conn.mode.assert_not_called()
+
+
+def test_bot_mode_can_be_turned_off(make_bot, conn):
+    b = make_bot(bot_mode=False)
+    b.on_featurelist(conn, featurelist('BOT=B'))
+    conn.mode.assert_not_called()
