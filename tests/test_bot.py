@@ -175,3 +175,26 @@ def test_ssl_verify_can_be_turned_off(make_bot):
     context = wrapper.func.__self__
     assert context.verify_mode == ssl.CERT_NONE
     assert not context.check_hostname
+
+
+def nick_in_use(nick, target='*'):
+    return SimpleNamespace(target=target, arguments=[nick, 'Nickname is already in use'])
+
+
+def test_retries_with_new_nick_when_taken(make_bot, conn):
+    b = make_bot()
+    b.on_nicknameinuse(conn, nick_in_use('pinbot'))
+    conn.nick.assert_called_once_with('pinbot_')
+
+
+def test_keeps_retrying_when_new_nick_also_taken(make_bot, conn):
+    # get_nickname still says pinbot until the server accepts a nick
+    b = make_bot()
+    b.on_nicknameinuse(conn, nick_in_use('pinbot_'))
+    conn.nick.assert_called_once_with('pinbot__')
+
+
+def test_failed_nick_change_after_connecting_keeps_nick(make_bot, conn):
+    b = make_bot()
+    b.on_nicknameinuse(conn, nick_in_use('othernick', target='pinbot'))
+    conn.nick.assert_not_called()

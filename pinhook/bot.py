@@ -112,6 +112,15 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.logger.info('joining channel {}'.format(channel.split()[0]))
             c.join(*channel.split())
 
+    def on_nicknameinuse(self, c, e):
+        # servers call us * until we're registered, after that a failed
+        # nick change should just keep the nick we already have
+        if e.target != '*':
+            return
+        new_nick = e.arguments[0] + '_'
+        self.logger.warning('nickname {} in use, trying {}'.format(e.arguments[0], new_nick))
+        c.nick(new_nick)
+
     def on_featurelist(self, c, e):
         # servers that support bot mode advertise its letter as BOT=<mode>
         # https://ircv3.net/specs/extensions/bot-mode
