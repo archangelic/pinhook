@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import difflib
 import functools
 import logging
+import socket
 import ssl
 import sys
 import time
@@ -95,6 +96,35 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.text = text
             if cmd is None and text is None:
                 raise TypeError('missing cmd or text parameter')
+
+    def connect(self, *args, **kwargs):
+        # the irc library quietly retries failed connections, so say why it failed
+        try:
+            super().connect(*args, **kwargs)
+        except irc.client.ServerConnectionError as e:
+            self.logger.error(self.connection_error_message(args[0], args[1], e))
+            raise
+
+    def connection_error_message(self, host, port, error):
+        cause = error.__cause__
+        start = "couldn't connect to {}:{}: ".format(host, port)
+        end = ' (will keep retrying every 1-5 minutes)'
+        if isinstance(cause, ssl.SSLCertVerificationError):
+            start += "the server's ssl certificate failed verification ({}). ".format(cause.verify_message.rstrip('.'))
+            # openssl codes for hostname and ip address mismatch, and expired
+            if cause.verify_code in (62, 64):
+                return start + 'Set server to the name the certificate was issued for, not an IP address or alias' + end
+            if cause.verify_code == 10:
+                return start + 'This needs fixing on the server' + end
+            return start + 'If this server uses a self-signed certificate, set ssl_verify to false' + end
+        if isinstance(cause, ssl.SSLError):
+            return (start + 'ssl handshake failed ({}). '
+                    "Check {} is the server's ssl port, usually 6697".format(getattr(cause, 'reason', None) or cause, port) + end)
+        if isinstance(cause, socket.gaierror):
+            return start + 'server name not found, check the server setting' + end
+        if isinstance(cause, ConnectionRefusedError):
+            return start + 'connection refused, check the server and port settings' + end
+        return start + str(cause or error) + end
 
     def warn_unknown_options(self, kwargs):
         for key in sorted(set(kwargs) - self.options):

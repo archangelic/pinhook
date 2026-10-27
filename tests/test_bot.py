@@ -1,8 +1,10 @@
 import logging
+import socket
 import ssl
 from types import SimpleNamespace
 from unittest import mock
 
+import irc.client
 import pytest
 
 from pinhook import bot as pinhook_bot
@@ -393,3 +395,42 @@ def test_output_pauses_between_lines(make_bot, plugin_dir, conn, sleeps):
     )))
     b.process_event(conn, event('mal', '#test', '!multi'))
     assert sleeps == [.5, .5, .5]
+
+
+def connection_error(cause):
+    try:
+        raise irc.client.ServerConnectionError("Couldn't connect to socket") from cause
+    except irc.client.ServerConnectionError as e:
+        return e
+
+
+def cert_error(code, message):
+    e = ssl.SSLCertVerificationError(message)
+    e.verify_code, e.verify_message = code, message
+    return e
+
+
+@pytest.mark.parametrize('cause, expected', [
+    (cert_error(20, 'unable to get local issuer certificate'), 'set ssl_verify to false'),
+    (cert_error(62, "Hostname mismatch, certificate is not valid for 'irc.example.net'."), 'name the certificate was issued for'),
+    (cert_error(10, 'certificate has expired'), 'needs fixing on the server'),
+    (ssl.SSLError('wrong version number'), "Check 6697 is the server's ssl port"),
+    (socket.gaierror(8, 'nodename nor servname provided'), 'server name not found'),
+    (ConnectionRefusedError(61, 'Connection refused'), 'connection refused, check the server and port'),
+])
+def test_connection_errors_are_explained(make_bot, caplog, cause, expected):
+    b = make_bot()
+    b.connection.connect = mock.Mock(side_effect=connection_error(cause))
+    with pytest.raises(irc.client.ServerConnectionError):
+        b.connect('irc.example.net', 6697, 'pinbot')
+    assert "couldn't connect to irc.example.net:6697" in caplog.text
+    assert expected in caplog.text
+    assert 'will keep retrying' in caplog.text
+
+
+def test_self_signed_hint_not_given_for_name_mismatch(make_bot, caplog):
+    b = make_bot()
+    b.connection.connect = mock.Mock(side_effect=connection_error(cert_error(62, 'Hostname mismatch')))
+    with pytest.raises(irc.client.ServerConnectionError):
+        b.connect('irc.example.net', 6697, 'pinbot')
+    assert 'ssl_verify' not in caplog.text
