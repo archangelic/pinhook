@@ -8,6 +8,19 @@ PING_PLUGIN = (
 )
 
 
+def test_private_message_gets_reply(make_bot, plugin_dir, conn):
+    b = make_bot(plugin_dir('ping', PING_PLUGIN))
+    b.process_event(conn, event('mal', 'pinbot', '!ping', type='privmsg'))
+    conn.privmsg.assert_called_once_with('mal', 'pong')
+
+
+def test_private_message_after_nick_change(make_bot, plugin_dir, conn):
+    # e.g. services forced a nick change while connected
+    b = make_bot(plugin_dir('ping', PING_PLUGIN))
+    b.process_event(conn, event('mal', 'pinbot_', '!ping', type='privmsg'))
+    conn.privmsg.assert_called_once_with('mal', 'pong')
+
+
 def test_banned_user_cannot_use_plugins(make_bot, plugin_dir, conn):
     b = make_bot(plugin_dir('ping', PING_PLUGIN), banned_users=['troll'])
     b.process_event(conn, event('troll', '#test', '!ping'))

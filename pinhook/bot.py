@@ -264,7 +264,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             msg_type = 'message'
         else:
             msg_type = e.type
-        if e.target == self.bot_nick:
+        if not irc.client.is_channel(e.target):
             chan = nick
             nick_list = [nick]
         else:
