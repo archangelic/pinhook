@@ -149,7 +149,7 @@ def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
 def command(command, help_text='N/A', ops=False, ops_msg='', hide=False):
     @wraps(command)
     def register_for_command(func):
-        _add_command(command, help_text, func, ops=ops, ops_msg=ops_msg, hide=False)
+        _add_command(command, help_text, func, ops=ops, ops_msg=ops_msg, hide=hide)
         return func
     return register_for_command
 
