@@ -239,3 +239,9 @@ def test_enable_after_plugin_deleted_says_not_found(make_bot, plugin_dir, tmp_pa
     conn.reset_mock()
     b.process_event(conn, event('mal', '#test', '!enable !ping'))
     conn.privmsg.assert_called_once_with('#test', "mal: '!ping' not found")
+
+
+def test_disable_unknown_plugin_says_not_found(make_bot, conn):
+    b = make_bot(ops=['mal'])
+    b.process_event(conn, event('mal', '#test', '!disable nope'))
+    conn.privmsg.assert_called_once_with('#test', "mal: 'nope' not found")

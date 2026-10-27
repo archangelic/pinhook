@@ -204,6 +204,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                 else:
                     plugin.plugins[arg].disable()
                     output = plugin.message("{}: '{}' disabled!".format(nick, arg))
+            else:
+                output = plugin.message("{}: '{}' not found".format(nick, arg))
         elif cmd == 'op' and op:
             for o in arg.split(' '):
                 self.ops.append(o)
