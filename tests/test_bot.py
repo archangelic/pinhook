@@ -117,3 +117,27 @@ def test_bot_mode_can_be_turned_off(make_bot, conn):
     b = make_bot(bot_mode=False)
     b.on_featurelist(conn, featurelist('BOT=B'))
     conn.mode.assert_not_called()
+
+
+def test_command_returning_string_does_not_crash(make_bot, plugin_dir, conn, caplog):
+    b = make_bot(plugin_dir('bad', (
+        "import pinhook.plugin as p\n"
+        "@p.command('!bad')\n"
+        "def bad(msg): return 'plain string'\n"
+    )))
+    b.process_event(conn, event('mal', '#test', '!bad'))
+    conn.privmsg.assert_not_called()
+    assert 'issue with command !bad' in caplog.text
+    assert 'got str' in caplog.text
+
+
+def test_listener_returning_string_does_not_stop_others(make_bot, plugin_dir, conn, caplog):
+    plugin_dir('bad_listener', (
+        "import pinhook.plugin as p\n"
+        "@p.listener('bad')\n"
+        "def bad(msg): return 'plain string'\n"
+    ))
+    b = make_bot(plugin_dir('echo', ECHO_PLUGIN))
+    b.process_event(conn, event('mal', '#test', 'hello'))
+    conn.privmsg.assert_called_once_with('#test', 'hello')
+    assert 'issue with listener bad' in caplog.text

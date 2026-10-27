@@ -205,6 +205,11 @@ class Bot(irc.bot.SingleServerIRCBot):
             output = plugin.message('currently banned: {}'.format(', '.join(self.banned_users)))
         return output
 
+    def check_output(self, output):
+        if output and not isinstance(output, plugin.Output):
+            raise TypeError('plugins must return message() or action(), got {}'.format(type(output).__name__))
+        return output
+
     def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type, botnick):
         output = None
         if cmd in plugin.cmds:
@@ -214,7 +219,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                         output =  plugin.message(plugin.cmds[cmd].ops_msg)
                 elif plugin.cmds[cmd].enabled:
                     self.logger.debug('executing {}'.format(cmd))
-                    output = plugin.cmds[cmd].run(self.Message(
+                    output = self.check_output(plugin.cmds[cmd].run(self.Message(
                         bot=self,
                         channel=chan,
                         cmd=cmd,
@@ -229,7 +234,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger,
                         msg_type=msg_type
-                    ))
+                    )))
             except Exception:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
@@ -237,7 +242,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 if plugin.lstnrs[lstnr].enabled:
                     try:
                         self.logger.debug('whispering to listener: {}'.format(lstnr))
-                        listen_output = plugin.lstnrs[lstnr].run(self.Message(
+                        listen_output = self.check_output(plugin.lstnrs[lstnr].run(self.Message(
                             bot=self,
                             channel=chan,
                             text=text,
@@ -251,7 +256,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                             ops=self.ops,
                             logger=self.logger,
                             msg_type=msg_type
-                        ))
+                        )))
                         if listen_output:
                             output = listen_output
                     except Exception:
