@@ -288,3 +288,43 @@ def test_quit_command_disconnects_and_exits(make_bot, conn):
     with pytest.raises(SystemExit):
         b.process_event(conn, event('mal', '#test', '!quit bye'))
     conn.quit.assert_called_once_with('bye')
+
+
+def test_several_bots_do_not_duplicate_log_lines(make_bot, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    make_bot(log_file='same.log')
+    b = make_bot(log_file=str(tmp_path / 'same.log'))  # same file, absolute path
+    b.logger.warning('one line please')
+    assert (tmp_path / 'same.log').read_text().count('one line please') == 1
+
+
+def test_each_bot_logs_to_its_own_file(tmp_path):
+    alpha = pinhook_bot.Bot(['#test'], 'alpha', 'localhost', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 'alpha.log'))
+    beta = pinhook_bot.Bot(['#test'], 'beta', 'localhost', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 'beta.log'))
+    alpha.logger.warning('from alpha')
+    beta.logger.warning('from beta')
+    assert 'from alpha' in (tmp_path / 'alpha.log').read_text()
+    assert 'from beta' not in (tmp_path / 'alpha.log').read_text()
+    assert 'from beta' in (tmp_path / 'beta.log').read_text()
+    assert 'from alpha' not in (tmp_path / 'beta.log').read_text()
+
+
+def test_each_bot_has_its_own_log_level(tmp_path, caplog):
+    quiet = pinhook_bot.Bot(['#test'], 'quiet', 'localhost', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 'q.log'), log_level='off')
+    loud = pinhook_bot.Bot(['#test'], 'loud', 'localhost', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 'l.log'), log_level='debug')
+    quiet.logger.error('quiet bot')
+    loud.logger.debug('loud bot')
+    assert 'quiet bot' not in caplog.text
+    assert 'loud bot' in caplog.text
+
+
+def test_plugin_loading_and_plugin_logs_go_to_their_bot(make_bot, plugin_dir, tmp_path, conn):
+    b = make_bot(plugin_dir('chatty', (
+        "import pinhook.plugin as p\n"
+        "@p.command('!chatty')\n"
+        "def chatty(msg): msg.logger.info('hello from plugin')\n"
+    )))
+    b.process_event(conn, event('mal', '#test', '!chatty'))
+    log_text = (tmp_path / 'bot.log').read_text()
+    assert 'loading plugin chatty' in log_text
+    assert 'hello from plugin' in log_text

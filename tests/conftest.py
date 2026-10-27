@@ -1,3 +1,4 @@
+import logging
 from types import SimpleNamespace
 from unittest import mock
 
@@ -17,6 +18,14 @@ def clear_plugins():
     plugin.cmds.clear()
     plugin.lstnrs.clear()
     plugin.plugins.clear()
+    # close log files the bots opened during the test
+    for name in list(logging.root.manager.loggerDict):
+        if name == 'bot' or name.startswith('bot.'):
+            logger = logging.getLogger(name)
+            for handler in list(logger.handlers):
+                if isinstance(handler, logging.FileHandler):
+                    logger.removeHandler(handler)
+                    handler.close()
 
 
 @pytest.fixture

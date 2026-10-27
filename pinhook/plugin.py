@@ -113,7 +113,7 @@ def clear_plugins():
     lstnrs.clear()
     plugins.clear()
 
-def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
+def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!', logger=logger):
     # i'm not sure why i need this but i do
     global cmds
     global plugins

@@ -68,7 +68,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.bot_nick = nickname
         self.start_logging()
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
-        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
+        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
 
     class Message:
         def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None):
@@ -95,7 +95,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 raise TypeError('missing cmd or text parameter')
 
     def start_logging(self):
-        self.logger = log.logger
+        self.logger = log.get_bot_logger(self.bot_nick)
         log_level = str(self.log_level).lower()
         if log_level == 'off':
             self.logger.disabled = True
@@ -104,9 +104,9 @@ class Bot(irc.bot.SingleServerIRCBot):
             raise ValueError("log_level must be one of: off, {}".format(', '.join(self.log_levels)))
         self.logger.disabled = False
         if self.log_file:
-            log.set_log_file(self.log_file)
+            log.set_log_file(self.log_file, self.logger)
         else:
-            log.set_log_file('{}.log'.format(self.bot_nick))
+            log.set_log_file('{}.log'.format(self.bot_nick), self.logger)
         self.logger.setLevel(self.log_levels[log_level])
         self.logger.info('Logging started!')
 
@@ -187,7 +187,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.call_help(nick, op)
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
-            plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
+            plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
             output = plugin.message('Plugins reloaded')
         elif cmd == 'enable' and op:
             if arg in plugin.plugins:
@@ -390,7 +390,7 @@ class TwitchBot(Bot):
         self.logger.info('Joining Twitch Server')
         irc.bot.SingleServerIRCBot.__init__(self, [('irc.twitch.tv', 6667, 'oauth:'+token)], nickname, nickname)
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
-        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix)
+        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
 
     def on_welcome(self, c, e):
         self.logger.info('requesting permissions')
