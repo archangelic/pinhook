@@ -1,4 +1,6 @@
+import ssl
 from types import SimpleNamespace
+from unittest import mock
 
 from conftest import event
 
@@ -152,3 +154,24 @@ def test_list_output_with_newline_sends_each_line(make_bot, plugin_dir, conn):
     b.process_event(conn, event('mal', '#test', '!multi'))
     assert [c.args for c in conn.privmsg.call_args_list] == [
         ('#test', 'one'), ('#test', 'two'), ('#test', 'three')]
+
+
+def ssl_wrapper(make_bot, **kwargs):
+    with mock.patch('irc.connection.Factory') as factory:
+        make_bot(**kwargs)
+    return factory.call_args.kwargs['wrapper']
+
+
+def test_ssl_verifies_certificate_by_default(make_bot):
+    wrapper = ssl_wrapper(make_bot, ssl_required=True)
+    context = wrapper.func.__self__
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname
+    assert wrapper.keywords['server_hostname'] == 'localhost'
+
+
+def test_ssl_verify_can_be_turned_off(make_bot):
+    wrapper = ssl_wrapper(make_bot, ssl_required=True, ssl_verify=False)
+    context = wrapper.func.__self__
+    assert context.verify_mode == ssl.CERT_NONE
+    assert not context.check_hostname

@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from datetime import datetime, timezone
+import functools
 import logging
 import ssl
 import time
@@ -33,6 +34,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.ops = kwargs.get('ops', [])
         self.plugin_dir = kwargs.get('plugin_dir', 'plugins')
         self.ssl_required = kwargs.get('ssl_required', False)
+        self.ssl_verify = kwargs.get('ssl_verify', True)
         self.ns_pass = kwargs.get('ns_pass', None)
         self.nickserv = kwargs.get('nickserv', 'NickServ')
         self.log_level = kwargs.get('log_level', 'info')
@@ -44,7 +46,12 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.banned_users = kwargs.get('banned_users', [])
         self.bot_mode = kwargs.get('bot_mode', True)
         if self.ssl_required:
-            factory = irc.connection.Factory(wrapper=ssl.wrap_socket)
+            context = ssl.create_default_context()
+            if not self.ssl_verify:
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+            wrapper = functools.partial(context.wrap_socket, server_hostname=server)
+            factory = irc.connection.Factory(wrapper=wrapper)
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=factory)
         else:
             irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname)
