@@ -42,7 +42,9 @@ def make_bot(tmp_path):
 
 @pytest.fixture
 def conn():
-    return mock.MagicMock()
+    c = mock.MagicMock()
+    c.get_nickname.return_value = 'pinbot'
+    return c
 
 
 def event(nick, target, text, type='pubmsg'):

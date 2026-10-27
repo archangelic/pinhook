@@ -193,7 +193,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             output = plugin.message('currently banned: {}'.format(', '.join(self.banned_users)))
         return output
 
-    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type):
+    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type, botnick):
         output = None
         if cmd in plugin.cmds:
             try:
@@ -213,7 +213,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                         privmsg=privmsg,
                         action=action,
                         notice=notice,
-                        botnick=self.bot_nick,
+                        botnick=botnick,
                         ops=self.ops,
                         logger=self.logger,
                         msg_type=msg_type
@@ -235,7 +235,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                             privmsg=privmsg,
                             action=action,
                             notice=notice,
-                            botnick=self.bot_nick,
+                            botnick=botnick,
                             ops=self.ops,
                             logger=self.logger,
                             msg_type=msg_type
@@ -254,8 +254,9 @@ class Bot(irc.bot.SingleServerIRCBot):
         if nick in self.banned_users:
             self.logger.debug('ignoring banned user {}'.format(nick))
             return
-        if nick == self.bot_nick:
-            pass
+        botnick = c.get_nickname()
+        if irc.strings.lower(nick) == irc.strings.lower(botnick):
+            return
         if e.arguments:
             text = e.arguments[0]
         else:
@@ -294,7 +295,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'privmsg': c.privmsg,
                 'action': c.action,
                 'notice': c.notice,
-                'msg_type': msg_type
+                'msg_type': msg_type,
+                'botnick': botnick
             }
             output = self.call_plugins(**plugin_info)
         if output:
