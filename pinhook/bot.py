@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from datetime import datetime, timezone
+import difflib
 import functools
 import logging
 import ssl
@@ -28,6 +29,12 @@ class Bot(irc.bot.SingleServerIRCBot):
         'ban': 'ban a user from using the bot',
         'unban': 'remove bot ban for user',
         'banlist': 'currently banned nicks'
+    }
+    # keyword options Bot understands, subclasses can add their own
+    options = {
+        'port', 'ops', 'plugin_dir', 'ssl_required', 'ssl_verify', 'ns_pass',
+        'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
+        'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -61,6 +68,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.chanlist = channels
         self.bot_nick = nickname
         self.start_logging()
+        self.warn_unknown_options(kwargs)
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
 
@@ -87,6 +95,12 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.text = text
             if cmd is None and text is None:
                 raise TypeError('missing cmd or text parameter')
+
+    def warn_unknown_options(self, kwargs):
+        for key in sorted(set(kwargs) - self.options):
+            close = difflib.get_close_matches(key, self.options, n=1)
+            hint = ", did you mean '{}'?".format(close[0]) if close else ''
+            self.logger.warning("unknown option '{}' ignored{}".format(key, hint))
 
     def ssl_factory(self, server):
         context = ssl.create_default_context()
@@ -378,6 +392,10 @@ class Bot(irc.bot.SingleServerIRCBot):
 
 class TwitchBot(Bot):
     server = 'irc.chat.twitch.tv'
+    options = {
+        'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
+        'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
+    }
 
     def __init__(self, nickname, channel, token, **kwargs):
         self.port = kwargs.get('port', 6697)
@@ -394,6 +412,7 @@ class TwitchBot(Bot):
         self.bot_mode = kwargs.get('bot_mode', True)
         self.bot_nick = nickname
         self.start_logging()
+        self.warn_unknown_options(kwargs)
         self.channel = channel
         self.logger.info('Joining Twitch Server')
         # always use tls, the oauth token is a password

@@ -9,10 +9,18 @@ class Config(Schema):
     port = fields.Int()
     ops = fields.List(fields.Str())
     ssl_required = fields.Bool()
+    ssl_verify = fields.Bool()
     plugin_dir = fields.Str()
     ns_pass = fields.Str()
+    nickserv = fields.Str()
     log_level = fields.Str(validate=validate.OneOf(['off'] + list(Bot.log_levels)))
+    log_file = fields.Str()
     server_pass = fields.Str()
+    cmd_prefix = fields.Str()
+    use_prefix_for_plugins = fields.Bool()
+    disable_help = fields.Bool()
+    banned_users = fields.List(fields.Str())
+    bot_mode = fields.Bool()
 
     class Meta:
         unknown = INCLUDE

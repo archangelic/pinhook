@@ -367,3 +367,19 @@ def test_twitch_bot_uses_tls(tmp_path):
     wrapper = factory.call_args.kwargs['wrapper']
     assert wrapper.func.__self__.verify_mode == ssl.CERT_REQUIRED
     assert wrapper.keywords['server_hostname'] == 'irc.chat.twitch.tv'
+
+
+def test_unknown_option_warns_with_suggestion(make_bot, caplog):
+    make_bot(ssl_requred=True)
+    assert "unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?" in caplog.text
+
+
+def test_known_options_do_not_warn(make_bot, caplog):
+    make_bot(ssl_verify=False, bot_mode=False, cmd_prefix='?')
+    assert 'unknown option' not in caplog.text
+
+
+def test_twitch_bot_warns_about_irc_only_options(tmp_path, caplog):
+    with mock.patch('irc.connection.Factory'):
+        pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 't.log'), ns_pass='x')
+    assert "unknown option 'ns_pass' ignored" in caplog.text
