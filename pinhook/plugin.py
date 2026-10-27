@@ -111,6 +111,7 @@ def _add_listener(name, func):
 def clear_plugins():
     cmds.clear()
     lstnrs.clear()
+    plugins.clear()
 
 def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
     # i'm not sure why i need this but i do

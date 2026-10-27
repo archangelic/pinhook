@@ -230,3 +230,12 @@ def test_logging_works_again_after_off(make_bot, caplog):
     b = make_bot(log_level='info')
     b.logger.error('should appear')
     assert 'should appear' in caplog.text
+
+
+def test_enable_after_plugin_deleted_says_not_found(make_bot, plugin_dir, tmp_path, conn):
+    b = make_bot(plugin_dir('ping', PING_PLUGIN), ops=['mal'])
+    (tmp_path / 'ping.py').unlink()
+    b.process_event(conn, event('mal', '#test', '!reload'))
+    conn.reset_mock()
+    b.process_event(conn, event('mal', '#test', '!enable !ping'))
+    conn.privmsg.assert_called_once_with('#test', "mal: '!ping' not found")

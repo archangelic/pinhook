@@ -61,3 +61,28 @@ def test_plugin_named_like_stdlib_module_does_not_replace_it(plugin_dir):
     assert '!j' in plugin.cmds
     assert json.__file__ == json_file
     assert not hasattr(json, 'j')
+
+
+def test_reload_removes_deleted_plugins(plugin_dir, tmp_path):
+    path = plugin_dir('gone', (
+        "import pinhook.plugin as p\n"
+        "@p.command('!gone')\n"
+        "def gone(msg): pass\n"
+    ))
+    plugin.load_plugins(path)
+    (tmp_path / 'gone.py').unlink()
+    plugin.load_plugins(path)
+    assert '!gone' not in plugin.cmds
+    assert '!gone' not in plugin.plugins
+
+
+def test_reload_keeps_disabled_plugins_disabled(plugin_dir):
+    path = plugin_dir('stays', (
+        "import pinhook.plugin as p\n"
+        "@p.command('!stays')\n"
+        "def stays(msg): pass\n"
+    ))
+    plugin.load_plugins(path)
+    plugin.plugins['!stays'].disable()
+    plugin.load_plugins(path)
+    assert not plugin.plugins['!stays'].enabled
