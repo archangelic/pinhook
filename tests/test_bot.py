@@ -328,3 +328,9 @@ def test_plugin_loading_and_plugin_logs_go_to_their_bot(make_bot, plugin_dir, tm
     log_text = (tmp_path / 'bot.log').read_text()
     assert 'loading plugin chatty' in log_text
     assert 'hello from plugin' in log_text
+
+
+def test_log_lines_say_which_bot(make_bot, tmp_path):
+    b = make_bot()
+    b.logger.warning('who said this')
+    assert ' - bot.pinbot - ' in (tmp_path / 'bot.log').read_text()

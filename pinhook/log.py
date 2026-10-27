@@ -1,7 +1,7 @@
 import logging
 
 logger = logging.getLogger('bot')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s')
 # Set console logger
 streamhandler = logging.StreamHandler()
 streamhandler.setFormatter(formatter)
