@@ -33,3 +33,10 @@ def test_unknown_config_keys_are_passed_to_bot(tmp_path):
     # Bot warns about them, so the CLI should not drop them silently
     result, bot = run_cli(tmp_path, dict(BASE, ssl_requred=True))
     assert bot.call_args.kwargs['ssl_requred'] is True
+
+
+def test_toml_config_without_toml_installed_gives_install_hint(tmp_path, monkeypatch):
+    monkeypatch.setitem(__import__('sys').modules, 'toml', None)  # makes "import toml" fail
+    result, bot = run_cli(tmp_path, 'nickname = "pinbot"\n', name='config.toml')
+    assert result.exit_code != 0
+    assert 'pip3 install pinhook[toml]' in result.output
