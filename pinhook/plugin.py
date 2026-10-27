@@ -1,7 +1,8 @@
 from enum import Enum
 from functools import wraps
-import importlib
+import importlib.util
 import os
+import sys
 
 from .log import logger
 
@@ -133,8 +134,11 @@ def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!'):
             try:
                 name = m[:-3]
                 logger.info('loading plugin {}'.format(name))
-                spec = importlib.machinery.PathFinder().find_spec(name, [plugin_dir])
-                spec.loader.load_module()
+                # load under our own name so a plugin called json.py can't replace the real json module
+                spec = importlib.util.spec_from_file_location('pinhook_plugins.' + name, os.path.join(plugin_dir, m))
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[spec.name] = module
+                spec.loader.exec_module(module)
             except Exception:
                 logger.exception('could not load plugin')
     # gather all commands and listeners
