@@ -94,6 +94,12 @@ class Bot(irc.bot.SingleServerIRCBot):
             if cmd is None and text is None:
                 raise TypeError('missing cmd or text parameter')
 
+    @staticmethod
+    def nick_in(nick, nicks):
+        # irc nicks are case insensitive, so Troll and troll are the same person
+        nick = irc.strings.lower(nick)
+        return any(irc.strings.lower(n) == nick for n in nicks)
+
     def start_logging(self):
         self.logger = log.get_bot_logger(self.bot_nick)
         log_level = str(self.log_level).lower()
@@ -166,10 +172,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         else:
             cmd = cmd[len(self.cmd_prefix):]
         output = None
-        if nick in self.ops:
-            op = True
-        else:
-            op = False
+        op = self.nick_in(nick, self.ops)
         if cmd == 'join' and op:
             try:
                 c.join(*arg.split())
@@ -211,23 +214,23 @@ class Bot(irc.bot.SingleServerIRCBot):
             output = plugin.message('{}: usage: {}{} <nick>'.format(nick, self.cmd_prefix, cmd))
         elif cmd == 'op' and op:
             for o in arg.split():
-                if o not in self.ops:
+                if not self.nick_in(o, self.ops):
                     self.ops.append(o)
             output = plugin.message('{}: {} added as op'.format(nick, arg))
         elif cmd == 'deop' and op:
             for o in arg.split():
-                self.ops = [i for i in self.ops if i != o]
+                self.ops = [i for i in self.ops if not self.nick_in(i, [o])]
             output = plugin.message('{}: {} removed as op'.format(nick, arg))
         elif cmd == 'ops' and op:
             output = plugin.message('current ops: {}'.format(', '.join(self.ops)))
         elif cmd == 'ban' and op:
             for o in arg.split():
-                if o not in self.banned_users:
+                if not self.nick_in(o, self.banned_users):
                     self.banned_users.append(o)
             output = plugin.message('{}: banned {}'.format(nick, arg))
         elif cmd == 'unban' and op:
             for o in arg.split():
-                self.banned_users = [i for i in self.banned_users if i != o]
+                self.banned_users = [i for i in self.banned_users if not self.nick_in(i, [o])]
             output = plugin.message('{}: removed ban for {}'.format(nick, arg))
         elif cmd == 'banlist':
             output = plugin.message('currently banned: {}'.format(', '.join(self.banned_users)))
@@ -242,7 +245,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         output = None
         if cmd in plugin.cmds:
             try:
-                if plugin.cmds[cmd].ops and nick not in self.ops:
+                if plugin.cmds[cmd].ops and not self.nick_in(nick, self.ops):
                     if plugin.cmds[cmd].ops_msg:
                         output =  plugin.message(plugin.cmds[cmd].ops_msg)
                 elif plugin.cmds[cmd].enabled:
@@ -296,7 +299,7 @@ class Bot(irc.bot.SingleServerIRCBot):
     def process_event(self, c, e):
         nick = e.source.nick
         user = e.source.user
-        if nick in self.banned_users:
+        if self.nick_in(nick, self.banned_users):
             self.logger.debug('ignoring banned user {}'.format(nick))
             return
         botnick = c.get_nickname()

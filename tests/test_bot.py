@@ -334,3 +334,26 @@ def test_log_lines_say_which_bot(make_bot, tmp_path):
     b = make_bot()
     b.logger.warning('who said this')
     assert ' - bot.pinbot - ' in (tmp_path / 'bot.log').read_text()
+
+
+def test_ban_ignores_nick_case(make_bot, conn):
+    b = make_bot(banned_users=['troll'])
+    b.process_event(conn, event('TroLL', '#test', '!banlist'))
+    conn.privmsg.assert_not_called()
+
+
+def test_unban_ignores_nick_case(make_bot, conn):
+    b = make_bot(ops=['mal'], banned_users=['troll'])
+    b.process_event(conn, event('mal', '#test', '!unban Troll'))
+    assert b.banned_users == []
+
+
+def test_ops_ignore_nick_case(make_bot, plugin_dir, conn):
+    b = make_bot(plugin_dir('opcmd', (
+        "import pinhook.plugin as p\n"
+        "@p.command('!secret', ops=True, ops_msg='ops only')\n"
+        "def secret(msg): return p.message('welcome op')\n"
+    )), ops=['Mal'])
+    b.process_event(conn, event('mal', '#test', '!secret'))
+    b.process_event(conn, event('MAL', '#test', '!ops'))
+    assert [c.args[1] for c in conn.privmsg.call_args_list] == ['welcome op', 'current ops: Mal']
