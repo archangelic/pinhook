@@ -383,3 +383,13 @@ def test_twitch_bot_warns_about_irc_only_options(tmp_path, caplog):
     with mock.patch('irc.connection.Factory'):
         pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 't.log'), ns_pass='x')
     assert "unknown option 'ns_pass' ignored" in caplog.text
+
+
+def test_output_pauses_between_lines(make_bot, plugin_dir, conn, sleeps):
+    b = make_bot(plugin_dir('multi', (
+        "import pinhook.plugin as p\n"
+        "@p.command('!multi')\n"
+        "def multi(msg): return p.message(['one', 'two', 'three'])\n"
+    )))
+    b.process_event(conn, event('mal', '#test', '!multi'))
+    assert sleeps == [.5, .5, .5]

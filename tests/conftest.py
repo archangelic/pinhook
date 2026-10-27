@@ -28,6 +28,14 @@ def clear_plugins():
                     handler.close()
 
 
+@pytest.fixture(autouse=True)
+def sleeps(monkeypatch):
+    # record flood protection pauses instead of waiting for them
+    calls = []
+    monkeypatch.setattr(pinhook_bot, 'time', SimpleNamespace(sleep=calls.append))
+    return calls
+
+
 @pytest.fixture
 def plugin_dir(tmp_path):
     def write_plugin(name, code):
