@@ -50,6 +50,7 @@ def make_bot(tmp_path):
     def build(plugin_path=None, **kwargs):
         kwargs.setdefault('plugin_dir', plugin_path or str(tmp_path / 'plugins'))
         kwargs.setdefault('log_file', str(tmp_path / 'bot.log'))
+        kwargs.setdefault('ban_file', str(tmp_path / 'bans.json'))
         b = pinhook_bot.Bot(['#test'], 'pinbot', 'localhost', **kwargs)
         b.channels['#test'] = mock.MagicMock()
         b.channels['#test'].users.return_value = []
@@ -64,10 +65,11 @@ def conn():
     return c
 
 
-def event(nick, target, text, type='pubmsg'):
+def event(nick, target, text, type='pubmsg', user='user', host='example.com', account=None):
     return SimpleNamespace(
-        source=SimpleNamespace(nick=nick, user='user'),
+        source=SimpleNamespace(nick=nick, user=user, host=host),
         target=target,
         arguments=[text],
         type=type,
+        tags=[{'key': 'account', 'value': account}] if account else None,
     )

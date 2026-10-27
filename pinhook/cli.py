@@ -21,6 +21,8 @@ class Config(Schema):
     disable_help = fields.Bool()
     banned_users = fields.List(fields.Str())
     bot_mode = fields.Bool()
+    ban_file = fields.Str(allow_none=True)
+    require_account = fields.Bool()
 
     class Meta:
         unknown = INCLUDE

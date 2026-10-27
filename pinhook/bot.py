@@ -8,6 +8,7 @@ import ssl
 import sys
 import time
 
+from . import bans
 from . import log
 from . import plugin
 
@@ -27,15 +28,16 @@ class Bot(irc.bot.SingleServerIRCBot):
         'op': 'add a user as bot operator',
         'deop': 'remove a user as bot operator',
         'ops': 'list all ops',
-        'ban': 'ban a user from using the bot',
+        'ban': 'ban a user from using the bot, by account or host when possible',
         'unban': 'remove bot ban for user',
-        'banlist': 'currently banned nicks'
+        'banlist': 'list current bans'
     }
     # keyword options Bot understands, subclasses can add their own
     options = {
         'port', 'ops', 'plugin_dir', 'ssl_required', 'ssl_verify', 'ns_pass',
         'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
+        'ban_file', 'require_account',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -45,6 +47,9 @@ class Bot(irc.bot.SingleServerIRCBot):
         'info': logging.INFO,
         'debug': logging.DEBUG,
     }
+    # set once the server agrees to tag messages with the sender's account
+    account_tag = False
+    _negotiating_caps = False
 
     def __init__(self, channels, nickname, server, **kwargs):
         self.port = kwargs.get('port', 6667)
@@ -60,21 +65,20 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
         self.disable_help = kwargs.get('disable_help', False)
-        self.banned_users = kwargs.get('banned_users', [])
         self.bot_mode = kwargs.get('bot_mode', True)
-        if self.ssl_required:
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=self.ssl_factory(server))
-        else:
-            irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname)
+        self.require_account = kwargs.get('require_account', False)
+        factory = self.ssl_factory(server) if self.ssl_required else irc.connection.Factory()
+        irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=self.cap_factory(factory))
         self.chanlist = channels
         self.bot_nick = nickname
         self.start_logging()
         self.warn_unknown_options(kwargs)
+        self.setup_bans(nickname, kwargs)
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
 
     class Message:
-        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None):
+        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False):
             self.bot = bot
             self.datetime = datetime.now(timezone.utc)
             self.timestamp = self.datetime.timestamp()
@@ -84,6 +88,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.nick_list = nick_list
             self.botnick = botnick
             self.ops = ops
+            self.is_op = is_op
             self.logger = logger
             self.action = action
             self.privmsg = privmsg
@@ -132,6 +137,90 @@ class Bot(irc.bot.SingleServerIRCBot):
             hint = ", did you mean '{}'?".format(close[0]) if close else ''
             self.logger.warning("unknown option '{}' ignored{}".format(key, hint))
 
+    def setup_bans(self, nickname, kwargs):
+        self.ban_file = kwargs.get('ban_file', '{}.bans.json'.format(nickname)) or None
+        self.config_bans = list(kwargs.get('banned_users', []))
+        self.banned_users = list(self.config_bans)
+        saved = bans.load(self.ban_file)
+        for entry in saved:
+            if not self.nick_in(entry, self.banned_users):
+                self.banned_users.append(entry)
+        if saved:
+            self.logger.info('loaded {} bans from {}'.format(len(saved), self.ban_file))
+        # recent nicks and who they are, so !ban troll can ban their account or host
+        self.seen = OrderedDict()
+
+    def save_bans(self):
+        # bans from the config stay in the config, the file keeps the ones made with !ban
+        bans.save(self.ban_file, [b for b in self.banned_users if not self.nick_in(b, self.config_bans)])
+
+    def remember(self, nick, user, host, account):
+        key = irc.strings.lower(nick)
+        self.seen[key] = (nick, user, host, account)
+        self.seen.move_to_end(key)
+        while len(self.seen) > 1000:
+            self.seen.popitem(last=False)
+
+    def ban_entry(self, target):
+        # a nick on its own is easy to change, so ban their account if they're
+        # logged in, or their user and host if not
+        if bans.is_account(target) or bans.is_mask(target):
+            return target, target
+        seen = self.seen.get(irc.strings.lower(target))
+        if not seen:
+            return target, "{} (nick only, they haven't spoken since the bot started)".format(target)
+        nick, user, host, account = seen
+        if account:
+            return '$a:' + account, '{} (account {})'.format(target, account)
+        entry = '*!*{}@{}'.format((user or '').lstrip('~'), host)
+        return entry, '{} ({})'.format(target, entry)
+
+    def remove_bans(self, target):
+        # the entry itself, plus anything banning the person last seen as target
+        seen = self.seen.get(irc.strings.lower(target))
+        removed = [b for b in self.banned_users if self.nick_in(b, [target]) or (seen and bans.matches(b, *seen))]
+        self.banned_users = [b for b in self.banned_users if b not in removed]
+        return removed
+
+    @staticmethod
+    def account_from_tags(tags):
+        for tag in tags or []:
+            if tag['key'] == 'account' and tag['value'] not in (None, '*'):
+                return tag['value']
+        return None
+
+    def cap_factory(self, factory):
+        # ask what the server supports before the irc library sends NICK and USER,
+        # some servers (like libera) only allow it before registration
+        def connect(address):
+            sock = factory(address)
+            sock.send(b'CAP LS 302\r\n')
+            self._negotiating_caps = True
+            self._server_caps = set()
+            self.account_tag = False
+            return sock
+        return connect
+
+    def on_cap(self, c, e):
+        if not self._negotiating_caps:
+            return
+        subcommand = e.arguments[0]
+        if subcommand == 'LS':
+            self._server_caps.update(cap.split('=')[0] for cap in e.arguments[-1].split())
+            # a * means the list carries on in another line
+            if len(e.arguments) > 2 and e.arguments[1] == '*':
+                return
+            if 'account-tag' in self._server_caps:
+                c.cap('REQ', 'account-tag')
+                return
+        elif subcommand in ('ACK', 'NAK'):
+            self.account_tag = subcommand == 'ACK' and 'account-tag' in e.arguments[-1].split()
+        else:
+            return
+        # registration waits until we say we're done
+        self._negotiating_caps = False
+        c.cap('END')
+
     def ssl_factory(self, server):
         context = ssl.create_default_context()
         if not self.ssl_verify:
@@ -163,6 +252,8 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.logger.info('Logging started!')
 
     def on_welcome(self, c, e):
+        if self.require_account and not self.account_tag:
+            self.logger.error("require_account is on but this server doesn't tell the bot who is logged in (account-tag), so the bot will ignore everyone")
         if self.ns_pass:
             self.logger.info('identifying with nickserv')
             c.privmsg(self.nickserv, 'identify {}'.format(self.ns_pass))
@@ -212,13 +303,14 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.connection.privmsg(nick, 'List of listeners: {}'.format(', '.join([l for l in plugin.lstnrs])))
         return None
 
-    def call_internal_commands(self, channel, nick, cmd, text, arg, c):
+    def call_internal_commands(self, channel, nick, cmd, text, arg, c, op=None):
         if not cmd.startswith(self.cmd_prefix):
             return None
         else:
             cmd = cmd[len(self.cmd_prefix):]
         output = None
-        op = self.nick_in(nick, self.ops)
+        if op is None:
+            op = self.nick_in(nick, self.ops)
         if cmd == 'join' and op:
             try:
                 c.join(*arg.split())
@@ -270,16 +362,29 @@ class Bot(irc.bot.SingleServerIRCBot):
         elif cmd == 'ops' and op:
             output = plugin.message('current ops: {}'.format(', '.join(self.ops)))
         elif cmd == 'ban' and op:
-            for o in arg.split():
-                if not self.nick_in(o, self.banned_users):
-                    self.banned_users.append(o)
-            output = plugin.message('{}: banned {}'.format(nick, arg))
+            banned = []
+            for target in arg.split():
+                entry, description = self.ban_entry(target)
+                if not self.nick_in(entry, self.banned_users):
+                    self.banned_users.append(entry)
+                banned.append(description)
+            self.save_bans()
+            output = plugin.message('{}: banned {}'.format(nick, ', '.join(banned)))
         elif cmd == 'unban' and op:
-            for o in arg.split():
-                self.banned_users = [i for i in self.banned_users if not self.nick_in(i, [o])]
-            output = plugin.message('{}: removed ban for {}'.format(nick, arg))
-        elif cmd == 'banlist':
-            output = plugin.message('currently banned: {}'.format(', '.join(self.banned_users)))
+            removed = []
+            for target in arg.split():
+                removed += self.remove_bans(target)
+            self.save_bans()
+            if not removed:
+                output = plugin.message('{}: no ban found for {}'.format(nick, arg))
+            else:
+                reply = '{}: removed ban on {}'.format(nick, ', '.join(removed))
+                from_config = [b for b in removed if self.nick_in(b, self.config_bans)]
+                if from_config:
+                    reply += " ({} is in the config file, so it'll be back after a restart)".format(', '.join(from_config))
+                output = plugin.message(reply)
+        elif cmd == 'banlist' and op:
+            output = plugin.message('currently banned: {}'.format(', '.join(self.banned_users) or 'nobody'))
         return output
 
     def check_output(self, output):
@@ -287,11 +392,13 @@ class Bot(irc.bot.SingleServerIRCBot):
             raise TypeError('plugins must return message() or action(), got {}'.format(type(output).__name__))
         return output
 
-    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type, botnick):
+    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type, botnick, op=None):
         output = None
+        if op is None:
+            op = self.nick_in(nick, self.ops)
         if cmd in plugin.cmds:
             try:
-                if plugin.cmds[cmd].ops and not self.nick_in(nick, self.ops):
+                if plugin.cmds[cmd].ops and not op:
                     if plugin.cmds[cmd].ops_msg:
                         output =  plugin.message(plugin.cmds[cmd].ops_msg)
                 elif plugin.cmds[cmd].enabled:
@@ -310,7 +417,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                         botnick=botnick,
                         ops=self.ops,
                         logger=self.logger,
-                        msg_type=msg_type
+                        msg_type=msg_type,
+                        is_op=op
                     )))
             except Exception:
                 self.logger.exception('issue with command {}'.format(cmd))
@@ -332,7 +440,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                             botnick=botnick,
                             ops=self.ops,
                             logger=self.logger,
-                            msg_type=msg_type
+                            msg_type=msg_type,
+                            is_op=op
                         )))
                         if listen_output:
                             output = listen_output
@@ -345,12 +454,19 @@ class Bot(irc.bot.SingleServerIRCBot):
     def process_event(self, c, e):
         nick = e.source.nick
         user = e.source.user
-        if self.nick_in(nick, self.banned_users):
+        host = e.source.host
+        account = self.account_from_tags(e.tags)
+        self.remember(nick, user, host, account)
+        if bans.matches_any(self.banned_users, nick, user, host, account):
             self.logger.debug('ignoring banned user {}'.format(nick))
             return
         botnick = c.get_nickname()
         if irc.strings.lower(nick) == irc.strings.lower(botnick):
             return
+        if self.require_account and not account:
+            self.logger.debug('ignoring {}, not logged in to an account'.format(nick))
+            return
+        op = bans.matches_any(self.ops, nick, user, host, account)
         if e.arguments:
             text = e.arguments[0]
         else:
@@ -376,7 +492,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
         else:
             arg = ''
-        output = self.call_internal_commands(chan, nick, cmd, text, arg, c)
+        output = self.call_internal_commands(chan, nick, cmd, text, arg, c, op=op)
         if not output:
             plugin_info = {
                 'chan': chan,
@@ -390,7 +506,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'action': c.action,
                 'notice': c.notice,
                 'msg_type': msg_type,
-                'botnick': botnick
+                'botnick': botnick,
+                'op': op
             }
             output = self.call_plugins(**plugin_info)
         if output:
@@ -425,6 +542,7 @@ class TwitchBot(Bot):
     options = {
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
+        'ban_file',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):
@@ -438,11 +556,12 @@ class TwitchBot(Bot):
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
         self.disable_help = kwargs.get('disable_help', False)
-        self.banned_users = kwargs.get('banned_users', [])
         self.bot_mode = kwargs.get('bot_mode', True)
+        self.require_account = False
         self.bot_nick = nickname
         self.start_logging()
         self.warn_unknown_options(kwargs)
+        self.setup_bans(nickname, kwargs)
         self.channel = channel
         self.logger.info('Joining Twitch Server')
         # always use tls, the oauth token is a password
