@@ -59,3 +59,21 @@ def test_toml_config_loads(tmp_path):
     assert result.exit_code == 0, result.output
     assert bot.call_args.kwargs['nickname'] == 'pinbot'
     assert bot.call_args.kwargs['bot_mode'] is False
+
+
+def test_config_mistakes_are_listed_without_traceback(tmp_path):
+    result, bot = run_cli(tmp_path, dict(BASE, port='sixsixsixseven', log_level='verbose'))
+    assert result.exit_code != 0
+    assert 'has problems:' in result.output
+    assert 'port: Not a valid integer.' in result.output
+    assert 'log_level: Must be one of' in result.output
+    assert 'Traceback' not in result.output
+
+
+def test_bot_startup_errors_are_shown_plainly(tmp_path):
+    path = tmp_path / 'config.json'
+    path.write_text(json.dumps(BASE))
+    with mock.patch('pinhook.cli.Bot', side_effect=ValueError("couldn't read ban file bans.json: oops")):
+        result = CliRunner().invoke(cli, [str(path)])
+    assert result.exit_code != 0
+    assert "Error: couldn't read ban file bans.json: oops" in result.output

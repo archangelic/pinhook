@@ -1,6 +1,6 @@
 import click
 from .bot import Bot
-from marshmallow import Schema, fields, validate, INCLUDE
+from marshmallow import Schema, fields, validate, INCLUDE, ValidationError
 
 class Config(Schema):
     nickname = fields.Str(required=True)
@@ -27,6 +27,13 @@ class Config(Schema):
     class Meta:
         unknown = INCLUDE
 
+def check_conf(schema, data, name):
+    try:
+        return schema.load(data)
+    except ValidationError as e:
+        problems = ['  {}: {}'.format(key, ' '.join(msgs) if isinstance(msgs, list) else msgs) for key, msgs in sorted(e.messages.items())]
+        raise click.ClickException('{} has problems:\n{}'.format(name, '\n'.join(problems)))
+
 def read_conf(config, conf_format):
     schema = Config()
     if not conf_format:
@@ -41,7 +48,7 @@ def read_conf(config, conf_format):
     if conf_format == 'json':
         import json
         to_json = json.loads(config.read())
-        output = schema.load(to_json)
+        output = check_conf(schema, to_json, config.name)
     elif conf_format == 'yaml':
         try:
             import yaml
@@ -49,7 +56,7 @@ def read_conf(config, conf_format):
             raise click.ClickException('yaml not installed, please use `pip3 install pinhook[yaml]` to install')
         else:
             to_yaml = yaml.load(config.read(), Loader=yaml.FullLoader)
-            output = schema.load(to_yaml)
+            output = check_conf(schema, to_yaml, config.name)
     elif conf_format == 'toml':
         try:
             # built in from python 3.11
@@ -62,7 +69,7 @@ def read_conf(config, conf_format):
             to_toml = toml.load(config.name)
         else:
             to_toml = tomllib.load(config)
-        output = schema.load(to_toml)
+        output = check_conf(schema, to_toml, config.name)
     return output
 
 @click.command()
@@ -70,6 +77,10 @@ def read_conf(config, conf_format):
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml', 'toml']))
 def cli(config, conf_format):
     config = read_conf(config, conf_format)
-    bot = Bot(**config)
+    try:
+        bot = Bot(**config)
+    except ValueError as e:
+        # a bad log_level or ban file, say what's wrong without a traceback
+        raise click.ClickException(str(e))
     bot.start()
 
