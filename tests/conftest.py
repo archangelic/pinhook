@@ -1,5 +1,9 @@
+from types import SimpleNamespace
+from unittest import mock
+
 import pytest
 
+from pinhook import bot as pinhook_bot
 from pinhook import plugin
 
 
@@ -21,3 +25,30 @@ def plugin_dir(tmp_path):
         (tmp_path / '{}.py'.format(name)).write_text(code)
         return str(tmp_path)
     return write_plugin
+
+
+@pytest.fixture
+def make_bot(tmp_path):
+    # builds a Bot without connecting, with a fake channel and connection
+    def build(plugin_path=None, **kwargs):
+        kwargs.setdefault('plugin_dir', plugin_path or str(tmp_path / 'plugins'))
+        kwargs.setdefault('log_file', str(tmp_path / 'bot.log'))
+        b = pinhook_bot.Bot(['#test'], 'pinbot', 'localhost', **kwargs)
+        b.channels['#test'] = mock.MagicMock()
+        b.channels['#test'].users.return_value = []
+        return b
+    return build
+
+
+@pytest.fixture
+def conn():
+    return mock.MagicMock()
+
+
+def event(nick, target, text, type='pubmsg'):
+    return SimpleNamespace(
+        source=SimpleNamespace(nick=nick, user='user'),
+        target=target,
+        arguments=[text],
+        type=type,
+    )

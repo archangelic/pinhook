@@ -251,6 +251,9 @@ class Bot(irc.bot.SingleServerIRCBot):
     def process_event(self, c, e):
         nick = e.source.nick
         user = e.source.user
+        if nick in self.banned_users:
+            self.logger.debug('ignoring banned user {}'.format(nick))
+            return
         if nick == self.bot_nick:
             pass
         if e.arguments:
