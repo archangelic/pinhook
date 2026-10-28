@@ -13,6 +13,7 @@ import warnings
 from . import bans
 from . import log
 from . import plugin
+from .store import Store
 
 import irc.bot
 
@@ -79,7 +80,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
 
     class Message:
-        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False, account=None):
+        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False, account=None, store=None):
             self._bot = bot
             self.datetime = datetime.now(timezone.utc)
             self.timestamp = self.datetime.timestamp()
@@ -91,6 +92,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.ops = ops
             self.is_op = is_op
             self.account = account
+            self.store = store
             self.is_private = not irc.client.is_channel(channel)
             self.logger = logger
             self._action = action
@@ -195,6 +197,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.log_file = self.path(kwargs.get('log_file') or log_file)
         ban_file = kwargs.get('ban_file', ban_file)
         self.ban_file = self.path(ban_file) if ban_file else None
+        self.stores = {}
 
     def path(self, path):
         """Where a file or folder from the options really is: relative paths are inside bot_dir, when it's set."""
@@ -202,6 +205,15 @@ class Bot(irc.bot.SingleServerIRCBot):
         if self.bot_dir and not os.path.isabs(path):
             return os.path.join(self.bot_dir, path)
         return path
+
+    def store(self, name):
+        """The saved data for the plugin file called name, the same dict the plugin gets as msg.store."""
+        if name not in self.stores:
+            self.stores[name] = self.open_store(name)
+        return self.stores[name]
+
+    def open_store(self, name):
+        return Store(name, os.path.join(self.data_dir, name + '.json'))
 
     def setup_bans(self, nickname, kwargs):
         self.config_bans = list(kwargs.get('banned_users', []))
@@ -469,6 +481,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                         output =  plugin.message(plugin.cmds[cmd].ops_msg)
                 elif plugin.cmds[cmd].enabled:
                     self.logger.debug('executing {}'.format(cmd))
+                    store = self.store(plugin.cmds[cmd].file_name)
                     output = self.check_output(plugin.cmds[cmd].run(self.Message(
                         bot=self,
                         channel=chan,
@@ -485,8 +498,10 @@ class Bot(irc.bot.SingleServerIRCBot):
                         logger=self.logger,
                         msg_type=msg_type,
                         is_op=op,
-                        account=account
+                        account=account,
+                        store=store
                     )))
+                    store.save_if_changed()
             except Exception:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
@@ -494,6 +509,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 if plugin.lstnrs[lstnr].enabled:
                     try:
                         self.logger.debug('whispering to listener: {}'.format(lstnr))
+                        store = self.store(plugin.lstnrs[lstnr].file_name)
                         listen_output = self.check_output(plugin.lstnrs[lstnr].run(self.Message(
                             bot=self,
                             channel=chan,
@@ -509,8 +525,10 @@ class Bot(irc.bot.SingleServerIRCBot):
                             logger=self.logger,
                             msg_type=msg_type,
                             is_op=op,
-                            account=account
+                            account=account,
+                            store=store
                         )))
+                        store.save_if_changed()
                         if listen_output:
                             output = listen_output
                     except Exception:

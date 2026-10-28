@@ -34,6 +34,12 @@ class _BasePlugin:
     enabled = True
     logger = logger
 
+    @property
+    def file_name(self):
+        # the plugin file this came from, which names its store and config section
+        module = getattr(self.run, '__module__', None) or 'plugin'
+        return module[len('pinhook_plugins.'):] if module.startswith('pinhook_plugins.') else module
+
     def enable(self):
         self.enabled = True
 

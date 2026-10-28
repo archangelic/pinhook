@@ -9,6 +9,7 @@
 * Given just the text, `msg.action(text)` replies where the message came from and `msg.notice(text)` sends the sender a notice
 * `msg.account` (the sender's services account) and `msg.is_private`
 * `bot_dir` keeps everything a bot uses in one folder, with `plugins/`, `data/` and `logs/` inside it. Without it, files go where they did in 1.11
+* `msg.store`, a dictionary each plugin can keep data in. It lasts through `!reload` and restarts, and is saved to `data_dir` automatically
 * `data_dir`, where plugins keep their saved data
 * A [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) guide to getting plugins ready for 2.0
 

@@ -4,6 +4,8 @@ import os
 
 import irc.strings
 
+from .store import write_json
+
 # ban and op entries can be one of:
 #   a nick                  troll
 #   a hostmask              *!*@203.0.113.7  (* and ? are wildcards)
@@ -49,11 +51,4 @@ def load(path):
 def save(path, entries):
     if not path:
         return
-    folder = os.path.dirname(path)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
-    # write to a temp file first so a crash can't leave a half written ban file
-    tmp = path + '.tmp'
-    with open(tmp, 'w') as f:
-        json.dump(entries, f, indent=2)
-    os.replace(tmp, path)
+    write_json(path, entries)

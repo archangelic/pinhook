@@ -14,6 +14,7 @@ import irc.bot
 import irc.client
 
 from .bot import Bot
+from .store import Store
 
 # one thing the bot sent, kind is 'message', 'action' or 'notice'
 Sent = namedtuple('Sent', ['kind', 'target', 'text'])
@@ -100,6 +101,10 @@ class TestBot(Bot):
     def start_logging(self):
         super().start_logging()
         self.logger.addHandler(self._errors)
+
+    def open_store(self, name):
+        # stores stay in memory, look at one with bot.store('karma')
+        return Store(name)
 
     def pause(self, seconds):
         # record flood protection pauses instead of waiting for them

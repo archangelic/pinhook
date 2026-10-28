@@ -107,12 +107,36 @@ They get the same line splitting and flood protection as returned replies. `msg.
 | `is_op` | `True` if the sender is a bot operator. Understands accounts and hostmasks, so use it rather than `nick in msg.ops` |
 | `ops` | the list of bot operators, as written in the config |
 | `botnick` | the bot's current nick |
+| `store` | the plugin's saved data, see [Saving data](#saving-data) |
 | `logger` | the bot's logger, see [Logging](#logging) |
 | `datetime` | when the message arrived, a timezone-aware `datetime` |
 | `timestamp` | the same as a unix timestamp |
 | `bot` | the bot itself. Deprecated, see [Preparing for 2.0](preparing-for-2.md) |
 
-`account` and `is_private` are new in 1.12.
+`account`, `is_private` and `store` are new in 1.12.
+
+## Saving data
+
+`msg.store` is a dictionary the plugin can keep things in. It's still there in the next message, after `!reload` and after the bot restarts:
+
+```python
+@pinhook.plugin.command('!karma')
+def karma(msg):
+    scores = msg.store.setdefault('scores', {})
+    scores[msg.arg] = scores.get(msg.arg, 0) + 1
+    return pinhook.plugin.message('{} has {} karma'.format(msg.arg, scores[msg.arg]))
+```
+
+* Each plugin file has its own store, named after the file. Commands and listeners in the same file share it
+* The bot saves it after each plugin call if anything changed, including changes inside nested lists and dicts. There's nothing to call
+* It's saved as `<plugin file name>.json` in [`data_dir`](options.md#data_dir), so `karma.py` keeps its data in `data/karma.json`
+* Values have to be things JSON can hold: strings, numbers, lists, dicts, `True`, `False` and `None`. Keys are saved as strings. Store a `datetime` as a string or a timestamp
+
+Stores are meant for small things: scores, quotes, last-seen times, settings changed by a command. For lots of data or lots of writes, use a proper database like `sqlite3`.
+
+To clear a plugin's data, stop the bot and delete its file.
+
+`msg.store` is new in 1.12.
 
 ## Logging
 

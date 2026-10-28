@@ -61,6 +61,20 @@ def test_help_lists_roll():
     assert '!roll -- roll some dice' in bot.sent_to('mal')
 ```
 
+## Saved data
+
+A `TestBot` keeps [plugin stores](plugins.md#saving-data) in memory, so nothing is written to disk. Look at one with `bot.store(name)`, where `name` is the plugin's file name:
+
+```python
+def test_karma_is_counted():
+    bot = TestBot()
+    bot.say('!karma pinhook')
+    bot.say('!karma pinhook')
+    assert bot.store('karma') == {'scores': {'pinhook': 2}}
+```
+
+Saving something JSON can't hold, like a `datetime`, fails the test with a `PluginError`.
+
 ## Options, ops and bans
 
 `TestBot` takes any of the bot's [options](options.md), so you can test ops and bans the same way they're set up for real:

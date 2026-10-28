@@ -118,7 +118,7 @@ Folder the bot loads plugins from. Every `.py` file in it is loaded. It's create
 
 ### data_dir
 
-Folder where plugins keep their saved data. New in 1.12.
+Folder where plugins keep their [saved data](plugins.md#saving-data), one `.json` file per plugin. New in 1.12.
 
 ## Plugins and commands
 
