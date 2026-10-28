@@ -77,3 +77,33 @@ def test_bot_startup_errors_are_shown_plainly(tmp_path):
         result = CliRunner().invoke(cli, [str(path)])
     assert result.exit_code != 0
     assert "Error: couldn't read ban file bans.json: oops" in result.output
+
+
+def test_environment_variables_are_filled_in(tmp_path, monkeypatch):
+    monkeypatch.setenv('PH_NS_PASS', 'hunter2')
+    monkeypatch.setenv('PH_CHAN', 'games')
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='${PH_NS_PASS}', channels=['#${PH_CHAN}', '#chat']))
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.kwargs['ns_pass'] == 'hunter2'
+    assert bot.call_args.kwargs['channels'] == ['#games', '#chat']
+
+
+def test_missing_environment_variable_stops_with_its_name(tmp_path, monkeypatch):
+    monkeypatch.delenv('PH_MISSING', raising=False)
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='${PH_MISSING}'))
+    assert result.exit_code != 0
+    assert "uses ${PH_MISSING}, but that environment variable isn't set" in result.output
+    bot.assert_not_called()
+
+
+def test_double_dollar_is_a_literal(tmp_path, monkeypatch):
+    monkeypatch.setenv('PH_NS_PASS', 'nope')
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='pa$${PH_NS_PASS}ss'))
+    assert bot.call_args.kwargs['ns_pass'] == 'pa${PH_NS_PASS}ss'
+
+
+def test_environment_variables_work_in_yaml(tmp_path, monkeypatch):
+    pytest.importorskip('yaml')
+    monkeypatch.setenv('PH_SERVER', 'irc.libera.chat')
+    result, bot = run_cli(tmp_path, 'nickname: pinbot\nserver: "${PH_SERVER}"\nchannels: ["#test"]\n', name='config.yaml')
+    assert bot.call_args.kwargs['server'] == 'irc.libera.chat'

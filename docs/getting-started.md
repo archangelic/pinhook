@@ -62,6 +62,22 @@ pinhook works out the format from the file extension. If it can't, tell it with 
 pinhook --format yaml my-bot.conf
 ```
 
+### Passwords and other secrets
+
+Keep secrets out of the config file by writing `${NAME}`. pinhook fills it in from the environment variable called `NAME` when the bot starts:
+
+```yaml
+ns_pass: "${PH_NICKSERV_PASSWORD}"
+```
+
+```bash
+PH_NICKSERV_PASSWORD=hunter2 pinhook config.yaml
+```
+
+It works in any value, including inside lists and plugin settings. If the variable isn't set, the bot doesn't start, and says which one is missing. To write a literal `${` in a value, write `$${`. New in 1.12.
+
+### Mistakes in the config
+
 If the config has a mistake pinhook stops and says which key is wrong. A key it doesn't recognise, like a typo, is logged as a warning with a suggestion instead.
 
 ## From a python file

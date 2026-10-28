@@ -1,3 +1,6 @@
+import os
+import re
+
 import click
 from .bot import Bot
 from marshmallow import Schema, fields, validate, INCLUDE, ValidationError
@@ -29,7 +32,26 @@ class Config(Schema):
     class Meta:
         unknown = INCLUDE
 
+# ${NAME} is read from the environment, $${ is a literal ${
+ENV_VAR = re.compile(r'\$\$\{|\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
+
+def expand_env(value, name):
+    if isinstance(value, dict):
+        return {k: expand_env(v, name) for k, v in value.items()}
+    if isinstance(value, list):
+        return [expand_env(v, name) for v in value]
+    if not isinstance(value, str):
+        return value
+    def replace(match):
+        if match.group(1) is None:
+            return '${'
+        if match.group(1) not in os.environ:
+            raise click.ClickException("{} uses ${{{}}}, but that environment variable isn't set".format(name, match.group(1)))
+        return os.environ[match.group(1)]
+    return ENV_VAR.sub(replace, value)
+
 def check_conf(schema, data, name):
+    data = expand_env(data, name)
     try:
         return schema.load(data)
     except ValidationError as e:
