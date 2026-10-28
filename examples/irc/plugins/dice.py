@@ -3,7 +3,7 @@ import re
 
 import pinhook.plugin
 
-dicepattern = re.compile('(?P<amount>\d+)d(?P<sides>\d+)\+?(?P<modifier>\d+)?')
+dicepattern = re.compile(r'(?P<amount>\d+)d(?P<sides>\d+)\+?(?P<modifier>\d+)?')
 
 def build_output(rolls, modifier):
     if len(rolls) == 1:
