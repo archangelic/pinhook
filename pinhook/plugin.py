@@ -1,3 +1,9 @@
+"""Decorators and replies for writing plugins.
+
+A plugin is a .py file in the bot's plugin folder. Mark its functions with
+`command` or `listener`, and return `message` or `action` to reply.
+See https://archangelic.github.io/pinhook/latest/plugins/
+"""
 from enum import Enum
 from functools import wraps
 import importlib.util
@@ -95,9 +101,19 @@ class Command(_BasePlugin):
 
 
 def action(msg):
+    """Reply with a /me action, where the message came from.
+
+    Args:
+        msg: the text, or a list of lines. Each line is sent separately.
+    """
     return Output(OutputType.Action, msg)
 
 def message(msg):
+    """Reply with a message, where the message came from.
+
+    Args:
+        msg: the text, or a list of lines. Each line is sent separately.
+    """
     return Output(OutputType.Message, msg)
 
 def _add_command(command, help_text, func,  ops=False, ops_msg='', hide=False):
@@ -161,6 +177,17 @@ def load_plugins(plugin_dir, use_prefix=False, cmd_prefix='!', logger=logger):
         logger.debug('adding listener {}'.format(lstnr))
 
 def command(command, help_text='N/A', ops=False, ops_msg='', hide=False):
+    """Make a function a command, run when a message starts with its command word.
+
+    The function gets the message as its only argument.
+
+    Args:
+        command: the command word, like '!roll'.
+        help_text: shown next to the command in !help.
+        ops: if True, only bot operators can run it.
+        ops_msg: what anyone else is told when they try. Empty means no reply.
+        hide: if True, leave it out of !help.
+    """
     @wraps(command)
     def register_for_command(func):
         _add_command(command, help_text, func, ops=ops, ops_msg=ops_msg, hide=hide)
@@ -168,6 +195,7 @@ def command(command, help_text='N/A', ops=False, ops_msg='', hide=False):
     return register_for_command
 
 def register(command, help_text='N/A'):
+    """Deprecated, will be removed in 2.0. Use `command` instead."""
     message = "@register is deprecated and will be removed in 2.0, use @command('{}') instead".format(command)
     logger.warning(message)
     warnings.warn(message, DeprecationWarning, stacklevel=2)
@@ -178,12 +206,21 @@ def register(command, help_text='N/A'):
     return register_for_command
 
 def listener(name):
+    """Make a function a listener, run for every message that isn't a command.
+
+    The function gets the message as its only argument, and returns nothing
+    when it has nothing to say.
+
+    Args:
+        name: the listener's name, shown in !help and used by !enable and !disable.
+    """
     def register_as_listener(func):
         _add_listener(name, func)
         return func
     return register_as_listener
 
 def ops(command, msg=None):
+    """Deprecated, will be removed in 2.0. Use `command` with ops=True instead."""
     message = "@ops is deprecated and will be removed in 2.0, use @command('{}', ops=True, ops_msg=...) instead".format(command)
     logger.warning(message)
     warnings.warn(message, DeprecationWarning, stacklevel=2)

@@ -1,3 +1,4 @@
+"""The bots: Bot for IRC servers and TwitchBot for Twitch chat."""
 from collections import OrderedDict
 from datetime import datetime, timezone
 import difflib
@@ -22,6 +23,17 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
 class Bot(irc.bot.SingleServerIRCBot):
+    """An IRC bot that loads plugins from a folder and runs them.
+
+    Args:
+        channels: channels to join once connected.
+        nickname: the bot's nick.
+        server: the server to connect to.
+        **kwargs: any of the bot's options, like port, ssl_required or ops. See
+            https://archangelic.github.io/pinhook/latest/options/
+
+    Call start() to connect and run until the bot quits.
+    """
     internal_commands = {
         'join': 'join a channel',
         'quit': 'force the bot to quit',
@@ -84,6 +96,29 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.check_plugin_config()
 
     class Message:
+        """A message sent to the bot, as a plugin gets it.
+
+        Attributes:
+            nick: who sent it.
+            user: the username part of their hostmask (nick!user@host).
+            account: the services account they're logged in to, or None.
+            channel: where it was sent. For a private message, the sender's nick.
+            is_private: True if it was a private message to the bot.
+            cmd: (commands) the command word that triggered it.
+            arg: (commands) everything after the command word.
+            text: (listeners) the whole message.
+            msg_type: 'message', or 'action' for a /me.
+            nick_list: nicks in the channel. Just the sender for private messages.
+            is_op: True if the sender is a bot operator.
+            ops: the list of bot operators, as written in the config.
+            botnick: the bot's current nick.
+            store: the plugin's saved data, a dict kept between restarts.
+            config: the plugin's settings from plugin_config, read only.
+            logger: the bot's logger.
+            datetime: when the message arrived, a timezone-aware datetime.
+            timestamp: the same as a unix timestamp.
+        """
+
         def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False, account=None, store=None, config=None):
             self._bot = bot
             self.datetime = datetime.now(timezone.utc)
@@ -114,6 +149,7 @@ class Bot(irc.bot.SingleServerIRCBot):
 
         @property
         def bot(self):
+            """The bot itself. Deprecated, it will be read only in 2.0."""
             self._bot.warn_deprecated('msg.bot', 'msg.bot is deprecated and will be read only in 2.0, use msg.reply(), msg.send() and msg.botnick instead')
             return self._bot
 
@@ -660,6 +696,15 @@ class Bot(irc.bot.SingleServerIRCBot):
 
 
 class TwitchBot(Bot):
+    """A bot for Twitch chat, connecting to irc.chat.twitch.tv over ssl.
+
+    Args:
+        nickname: the bot account's name.
+        channel: the channel to join, like '#channel'.
+        token: the bot account's oauth token, without 'oauth:'.
+        **kwargs: any of the options TwitchBot takes, see
+            https://archangelic.github.io/pinhook/latest/twitch/
+    """
     server = 'irc.chat.twitch.tv'
     options = {
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',

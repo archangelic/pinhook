@@ -14,6 +14,7 @@
 * `plugin_config` gives each plugin its own settings, as `msg.config`, plus a `shared` section every plugin can read
 * `!reload` also reads `plugin_config` from the config file again, so settings can change without a restart
 * `${NAME}` in a config file is filled in from the environment, so passwords don't have to be in the file
+* Docstrings for everything plugins and bot scripts use, so editors can show help, and an [API reference](https://archangelic.github.io/pinhook/latest/reference/) generated from them
 * A [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) guide to getting plugins ready for 2.0
 
 ### Deprecated
