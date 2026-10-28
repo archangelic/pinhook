@@ -301,8 +301,10 @@ def test_several_bots_do_not_duplicate_log_lines(make_bot, tmp_path, monkeypatch
 
 
 def test_each_bot_logs_to_its_own_file(tmp_path):
-    alpha = pinhook_bot.Bot(['#test'], 'alpha', 'localhost', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 'alpha.log'))
-    beta = pinhook_bot.Bot(['#test'], 'beta', 'localhost', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 'beta.log'))
+    alpha = pinhook_bot.Bot(['#test'], 'alpha', 'localhost', plugin_dir=str(tmp_path / 'p'),
+                            log_file=str(tmp_path / 'alpha.log'))
+    beta = pinhook_bot.Bot(['#test'], 'beta', 'localhost', plugin_dir=str(tmp_path / 'p'),
+                           log_file=str(tmp_path / 'beta.log'))
     alpha.logger.warning('from alpha')
     beta.logger.warning('from beta')
     assert 'from alpha' in (tmp_path / 'alpha.log').read_text()
@@ -312,8 +314,10 @@ def test_each_bot_logs_to_its_own_file(tmp_path):
 
 
 def test_each_bot_has_its_own_log_level(tmp_path, caplog):
-    quiet = pinhook_bot.Bot(['#test'], 'quiet', 'localhost', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 'q.log'), log_level='off')
-    loud = pinhook_bot.Bot(['#test'], 'loud', 'localhost', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 'l.log'), log_level='debug')
+    quiet = pinhook_bot.Bot(['#test'], 'quiet', 'localhost', plugin_dir=str(tmp_path / 'p'),
+                            log_file=str(tmp_path / 'q.log'), log_level='off')
+    loud = pinhook_bot.Bot(['#test'], 'loud', 'localhost', plugin_dir=str(tmp_path / 'p'),
+                           log_file=str(tmp_path / 'l.log'), log_level='debug')
     quiet.logger.error('quiet bot')
     loud.logger.debug('loud bot')
     assert 'quiet bot' not in caplog.text
@@ -363,7 +367,8 @@ def test_ops_ignore_nick_case(make_bot, plugin_dir, conn):
 
 def test_twitch_bot_uses_tls(tmp_path):
     with mock.patch('irc.connection.Factory') as factory:
-        b = pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 't.log'))
+        b = pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'),
+                                  log_file=str(tmp_path / 't.log'))
     server = b.servers.peek()
     assert (server.host, server.port) == ('irc.chat.twitch.tv', 6697)
     wrapper = factory.call_args.kwargs['wrapper']
@@ -383,7 +388,8 @@ def test_known_options_do_not_warn(make_bot, caplog):
 
 def test_twitch_bot_warns_about_irc_only_options(tmp_path, caplog):
     with mock.patch('irc.connection.Factory'):
-        pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'), log_file=str(tmp_path / 't.log'), ns_pass='x')
+        pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'),
+                              log_file=str(tmp_path / 't.log'), ns_pass='x')
     assert "unknown option 'ns_pass' ignored" in caplog.text
 
 
@@ -412,11 +418,13 @@ def cert_error(code, message):
 
 @pytest.mark.parametrize('cause, expected', [
     (cert_error(20, 'unable to get local issuer certificate'), 'set ssl_verify to false'),
-    (cert_error(62, "Hostname mismatch, certificate is not valid for 'irc.example.net'."), 'name the certificate was issued for'),
+    (cert_error(62, "Hostname mismatch, certificate is not valid for 'irc.example.net'."),
+     'name the certificate was issued for'),
     (cert_error(10, 'certificate has expired'), 'needs fixing on the server'),
     (ssl.SSLError('wrong version number'), "Check 6697 is the server's ssl port"),
     (socket.gaierror(8, 'nodename nor servname provided'), 'server name not found'),
-    (ConnectionRefusedError(61, 'Connection refused'), 'connection refused, check the server and port'),
+    (ConnectionRefusedError(61, 'Connection refused'),
+     'connection refused, check the server and port'),
 ])
 def test_connection_errors_are_explained(make_bot, caplog, cause, expected):
     b = make_bot()
@@ -430,7 +438,8 @@ def test_connection_errors_are_explained(make_bot, caplog, cause, expected):
 
 def test_self_signed_hint_not_given_for_name_mismatch(make_bot, caplog):
     b = make_bot()
-    b.connection.connect = mock.Mock(side_effect=connection_error(cert_error(62, 'Hostname mismatch')))
+    mismatch = connection_error(cert_error(62, 'Hostname mismatch'))
+    b.connection.connect = mock.Mock(side_effect=mismatch)
     with pytest.raises(irc.client.ServerConnectionError):
         b.connect('irc.example.net', 6697, 'pinbot')
     assert 'ssl_verify' not in caplog.text

@@ -75,7 +75,8 @@ def test_ban_logged_in_user_bans_their_account(make_bot, conn):
     assert b.banned_users == ['$a:trollacct']
     assert replies(conn) == ['mal: banned troll (account trollacct)']
     conn.reset_mock()
-    b.process_event(conn, event('newnick', '#test', '!banlist', host='elsewhere', account='trollacct'))
+    b.process_event(conn, event('newnick', '#test', '!banlist',
+                                host='elsewhere', account='trollacct'))
     conn.privmsg.assert_not_called()
 
 

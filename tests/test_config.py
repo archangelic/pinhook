@@ -6,7 +6,8 @@ WEATHER = (
     "import pinhook.plugin as p\n"
     "@p.command('!weather')\n"
     "def weather(msg):\n"
-    "    return p.message('{} in {}'.format(msg.config['api_key'], msg.config.get('units', 'metric')))\n"
+    "    units = msg.config.get('units', 'metric')\n"
+    "    return p.message('{} in {}'.format(msg.config['api_key'], units))\n"
     "@p.command('!mods')\n"
     "def mods(msg):\n"
     "    return p.message(', '.join(msg.config.shared.get('modteam', [])))\n"
@@ -26,7 +27,8 @@ def test_plugin_reads_its_own_section(tmp_path):
 
 
 def test_get_gives_a_default(tmp_path):
-    bot = TestBot(plugin_dir=plugins(tmp_path, weather=WEATHER), plugin_config={'weather': {'api_key': 'abc'}})
+    bot = TestBot(plugin_dir=plugins(tmp_path, weather=WEATHER),
+                  plugin_config={'weather': {'api_key': 'abc'}})
     assert bot.say('!weather') == ['abc in metric']
 
 
@@ -34,7 +36,8 @@ def test_missing_setting_names_the_setting_and_plugin(tmp_path):
     bot = TestBot(plugin_dir=plugins(tmp_path, weather=WEATHER))
     with pytest.raises(PluginError) as error:
         bot.say('!weather')
-    assert "plugin_config has no 'api_key' setting for the weather plugin" in str(error.value.__cause__)
+    expected = "plugin_config has no 'api_key' setting for the weather plugin"
+    assert expected in str(error.value.__cause__)
 
 
 def test_every_plugin_can_read_the_shared_section(tmp_path):
@@ -64,6 +67,8 @@ def test_config_is_read_only(tmp_path):
 
 
 def test_section_for_a_missing_plugin_warns_with_a_suggestion(tmp_path, caplog):
-    TestBot(plugin_dir=plugins(tmp_path, weather=WEATHER), plugin_config={'weathr': {}, 'shared': {}})
-    assert "plugin_config has settings for 'weathr', but there's no plugin called that, did you mean 'weather'?" in caplog.text
+    TestBot(plugin_dir=plugins(tmp_path, weather=WEATHER),
+            plugin_config={'weathr': {}, 'shared': {}})
+    assert ("plugin_config has settings for 'weathr', but there's no plugin called that, "
+            "did you mean 'weather'?") in caplog.text
     assert "'shared'" not in caplog.text

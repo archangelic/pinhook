@@ -37,7 +37,8 @@ def plugin_dir(folder, **plugins):
 
 
 def real_bot(bot_dir, **options):
-    return pinhook_bot.Bot(['#test'], 'pinbot', 'localhost', bot_dir=str(bot_dir), log_level='off', **options)
+    return pinhook_bot.Bot(['#test'], 'pinbot', 'localhost', bot_dir=str(bot_dir),
+                           log_level='off', **options)
 
 
 # in a TestBot

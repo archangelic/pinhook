@@ -6,6 +6,7 @@ import click
 from .bot import Bot
 from marshmallow import Schema, fields, validate, INCLUDE, ValidationError
 
+
 class Config(Schema):
     nickname = fields.Str(required=True)
     channels = fields.List(fields.Str(), required=True)
@@ -34,8 +35,10 @@ class Config(Schema):
     class Meta:
         unknown = INCLUDE
 
+
 # ${NAME} is read from the environment, $${ is a literal ${
 ENV_VAR = re.compile(r'\$\$\{|\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
+
 
 def expand_env(value, name):
     if isinstance(value, dict):
@@ -44,35 +47,45 @@ def expand_env(value, name):
         return [expand_env(v, name) for v in value]
     if not isinstance(value, str):
         return value
+
     def replace(match):
         if match.group(1) is None:
             return '${'
         if match.group(1) not in os.environ:
-            raise click.ClickException("{} uses ${{{}}}, but that environment variable isn't set".format(name, match.group(1)))
+            raise click.ClickException("{} uses ${{{}}}, but that environment variable isn't set"
+                                       .format(name, match.group(1)))
         return os.environ[match.group(1)]
     return ENV_VAR.sub(replace, value)
+
 
 def flatten_problems(messages, path=''):
     # nested settings give nested errors, list them as plugin_config.weather: ...
     for key, msgs in messages.items():
         # marshmallow says whether a mapping's key or value was wrong, the path says enough
-        name = path if key in ('key', 'value') and path else '.'.join(p for p in (path, str(key)) if p)
+        if key in ('key', 'value') and path:
+            name = path
+        else:
+            name = '.'.join(p for p in (path, str(key)) if p)
         if isinstance(msgs, dict):
             yield from flatten_problems(msgs, name)
         else:
             yield name, ' '.join(msgs) if isinstance(msgs, list) else str(msgs)
+
 
 def check_conf(schema, data, name):
     data = expand_env(data, name)
     try:
         return schema.load(data)
     except ValidationError as e:
-        problems = ['  {}: {}'.format(key, msgs) for key, msgs in sorted(flatten_problems(e.messages))]
+        problems = ['  {}: {}'.format(key, msgs)
+                    for key, msgs in sorted(flatten_problems(e.messages))]
         raise click.ClickException('{} has problems:\n{}'.format(name, '\n'.join(problems)))
+
 
 def load_conf_file(path, conf_format):
     with open(path, 'rb') as f:
         return read_conf(f, conf_format)
+
 
 def read_conf(config, conf_format):
     schema = Config()
@@ -84,7 +97,8 @@ def read_conf(config, conf_format):
         elif config.name.endswith(('.toml', '.tml')):
             conf_format = 'toml'
         else:
-            raise click.ClickException('Could not detect file format, please supply using --format option')
+            raise click.ClickException(
+                'Could not detect file format, please supply using --format option')
     if conf_format == 'json':
         import json
         to_json = json.loads(config.read())
@@ -93,7 +107,8 @@ def read_conf(config, conf_format):
         try:
             import yaml
         except ImportError:
-            raise click.ClickException('yaml not installed, please use `pip3 install pinhook[yaml]` to install')
+            raise click.ClickException(
+                'yaml not installed, please use `pip3 install pinhook[yaml]` to install')
         else:
             to_yaml = yaml.load(config.read(), Loader=yaml.FullLoader)
             output = check_conf(schema, to_yaml, config.name)
@@ -105,12 +120,14 @@ def read_conf(config, conf_format):
             try:
                 import toml
             except ImportError:
-                raise click.ClickException('toml not installed, please use `pip3 install pinhook[toml]` to install')
+                raise click.ClickException(
+                    'toml not installed, please use `pip3 install pinhook[toml]` to install')
             to_toml = toml.load(config.name)
         else:
             to_toml = tomllib.load(config)
         output = check_conf(schema, to_toml, config.name)
     return output
+
 
 @click.command()
 @click.argument('config', type=click.File('rb'))
@@ -126,4 +143,3 @@ def cli(config, conf_format):
     bot.config_file = config_file
     bot.config_loader = functools.partial(load_conf_file, config_file, conf_format)
     bot.start()
-

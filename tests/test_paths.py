@@ -27,20 +27,23 @@ def test_bot_dir_keeps_everything_in_one_folder(tmp_path, conn):
     b = new_bot(bot_dir=str(tmp_path / 'ph-bot'), ops=['mal'])
     b.channels['#test'] = conn
     b.process_event(conn, event('mal', '#test', '!ban troll'))
-    assert files(tmp_path / 'ph-bot') == ['data', 'data/pinbot.bans.json', 'logs', 'logs/pinbot.log', 'plugins']
+    assert files(tmp_path / 'ph-bot') == [
+        'data', 'data/pinbot.bans.json', 'logs', 'logs/pinbot.log', 'plugins']
     assert b.data_dir == str(tmp_path / 'ph-bot' / 'data')
 
 
 def test_bot_dir_loads_plugins_from_inside_it(tmp_path):
     (tmp_path / 'plugins').mkdir()
-    (tmp_path / 'plugins' / 'hi.py').write_text("import pinhook.plugin as p\n@p.command('!hi')\ndef hi(msg): pass\n")
+    (tmp_path / 'plugins' / 'hi.py').write_text(
+        "import pinhook.plugin as p\n@p.command('!hi')\ndef hi(msg): pass\n")
     from pinhook import plugin
     new_bot(bot_dir=str(tmp_path))
     assert '!hi' in plugin.cmds
 
 
 def test_relative_options_are_inside_bot_dir(tmp_path):
-    b = new_bot(bot_dir=str(tmp_path), plugin_dir='my-plugins', data_dir='stores', log_file='bot.log', ban_file='bans.json')
+    b = new_bot(bot_dir=str(tmp_path), plugin_dir='my-plugins', data_dir='stores',
+                log_file='bot.log', ban_file='bans.json')
     assert b.plugin_dir == str(tmp_path / 'my-plugins')
     assert b.data_dir == str(tmp_path / 'stores')
     assert b.log_file == str(tmp_path / 'bot.log')
@@ -49,7 +52,8 @@ def test_relative_options_are_inside_bot_dir(tmp_path):
 
 def test_absolute_options_stay_where_they_point(tmp_path):
     elsewhere = tmp_path / 'elsewhere'
-    b = new_bot(bot_dir=str(tmp_path / 'ph-bot'), log_file=str(elsewhere / 'bot.log'), data_dir=str(elsewhere / 'data'))
+    b = new_bot(bot_dir=str(tmp_path / 'ph-bot'), log_file=str(elsewhere / 'bot.log'),
+                data_dir=str(elsewhere / 'data'))
     assert b.log_file == str(elsewhere / 'bot.log')
     assert b.data_dir == str(elsewhere / 'data')
     assert (elsewhere / 'bot.log').exists()

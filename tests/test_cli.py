@@ -73,7 +73,8 @@ def test_config_mistakes_are_listed_without_traceback(tmp_path):
 def test_bot_startup_errors_are_shown_plainly(tmp_path):
     path = tmp_path / 'config.json'
     path.write_text(json.dumps(BASE))
-    with mock.patch('pinhook.cli.Bot', side_effect=ValueError("couldn't read ban file bans.json: oops")):
+    error = ValueError("couldn't read ban file bans.json: oops")
+    with mock.patch('pinhook.cli.Bot', side_effect=error):
         result = CliRunner().invoke(cli, [str(path)])
     assert result.exit_code != 0
     assert "Error: couldn't read ban file bans.json: oops" in result.output
@@ -82,7 +83,8 @@ def test_bot_startup_errors_are_shown_plainly(tmp_path):
 def test_environment_variables_are_filled_in(tmp_path, monkeypatch):
     monkeypatch.setenv('PH_NS_PASS', 'hunter2')
     monkeypatch.setenv('PH_CHAN', 'games')
-    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='${PH_NS_PASS}', channels=['#${PH_CHAN}', '#chat']))
+    config = dict(BASE, ns_pass='${PH_NS_PASS}', channels=['#${PH_CHAN}', '#chat'])
+    result, bot = run_cli(tmp_path, config)
     assert result.exit_code == 0, result.output
     assert bot.call_args.kwargs['ns_pass'] == 'hunter2'
     assert bot.call_args.kwargs['channels'] == ['#games', '#chat']
@@ -105,15 +107,18 @@ def test_double_dollar_is_a_literal(tmp_path, monkeypatch):
 def test_environment_variables_work_in_yaml(tmp_path, monkeypatch):
     pytest.importorskip('yaml')
     monkeypatch.setenv('PH_SERVER', 'irc.libera.chat')
-    result, bot = run_cli(tmp_path, 'nickname: pinbot\nserver: "${PH_SERVER}"\nchannels: ["#test"]\n', name='config.yaml')
+    config = 'nickname: pinbot\nserver: "${PH_SERVER}"\nchannels: ["#test"]\n'
+    result, bot = run_cli(tmp_path, config, name='config.yaml')
     assert bot.call_args.kwargs['server'] == 'irc.libera.chat'
 
 
 def test_plugin_config_is_passed_to_the_bot_with_environment_variables(tmp_path, monkeypatch):
     monkeypatch.setenv('PH_WEATHER_KEY', 'abc123')
-    result, bot = run_cli(tmp_path, dict(BASE, plugin_config={'weather': {'api_key': '${PH_WEATHER_KEY}', 'units': 'metric'}}))
+    weather = {'api_key': '${PH_WEATHER_KEY}', 'units': 'metric'}
+    result, bot = run_cli(tmp_path, dict(BASE, plugin_config={'weather': weather}))
     assert result.exit_code == 0, result.output
-    assert bot.call_args.kwargs['plugin_config'] == {'weather': {'api_key': 'abc123', 'units': 'metric'}}
+    expected = {'weather': {'api_key': 'abc123', 'units': 'metric'}}
+    assert bot.call_args.kwargs['plugin_config'] == expected
 
 
 def test_plugin_config_sections_must_be_mappings(tmp_path):
@@ -156,11 +161,13 @@ def say(bot, conn, text, nick='mal'):
 
 
 def reload_config(tmp_path, **plugin_config):
-    return dict(BASE, ops=['mal'], log_level='off', ban_file='', bot_dir=str(tmp_path), plugin_config=plugin_config)
+    return dict(BASE, ops=['mal'], log_level='off', ban_file='', bot_dir=str(tmp_path),
+                plugin_config=plugin_config)
 
 
 def test_reload_reads_plugin_config_from_the_file_again(tmp_path):
-    bot, conn, path = start_from_config(tmp_path, reload_config(tmp_path, weather={'units': 'metric'}))
+    config = reload_config(tmp_path, weather={'units': 'metric'})
+    bot, conn, path = start_from_config(tmp_path, config)
     assert say(bot, conn, '!units') == ['metric']
     path.write_text(json.dumps(reload_config(tmp_path, weather={'units': 'imperial'})))
     assert say(bot, conn, '!reload') == ['Plugins reloaded (and plugin_config from config.json)']
@@ -168,9 +175,11 @@ def test_reload_reads_plugin_config_from_the_file_again(tmp_path):
 
 
 def test_reload_keeps_old_settings_when_the_file_is_broken(tmp_path):
-    bot, conn, path = start_from_config(tmp_path, reload_config(tmp_path, weather={'units': 'metric'}))
+    config = reload_config(tmp_path, weather={'units': 'metric'})
+    bot, conn, path = start_from_config(tmp_path, config)
     path.write_text('{"nickname": ')
-    assert say(bot, conn, '!reload') == ["Plugins reloaded, but config.json has a problem so plugin_config wasn't changed, see the log"]
+    assert say(bot, conn, '!reload') == ["Plugins reloaded, but config.json has a problem "
+                                         "so plugin_config wasn't changed, see the log"]
     assert say(bot, conn, '!units') == ['metric']
 
 

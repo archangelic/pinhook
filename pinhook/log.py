@@ -8,6 +8,7 @@ streamhandler = logging.StreamHandler()
 streamhandler.setFormatter(formatter)
 logger.addHandler(streamhandler)
 
+
 def get_bot_logger(nickname):
     # each bot gets its own child of the 'bot' logger so it can have its own
     # level and log file, console output still goes through the parent
@@ -17,6 +18,7 @@ def get_bot_logger(nickname):
         bot_logger.removeHandler(handler)
         handler.close()
     return bot_logger
+
 
 def set_log_file(filename, target=logger):
     # make the logs folder the first time

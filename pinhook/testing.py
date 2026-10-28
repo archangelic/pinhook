@@ -141,13 +141,15 @@ class TestBot(Bot):
         """Every message and action the bot has sent to target, like a nick for !help."""
         return [s.text for s in self.sent if s.target == target and s.kind in ('message', 'action')]
 
-    def _receive(self, kind, nick, target, text, reply_to, user=None, host='example.com', account=None):
+    def _receive(self, kind, nick, target, text, reply_to,
+                 user=None, host='example.com', account=None):
         start = len(self.sent)
         source = irc.client.NickMask.from_params(nick, user or nick, host)
         tags = [{'key': 'account', 'value': account}] if account else None
         self.process_event(self.connection, irc.client.Event(kind, source, target, [text], tags))
         self._raise_plugin_errors()
-        return [s.text for s in self.sent[start:] if s.target == reply_to and s.kind in ('message', 'action')]
+        return [s.text for s in self.sent[start:]
+                if s.target == reply_to and s.kind in ('message', 'action')]
 
     def _raise_plugin_errors(self):
         if self._errors.records:

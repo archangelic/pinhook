@@ -32,7 +32,8 @@ class PluginConfig(Mapping):
         try:
             return self._settings[key]
         except KeyError:
-            raise KeyError("plugin_config has no '{}' setting for the {} plugin".format(key, self.name)) from None
+            raise KeyError("plugin_config has no '{}' setting for the {} plugin".format(
+                key, self.name)) from None
 
     def __iter__(self):
         return iter(self._settings)
@@ -63,9 +64,11 @@ class Store(dict):
                 try:
                     data = json.load(f)
                 except ValueError as e:
-                    raise ValueError("couldn't read the store for {} from {}: {}".format(name, path, e))
+                    raise ValueError("couldn't read the store for {} from {}: {}".format(
+                        name, path, e))
             if not isinstance(data, dict):
-                raise ValueError('the store for {} in {} should hold a JSON object'.format(name, path))
+                raise ValueError('the store for {} in {} should hold a JSON object'.format(
+                    name, path))
             self.update(data)
         self._saved = self._snapshot()
 
@@ -73,7 +76,8 @@ class Store(dict):
         try:
             return json.dumps(self, sort_keys=True)
         except (TypeError, ValueError) as e:
-            raise TypeError('the store for {} can only hold JSON values (strings, numbers, lists, dicts, True, False and None): {}'.format(self.name, e)) from e
+            raise TypeError('the store for {} can only hold JSON values (strings, numbers, lists, '
+                            'dicts, True, False and None): {}'.format(self.name, e)) from e
 
     def save_if_changed(self):
         """Save the store if anything in it changed since it was last saved."""

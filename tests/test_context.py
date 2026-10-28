@@ -48,7 +48,8 @@ def test_action_with_one_argument_replies(tmp_path):
         "    msg.action('#party', 'dances here too')\n"
     )))
     bot.say('!dance')
-    assert bot.sent == [Sent('action', '#test', 'dances'), Sent('action', '#party', 'dances here too')]
+    assert bot.sent == [Sent('action', '#test', 'dances'),
+                        Sent('action', '#party', 'dances here too')]
 
 
 def test_notice_with_one_argument_goes_to_the_sender(tmp_path):
