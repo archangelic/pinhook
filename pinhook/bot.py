@@ -290,6 +290,10 @@ class Bot(irc.bot.SingleServerIRCBot):
     def on_action(self, c, e):
         self.process_event(c, e)
 
+    def pause(self, seconds):
+        # flood protection between lines of output
+        time.sleep(seconds)
+
     def call_help(self, nick, op):
         cmds = {k:v.help_text for k,v in plugin.cmds.items() if not (plugin.cmds[k].ops or plugin.cmds[k].hide) }
         cmds.update({self.cmd_prefix + 'help': 'returns this output to private message'})
@@ -299,7 +303,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         helpout = OrderedDict(sorted(cmds.items()))
         for h in helpout:
             self.connection.privmsg(nick, '{} -- {}'.format(h, helpout[h]))
-            time.sleep(.1)
+            self.pause(.1)
         self.connection.privmsg(nick, 'List of listeners: {}'.format(', '.join([l for l in plugin.lstnrs])))
         return None
 
@@ -534,7 +538,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                     break
             else:
                 self.logger.warning("Unsupported output type '{}'".format(output.msg_type))
-            time.sleep(.5)
+            self.pause(.5)
 
 
 class TwitchBot(Bot):
