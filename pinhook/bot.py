@@ -7,6 +7,7 @@ import socket
 import ssl
 import sys
 import time
+import warnings
 
 from . import bans
 from . import log
@@ -78,8 +79,8 @@ class Bot(irc.bot.SingleServerIRCBot):
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
 
     class Message:
-        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False):
-            self.bot = bot
+        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False, account=None):
+            self._bot = bot
             self.datetime = datetime.now(timezone.utc)
             self.timestamp = self.datetime.timestamp()
             self.channel = channel
@@ -89,10 +90,12 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.botnick = botnick
             self.ops = ops
             self.is_op = is_op
+            self.account = account
+            self.is_private = not irc.client.is_channel(channel)
             self.logger = logger
-            self.action = action
+            self._action = action
             self.privmsg = privmsg
-            self.notice = notice
+            self._notice = notice
             self.msg_type = msg_type
             if cmd:
                 self.cmd = cmd
@@ -101,6 +104,38 @@ class Bot(irc.bot.SingleServerIRCBot):
                 self.text = text
             if cmd is None and text is None:
                 raise TypeError('missing cmd or text parameter')
+
+        @property
+        def bot(self):
+            self._bot.warn_deprecated('msg.bot', 'msg.bot is deprecated and will be read only in 2.0, use msg.reply(), msg.send() and msg.botnick instead')
+            return self._bot
+
+        def reply(self, text):
+            """Send text where the message came from: the channel, or the sender if it was private."""
+            self._bot.process_output(self._bot.connection, self.channel, plugin.message(text))
+
+        def send(self, target, text):
+            """Send text to another channel or nick."""
+            self._bot.process_output(self._bot.connection, target, plugin.message(text))
+
+        def action(self, *args):
+            """action(text) replies with a /me, action(target, text) sends one somewhere else."""
+            target, text = self._target_and_text(args, self.channel)
+            self._bot.process_output(self._bot.connection, target, plugin.action(text))
+
+        def notice(self, *args):
+            """notice(text) sends the sender a notice, notice(target, text) sends one to anyone."""
+            target, text = self._target_and_text(args, self.nick)
+            for line in plugin.message(text).msg:
+                self._notice(target, line)
+
+        @staticmethod
+        def _target_and_text(args, default_target):
+            if len(args) == 1:
+                return default_target, args[0]
+            if len(args) == 2:
+                return args
+            raise TypeError('expected (text) or (target, text), got {} arguments'.format(len(args)))
 
     def connect(self, *args, **kwargs):
         # the irc library quietly retries failed connections, so say why it failed
@@ -130,6 +165,14 @@ class Bot(irc.bot.SingleServerIRCBot):
         if isinstance(cause, ConnectionRefusedError):
             return start + 'connection refused, check the server and port settings' + end
         return start + str(cause or error) + end
+
+    def warn_deprecated(self, key, message):
+        # log each one once per bot, and warn every time so tests show where it came from
+        warned = self.__dict__.setdefault('_deprecations_warned', set())
+        if key not in warned:
+            warned.add(key)
+            self.logger.warning(message)
+        warnings.warn(message, DeprecationWarning, stacklevel=3)
 
     def warn_unknown_options(self, kwargs):
         for key in sorted(set(kwargs) - self.options):
@@ -396,7 +439,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             raise TypeError('plugins must return message() or action(), got {}'.format(type(output).__name__))
         return output
 
-    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type, botnick, op=None):
+    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type, botnick, op=None, account=None):
         output = None
         if op is None:
             op = self.nick_in(nick, self.ops)
@@ -422,7 +465,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger,
                         msg_type=msg_type,
-                        is_op=op
+                        is_op=op,
+                        account=account
                     )))
             except Exception:
                 self.logger.exception('issue with command {}'.format(cmd))
@@ -445,7 +489,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                             ops=self.ops,
                             logger=self.logger,
                             msg_type=msg_type,
-                            is_op=op
+                            is_op=op,
+                            account=account
                         )))
                         if listen_output:
                             output = listen_output
@@ -511,7 +556,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'notice': c.notice,
                 'msg_type': msg_type,
                 'botnick': botnick,
-                'op': op
+                'op': op,
+                'account': account
             }
             output = self.call_plugins(**plugin_info)
         if output:

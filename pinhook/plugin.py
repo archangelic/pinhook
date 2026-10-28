@@ -3,6 +3,7 @@ from functools import wraps
 import importlib.util
 import os
 import sys
+import warnings
 
 from .log import logger
 
@@ -161,7 +162,9 @@ def command(command, help_text='N/A', ops=False, ops_msg='', hide=False):
     return register_for_command
 
 def register(command, help_text='N/A'):
-    logger.warning('@register decorator has been deprecated in favor of @command. This will cause errors in future versions.')
+    message = "@register is deprecated and will be removed in 2.0, use @command('{}') instead".format(command)
+    logger.warning(message)
+    warnings.warn(message, DeprecationWarning, stacklevel=2)
     @wraps(command)
     def register_for_command(func):
         _add_command(command, help_text, func)
@@ -175,7 +178,9 @@ def listener(name):
     return register_as_listener
 
 def ops(command, msg=None):
-    logger.warning('use of the @ops decorator has been deprecated in favor of using the @command decorator with the ops and ops_msg options. Use will cause errors in future versions.')
+    message = "@ops is deprecated and will be removed in 2.0, use @command('{}', ops=True, ops_msg=...) instead".format(command)
+    logger.warning(message)
+    warnings.warn(message, DeprecationWarning, stacklevel=2)
     @wraps(command)
     def register_ops_command(func):
         _ops_plugin(command, msg, func)
