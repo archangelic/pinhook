@@ -112,4 +112,4 @@ Plugin files are loaded as `pinhook_plugins.<filename>`, so a plugin named after
 
 ## Testing plugins
 
-pinhook's own tests build a bot without connecting it and feed it fake messages. The helpers in [tests/conftest.py](https://github.com/archangelic/pinhook/blob/master/tests/conftest.py) are a good starting point for testing your own plugins the same way.
+`pinhook.testing` runs your plugins in a bot that never connects, so you can check what they reply with pytest. See [Testing plugins](testing.md).

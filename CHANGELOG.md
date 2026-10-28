@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.12.0 (not released yet)
+
+### New
+
+* `pinhook.testing`: a `TestBot` that runs your plugins without a server, so you can test them with pytest
+
+### Fixed
+
+* The example dice plugins used an invalid escape in their regex, which newer Pythons warn about
+
 ## 1.11.0
 
 ### Before you upgrade

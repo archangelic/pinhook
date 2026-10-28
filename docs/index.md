@@ -40,6 +40,7 @@ Say `!hello` in `#foo` and the bot answers.
 * [Getting started](getting-started.md): config files, the command line tool and your first plugin
 * [Options](options.md): everything you can set on a bot
 * [Writing plugins](plugins.md): commands, listeners and what a plugin gets to work with
+* [Testing plugins](testing.md): check your plugins with pytest, no server needed
 * [Bans and ops](bans-and-ops.md): who can run what, and bans that are hard to dodge
 * [Troubleshooting](troubleshooting.md): what the log messages mean
 * Coming from an older version? See [Upgrading to 1.11](upgrading.md)

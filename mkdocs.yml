@@ -19,6 +19,7 @@ nav:
   - Options: options.md
   - Built-in commands: commands.md
   - Writing plugins: plugins.md
+  - Testing plugins: testing.md
   - Bans and ops: bans-and-ops.md
   - Twitch bots: twitch.md
   - Troubleshooting: troubleshooting.md
