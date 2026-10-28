@@ -1,6 +1,13 @@
 # Changelog
 
-## 1.12.0 (not released yet)
+## 1.12.0
+
+### Before you upgrade
+
+Nothing should break. Two things you might notice:
+
+* Plugins that use `msg.bot`, `@register` or `@ops` log a deprecation warning saying what to use instead (`msg.bot` only once per bot). They all still work. [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) has the details
+* Once a plugin uses `msg.store`, a `data/` folder appears where the bot runs, or inside `bot_dir` if that's set
 
 ### New
 
