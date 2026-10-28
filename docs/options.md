@@ -22,6 +22,7 @@ unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?
 | [`require_account`](#require_account) | `False` | only answer logged-in users |
 | [`bot_dir`](#bot_dir) | none | one folder for everything the bot keeps |
 | [`plugin_dir`](#plugin_dir) | `"plugins"` | where plugins live |
+| [`plugin_config`](#plugin_config) | none | settings for plugins |
 | [`data_dir`](#data_dir) | `"data"` | where plugins keep their data |
 | [`cmd_prefix`](#cmd_prefix) | `"!"` | prefix for built-in commands |
 | [`use_prefix_for_plugins`](#use_prefix_for_plugins) | `False` | add the prefix to plugin commands |
@@ -121,6 +122,20 @@ Folder the bot loads plugins from. Every `.py` file in it is loaded. It's create
 Folder where plugins keep their [saved data](plugins.md#saving-data), one `.json` file per plugin. New in 1.12.
 
 ## Plugins and commands
+
+### plugin_config
+
+Settings for plugins, a section per plugin file, plus a `shared` section every plugin can read. See [Settings](plugins.md#settings).
+
+```yaml
+plugin_config:
+    weather:
+        units: "metric"
+    shared:
+        modteam: ["mal", "ana"]
+```
+
+A section for a plugin that isn't loaded logs a warning, with a suggestion if it looks like a typo. New in 1.12.
 
 ### cmd_prefix
 

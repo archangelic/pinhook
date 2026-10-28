@@ -107,3 +107,17 @@ def test_environment_variables_work_in_yaml(tmp_path, monkeypatch):
     monkeypatch.setenv('PH_SERVER', 'irc.libera.chat')
     result, bot = run_cli(tmp_path, 'nickname: pinbot\nserver: "${PH_SERVER}"\nchannels: ["#test"]\n', name='config.yaml')
     assert bot.call_args.kwargs['server'] == 'irc.libera.chat'
+
+
+def test_plugin_config_is_passed_to_the_bot_with_environment_variables(tmp_path, monkeypatch):
+    monkeypatch.setenv('PH_WEATHER_KEY', 'abc123')
+    result, bot = run_cli(tmp_path, dict(BASE, plugin_config={'weather': {'api_key': '${PH_WEATHER_KEY}', 'units': 'metric'}}))
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.kwargs['plugin_config'] == {'weather': {'api_key': 'abc123', 'units': 'metric'}}
+
+
+def test_plugin_config_sections_must_be_mappings(tmp_path):
+    result, bot = run_cli(tmp_path, dict(BASE, plugin_config={'weather': ['not', 'a', 'mapping']}))
+    assert result.exit_code != 0
+    assert 'plugin_config.weather: Not a valid mapping type.' in result.output
+    assert 'defaultdict' not in result.output

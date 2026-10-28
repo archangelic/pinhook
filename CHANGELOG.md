@@ -11,6 +11,7 @@
 * `bot_dir` keeps everything a bot uses in one folder, with `plugins/`, `data/` and `logs/` inside it. Without it, files go where they did in 1.11
 * `msg.store`, a dictionary each plugin can keep data in. It lasts through `!reload` and restarts, and is saved to `data_dir` automatically
 * `data_dir`, where plugins keep their saved data
+* `plugin_config` gives each plugin its own settings, as `msg.config`, plus a `shared` section every plugin can read
 * `${NAME}` in a config file is filled in from the environment, so passwords don't have to be in the file
 * A [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) guide to getting plugins ready for 2.0
 

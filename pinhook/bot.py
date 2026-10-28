@@ -13,7 +13,7 @@ import warnings
 from . import bans
 from . import log
 from . import plugin
-from .store import Store
+from .store import PluginConfig, Store
 
 import irc.bot
 
@@ -40,7 +40,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         'port', 'ops', 'plugin_dir', 'ssl_required', 'ssl_verify', 'ns_pass',
         'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
-        'ban_file', 'require_account', 'bot_dir', 'data_dir',
+        'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -78,9 +78,10 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.setup_bans(nickname, kwargs)
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
+        self.check_plugin_config()
 
     class Message:
-        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False, account=None, store=None):
+        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False, account=None, store=None, config=None):
             self._bot = bot
             self.datetime = datetime.now(timezone.utc)
             self.timestamp = self.datetime.timestamp()
@@ -93,6 +94,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.is_op = is_op
             self.account = account
             self.store = store
+            self.config = config if config is not None else PluginConfig('plugin')
             self.is_private = not irc.client.is_channel(channel)
             self.logger = logger
             self._action = action
@@ -198,6 +200,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         ban_file = kwargs.get('ban_file', ban_file)
         self.ban_file = self.path(ban_file) if ban_file else None
         self.stores = {}
+        self.plugin_config = dict(kwargs.get('plugin_config') or {})
 
     def path(self, path):
         """Where a file or folder from the options really is: relative paths are inside bot_dir, when it's set."""
@@ -211,6 +214,18 @@ class Bot(irc.bot.SingleServerIRCBot):
         if name not in self.stores:
             self.stores[name] = self.open_store(name)
         return self.stores[name]
+
+    def config_for(self, name):
+        """The plugin_config section for the plugin file called name, as msg.config."""
+        return PluginConfig(name, self.plugin_config.get(name), self.plugin_config.get('shared'))
+
+    def check_plugin_config(self):
+        # a section for a plugin that isn't loaded is probably a typo
+        loaded = {p.file_name for p in plugin.plugins.values()}
+        for name in sorted(set(self.plugin_config) - loaded - {'shared'}):
+            close = difflib.get_close_matches(name, loaded, n=1)
+            hint = ", did you mean '{}'?".format(close[0]) if close else ''
+            self.logger.warning("plugin_config has settings for '{}', but there's no plugin called that{}".format(name, hint))
 
     def open_store(self, name):
         return Store(name, os.path.join(self.data_dir, name + '.json'))
@@ -407,6 +422,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
+            self.check_plugin_config()
             output = plugin.message('Plugins reloaded')
         elif cmd == 'enable' and op:
             if arg in plugin.plugins:
@@ -499,7 +515,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                         msg_type=msg_type,
                         is_op=op,
                         account=account,
-                        store=store
+                        store=store,
+                        config=self.config_for(plugin.cmds[cmd].file_name)
                     )))
                     store.save_if_changed()
             except Exception:
@@ -526,7 +543,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                             msg_type=msg_type,
                             is_op=op,
                             account=account,
-                            store=store
+                            store=store,
+                            config=self.config_for(plugin.lstnrs[lstnr].file_name)
                         )))
                         store.save_if_changed()
                         if listen_output:
@@ -629,7 +647,7 @@ class TwitchBot(Bot):
     options = {
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
-        'ban_file', 'bot_dir', 'data_dir',
+        'ban_file', 'bot_dir', 'data_dir', 'plugin_config',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):
@@ -654,6 +672,7 @@ class TwitchBot(Bot):
         irc.bot.SingleServerIRCBot.__init__(self, [(self.server, self.port, 'oauth:'+token)], nickname, nickname, connect_factory=self.ssl_factory(self.server))
         self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
+        self.check_plugin_config()
 
     def on_welcome(self, c, e):
         self.logger.info('requesting permissions')

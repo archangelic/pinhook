@@ -13,6 +13,8 @@ Nothing here is urgent. Plugins written for 1.11 work in 1.12 unchanged, and the
 | checks `msg.nick in msg.ops` | `msg.is_op`, which also understands accounts and hostmasks |
 | sends through `msg.bot.connection` | `msg.reply(text)`, `msg.send(target, text)`, `msg.action(text)` or `msg.notice(text)` |
 | reads `msg.bot.bot_nick` | `msg.botnick` |
+| reads settings off a Bot subclass, like `msg.bot.modteam` | a [`plugin_config`](plugins.md#settings) section, or `shared` if several plugins need it: `msg.config.shared['modteam']` |
+| keeps data in its own files | [`msg.store`](plugins.md#saving-data) |
 
 For example:
 
@@ -60,7 +62,6 @@ These are plans, not promises yet. They might change before 2.0 is released.
 
 * `msg.bot` becomes read only: plugins can look at the bot's nick and channels, but not reach into it
 * `@register` and `@ops` are removed
-* plugins can keep their own data between restarts, and have their own section in the config file. Until then, a plugin that reads its own settings off a Bot subclass (like `msg.bot.modteam`) should keep doing so
 * replies don't block: the bot can answer other people while a plugin sends a long reply
 * commands are written without their prefix, and the bot's config chooses the prefix
 * 1.x plugins still run in 2.0 through a compatibility layer, with warnings

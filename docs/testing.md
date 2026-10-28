@@ -86,6 +86,14 @@ def test_only_ops_can_announce():
     assert bot.say('!announce hi', nick='mal') == ['only ops can announce']
 ```
 
+Plugin settings work the same way:
+
+```python
+def test_weather_uses_the_api_key():
+    bot = TestBot(plugin_config={'weather': {'api_key': 'test-key'}})
+    ...
+```
+
 It also takes `nickname` (default: `'testbot'`) and `channels` (default: `['#test']`).
 
 ## When a plugin breaks

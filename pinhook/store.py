@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+from types import MappingProxyType
 import json
 import os
 
@@ -12,6 +14,34 @@ def write_json(path, data):
     with open(tmp, 'w') as f:
         json.dump(data, f, indent=2, sort_keys=True)
     os.replace(tmp, path)
+
+
+class PluginConfig(Mapping):
+    """A plugin's settings from plugin_config in the bot's config. Read only.
+
+    Plugins get theirs as `msg.config`: their own section, keyed by plugin file
+    name, and `msg.config.shared` for the section every plugin can read.
+    """
+
+    def __init__(self, name, settings=None, shared=None):
+        self.name = name
+        self._settings = dict(settings or {})
+        self.shared = MappingProxyType(dict(shared or {}))
+
+    def __getitem__(self, key):
+        try:
+            return self._settings[key]
+        except KeyError:
+            raise KeyError("plugin_config has no '{}' setting for the {} plugin".format(key, self.name)) from None
+
+    def __iter__(self):
+        return iter(self._settings)
+
+    def __len__(self):
+        return len(self._settings)
+
+    def __repr__(self):
+        return 'PluginConfig({!r}, {!r})'.format(self.name, self._settings)
 
 
 class Store(dict):

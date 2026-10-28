@@ -108,12 +108,13 @@ They get the same line splitting and flood protection as returned replies. `msg.
 | `ops` | the list of bot operators, as written in the config |
 | `botnick` | the bot's current nick |
 | `store` | the plugin's saved data, see [Saving data](#saving-data) |
+| `config` | the plugin's settings, see [Settings](#settings) |
 | `logger` | the bot's logger, see [Logging](#logging) |
 | `datetime` | when the message arrived, a timezone-aware `datetime` |
 | `timestamp` | the same as a unix timestamp |
 | `bot` | the bot itself. Deprecated, see [Preparing for 2.0](preparing-for-2.md) |
 
-`account`, `is_private` and `store` are new in 1.12.
+`account`, `is_private`, `store` and `config` are new in 1.12.
 
 ## Saving data
 
@@ -137,6 +138,34 @@ Stores are meant for small things: scores, quotes, last-seen times, settings cha
 To clear a plugin's data, stop the bot and delete its file.
 
 `msg.store` is new in 1.12.
+
+## Settings
+
+`msg.config` holds the plugin's settings, from [`plugin_config`](options.md#plugin_config) in the bot's config. Owners can change them without editing the plugin:
+
+```yaml
+plugin_config:
+    weather:
+        api_key: "${WEATHER_API_KEY}"
+        units: "metric"
+    shared:
+        modteam: ["mal", "ana"]
+```
+
+```python
+@pinhook.plugin.command('!weather')
+def weather(msg):
+    key = msg.config['api_key']
+    units = msg.config.get('units', 'metric')
+    ...
+```
+
+* Each plugin reads the section named after its file, so `weather.py` reads `weather`
+* `msg.config.shared` is the `shared` section, which every plugin can read. Use it for settings several plugins need
+* Settings are read only. For things the plugin changes itself, use [`msg.store`](#saving-data)
+* A missing setting fails with a message naming it: `plugin_config has no 'api_key' setting for the weather plugin`. Use `msg.config.get('name', default)` for optional ones
+
+`msg.config` is new in 1.12.
 
 ## Logging
 
