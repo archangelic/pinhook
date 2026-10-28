@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.12.0
+
+### Before you upgrade
+
+Nothing should break. Two things you might notice:
+
+* Plugins that use `msg.bot`, `@register` or `@ops` log a deprecation warning saying what to use instead (`msg.bot` only once per bot). They all still work. [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) has the details
+* Once a plugin uses `msg.store`, a `data/` folder appears where the bot runs, or inside `bot_dir` if that's set
+
+### New
+
+* `pinhook.testing`: a `TestBot` that runs your plugins without a server, so you can test them with pytest
+* `msg.reply(text)` and `msg.send(target, text)` send straight away, so a plugin can reply more than once or to several places
+* Given just the text, `msg.action(text)` replies where the message came from and `msg.notice(text)` sends the sender a notice
+* `msg.account` (the sender's services account) and `msg.is_private`
+* `bot_dir` keeps everything a bot uses in one folder, with `plugins/`, `data/` and `logs/` inside it. Without it, files go where they did in 1.11
+* `msg.store`, a dictionary each plugin can keep data in. It lasts through `!reload` and restarts, and is saved to `data_dir` automatically
+* `data_dir`, where plugins keep their saved data
+* `plugin_config` gives each plugin its own settings, as `msg.config`, plus a `shared` section every plugin can read
+* `!reload` also reads `plugin_config` from the config file again, so settings can change without a restart
+* SASL logins with `sasl_password` (and `sasl_account` if it's not the nickname). The bot is logged in before it joins channels, and gets its own nick on networks that reserve registered nicks
+* `${NAME}` in a config file is filled in from the environment, so passwords don't have to be in the file
+* Docstrings for everything plugins and bot scripts use, so editors can show help, and an [API reference](https://archangelic.github.io/pinhook/latest/reference/) generated from them
+* A [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) guide to getting plugins ready for 2.0
+
+### Deprecated
+
+* `msg.bot`, which will be read only in 2.0. Use `msg.reply()`, `msg.send()` and `msg.botnick` instead. It still works, and logs a warning once
+* `@register` and `@ops` now raise a `DeprecationWarning` too, saying what to use instead. They'll be removed in 2.0
+
+### Fixed
+
+* The example dice plugins used an invalid escape in their regex, which newer Pythons warn about
+
 ## 1.11.0
 
 ### Before you upgrade

@@ -30,7 +30,11 @@ Once connected:
 
 | Message | What it means |
 | --- | --- |
-| `nickname x in use, trying x_` | Someone else has the nick, so the bot picked a new one. Nothing to fix, unless you'd rather use a different nickname |
+| `nickname x in use, trying x_` | Someone else has the nick, so the bot picked a new one. If the nick is the bot's own registered one, the network is probably keeping it for whoever logs in to that account: use [`sasl_password`](options.md#sasl_password) so the bot logs in while it connects |
+| `logged in as x with SASL` | All good: the bot is logged in to its account |
+| `SASL login as x failed (...), check sasl_account and sasl_password` | The server turned the login down, and its reason is in brackets. The bot connects anyway, without its account |
+| `sasl_password is set, but this server doesn't offer SASL PLAIN logins` | Use [`ns_pass`](options.md#ns_pass) on this server instead |
+| `sasl_password will be sent without ssl` | Turn on [`ssl_required`](options.md#ssl_required), and set `port` to the ssl port |
 | `require_account is on but this server doesn't tell the bot who is logged in (account-tag), so the bot will ignore everyone` | Turn off [`require_account`](options.md#require_account) on this server |
 
 ## The bot doesn't answer
@@ -50,5 +54,6 @@ Work through these in order:
 | `issue with command !x` / `issue with listener x` | The plugin raised an exception. The traceback under it says where |
 | `plugins must return message() or action(), got str` | The plugin returned a plain string. Wrap it: `return pinhook.plugin.message(text)` |
 | `output message too long: ...` | One line was over IRC's 512-byte limit, so it and the lines after it weren't sent. Split long output into a list of lines |
-| `@register decorator has been deprecated ...` | Swap `@register('!x')` for `@command('!x')` |
-| `use of the @ops decorator has been deprecated ...` | Swap `@ops('!x', 'msg')` for `@command('!x', ops=True, ops_msg='msg')` |
+| `@register is deprecated and will be removed in 2.0 ...` | Swap `@register('!x')` for `@command('!x')` |
+| `@ops is deprecated and will be removed in 2.0 ...` | Swap `@ops('!x', 'msg')` for `@command('!x', ops=True, ops_msg='msg')` |
+| `msg.bot is deprecated and will be read only in 2.0 ...` | See [Preparing for 2.0](preparing-for-2.md) for what to use instead |

@@ -54,6 +54,8 @@ def say_hi(msg):
 
 ## Replying
 
+There are two ways to reply: return what to say, or say it straight away.
+
 Return one of these to reply where the message came from, the channel or the private message:
 
 * `pinhook.plugin.message(text)`: a normal message
@@ -67,11 +69,26 @@ return pinhook.plugin.message(['line one', 'line two'])
 
 Returning anything else, like a plain string, is logged as an error and nothing is sent.
 
-To send somewhere else, use the functions on the message: `msg.privmsg(target, text)`, `msg.action(target, text)` and `msg.notice(target, text)`.
+Or use the message's methods, which send straight away, so a plugin can reply more than once or send to several places:
+
+| Method | Sends |
+| --- | --- |
+| `msg.reply(text)` | a message where this one came from |
+| `msg.action(text)` | a `/me` action where this one came from |
+| `msg.notice(text)` | a notice to the sender only |
+| `msg.send(target, text)` | a message to another channel or nick |
+| `msg.action(target, text)` | a `/me` action to another channel or nick |
+| `msg.notice(target, text)` | a notice to another channel or nick |
 
 ```python
-msg.notice(msg.nick, 'psst, only you can see this')
+@pinhook.plugin.command('!countdown')
+def countdown(msg):
+    msg.reply('3... 2... 1...')
+    msg.send('#announcements', 'liftoff in {}'.format(msg.channel))
+    msg.notice('thanks for launching!')
 ```
+
+They get the same line splitting and flood protection as returned replies. `msg.reply`, `msg.send` and the one-argument forms are new in 1.12. `msg.privmsg(target, text)` still works too.
 
 ## The message
 
@@ -79,7 +96,9 @@ msg.notice(msg.nick, 'psst, only you can see this')
 | --- | --- |
 | `nick` | who sent it |
 | `user` | the username part of their hostmask (`nick!user@host`) |
+| `account` | the services account they're logged in to, or `None`. Needs a server with account tags, see [Bans and ops](bans-and-ops.md) |
 | `channel` | where it was sent. For a private message, the sender's nick |
+| `is_private` | `True` if it was a private message to the bot |
 | `cmd` | (commands) the command word that triggered it |
 | `arg` | (commands) everything after the command word |
 | `text` | (listeners) the whole message |
@@ -88,11 +107,66 @@ msg.notice(msg.nick, 'psst, only you can see this')
 | `is_op` | `True` if the sender is a bot operator. Understands accounts and hostmasks, so use it rather than `nick in msg.ops` |
 | `ops` | the list of bot operators, as written in the config |
 | `botnick` | the bot's current nick |
+| `store` | the plugin's saved data, see [Saving data](#saving-data) |
+| `config` | the plugin's settings, see [Settings](#settings) |
 | `logger` | the bot's logger, see [Logging](#logging) |
 | `datetime` | when the message arrived, a timezone-aware `datetime` |
 | `timestamp` | the same as a unix timestamp |
-| `bot` | the bot itself |
-| `privmsg`, `action`, `notice` | functions to [send somewhere else](#replying) |
+| `bot` | the bot itself. Deprecated, see [Preparing for 2.0](preparing-for-2.md) |
+
+`account`, `is_private`, `store` and `config` are new in 1.12.
+
+## Saving data
+
+`msg.store` is a dictionary the plugin can keep things in. It's still there in the next message, after `!reload` and after the bot restarts:
+
+```python
+@pinhook.plugin.command('!karma')
+def karma(msg):
+    scores = msg.store.setdefault('scores', {})
+    scores[msg.arg] = scores.get(msg.arg, 0) + 1
+    return pinhook.plugin.message('{} has {} karma'.format(msg.arg, scores[msg.arg]))
+```
+
+* Each plugin file has its own store, named after the file. Commands and listeners in the same file share it
+* The bot saves it after each plugin call if anything changed, including changes inside nested lists and dicts. There's nothing to call
+* It's saved as `<plugin file name>.json` in [`data_dir`](options.md#data_dir), so `karma.py` keeps its data in `data/karma.json`
+* Values have to be things JSON can hold: strings, numbers, lists, dicts, `True`, `False` and `None`. Keys are saved as strings. Store a `datetime` as a string or a timestamp
+
+Stores are meant for small things: scores, quotes, last-seen times, settings changed by a command. For lots of data or lots of writes, use a proper database like `sqlite3`.
+
+To clear a plugin's data, stop the bot and delete its file.
+
+`msg.store` is new in 1.12.
+
+## Settings
+
+`msg.config` holds the plugin's settings, from [`plugin_config`](options.md#plugin_config) in the bot's config. Owners can change them without editing the plugin:
+
+```yaml
+plugin_config:
+    weather:
+        api_key: "${WEATHER_API_KEY}"
+        units: "metric"
+    shared:
+        modteam: ["mal", "ana"]
+```
+
+```python
+@pinhook.plugin.command('!weather')
+def weather(msg):
+    key = msg.config['api_key']
+    units = msg.config.get('units', 'metric')
+    ...
+```
+
+* Each plugin reads the section named after its file, so `weather.py` reads `weather`
+* `msg.config.shared` is the `shared` section, which every plugin can read. Use it for settings several plugins need
+* Settings are read only. For things the plugin changes itself, use [`msg.store`](#saving-data)
+* After changing settings in the config file, an op can run `!reload` to use them without restarting. If the file has a mistake, the bot keeps the old settings and says so. Other options, like `server`, still need a restart
+* A missing setting fails with a message naming it: `plugin_config has no 'api_key' setting for the weather plugin`. Use `msg.config.get('name', default)` for optional ones
+
+`msg.config` is new in 1.12.
 
 ## Logging
 
@@ -112,4 +186,4 @@ Plugin files are loaded as `pinhook_plugins.<filename>`, so a plugin named after
 
 ## Testing plugins
 
-pinhook's own tests build a bot without connecting it and feed it fake messages. The helpers in [tests/conftest.py](https://github.com/archangelic/pinhook/blob/master/tests/conftest.py) are a good starting point for testing your own plugins the same way.
+`pinhook.testing` runs your plugins in a bot that never connects, so you can check what they reply with pytest. See [Testing plugins](testing.md).

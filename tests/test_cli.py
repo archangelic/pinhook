@@ -73,7 +73,56 @@ def test_config_mistakes_are_listed_without_traceback(tmp_path):
 def test_bot_startup_errors_are_shown_plainly(tmp_path):
     path = tmp_path / 'config.json'
     path.write_text(json.dumps(BASE))
-    with mock.patch('pinhook.cli.Bot', side_effect=ValueError("couldn't read ban file bans.json: oops")):
+    error = ValueError("couldn't read ban file bans.json: oops")
+    with mock.patch('pinhook.cli.Bot', side_effect=error):
         result = CliRunner().invoke(cli, [str(path)])
     assert result.exit_code != 0
     assert "Error: couldn't read ban file bans.json: oops" in result.output
+
+
+def test_environment_variables_are_filled_in(tmp_path, monkeypatch):
+    monkeypatch.setenv('PH_NS_PASS', 'hunter2')
+    monkeypatch.setenv('PH_CHAN', 'games')
+    config = dict(BASE, ns_pass='${PH_NS_PASS}', channels=['#${PH_CHAN}', '#chat'])
+    result, bot = run_cli(tmp_path, config)
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.kwargs['ns_pass'] == 'hunter2'
+    assert bot.call_args.kwargs['channels'] == ['#games', '#chat']
+
+
+def test_missing_environment_variable_stops_with_its_name(tmp_path, monkeypatch):
+    monkeypatch.delenv('PH_MISSING', raising=False)
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='${PH_MISSING}'))
+    assert result.exit_code != 0
+    assert "uses ${PH_MISSING}, but that environment variable isn't set" in result.output
+    bot.assert_not_called()
+
+
+def test_double_dollar_is_a_literal(tmp_path, monkeypatch):
+    monkeypatch.setenv('PH_NS_PASS', 'nope')
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='pa$${PH_NS_PASS}ss'))
+    assert bot.call_args.kwargs['ns_pass'] == 'pa${PH_NS_PASS}ss'
+
+
+def test_environment_variables_work_in_yaml(tmp_path, monkeypatch):
+    pytest.importorskip('yaml')
+    monkeypatch.setenv('PH_SERVER', 'irc.libera.chat')
+    config = 'nickname: pinbot\nserver: "${PH_SERVER}"\nchannels: ["#test"]\n'
+    result, bot = run_cli(tmp_path, config, name='config.yaml')
+    assert bot.call_args.kwargs['server'] == 'irc.libera.chat'
+
+
+def test_plugin_config_is_passed_to_the_bot_with_environment_variables(tmp_path, monkeypatch):
+    monkeypatch.setenv('PH_WEATHER_KEY', 'abc123')
+    weather = {'api_key': '${PH_WEATHER_KEY}', 'units': 'metric'}
+    result, bot = run_cli(tmp_path, dict(BASE, plugin_config={'weather': weather}))
+    assert result.exit_code == 0, result.output
+    expected = {'weather': {'api_key': 'abc123', 'units': 'metric'}}
+    assert bot.call_args.kwargs['plugin_config'] == expected
+
+
+def test_plugin_config_sections_must_be_mappings(tmp_path):
+    result, bot = run_cli(tmp_path, dict(BASE, plugin_config={'weather': ['not', 'a', 'mapping']}))
+    assert result.exit_code != 0
+    assert 'plugin_config.weather: Not a valid mapping type.' in result.output
+    assert 'defaultdict' not in result.output

@@ -1,4 +1,5 @@
 import logging
+import os
 
 logger = logging.getLogger('bot')
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s')
@@ -6,6 +7,7 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(module
 streamhandler = logging.StreamHandler()
 streamhandler.setFormatter(formatter)
 logger.addHandler(streamhandler)
+
 
 def get_bot_logger(nickname):
     # each bot gets its own child of the 'bot' logger so it can have its own
@@ -17,7 +19,12 @@ def get_bot_logger(nickname):
         handler.close()
     return bot_logger
 
+
 def set_log_file(filename, target=logger):
+    # make the logs folder the first time
+    folder = os.path.dirname(filename)
+    if folder:
+        os.makedirs(folder, exist_ok=True)
     # Set file logger
     filehandler = logging.FileHandler(filename)
     filehandler.setFormatter(formatter)

@@ -1,16 +1,21 @@
+"""The bots: Bot for IRC servers and TwitchBot for Twitch chat."""
 from collections import OrderedDict
 from datetime import datetime, timezone
+import base64
 import difflib
 import functools
 import logging
+import os
 import socket
 import ssl
 import sys
 import time
+import warnings
 
 from . import bans
 from . import log
 from . import plugin
+from .store import PluginConfig, Store
 
 import irc.bot
 
@@ -19,6 +24,17 @@ irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
 class Bot(irc.bot.SingleServerIRCBot):
+    """An IRC bot that loads plugins from a folder and runs them.
+
+    Args:
+        channels: channels to join once connected.
+        nickname: the bot's nick.
+        server: the server to connect to.
+        **kwargs: any of the bot's options, like port, ssl_required or ops. See
+            https://archangelic.github.io/pinhook/latest/options/
+
+    Call start() to connect and run until the bot quits.
+    """
     internal_commands = {
         'join': 'join a channel',
         'quit': 'force the bot to quit',
@@ -37,7 +53,8 @@ class Bot(irc.bot.SingleServerIRCBot):
         'port', 'ops', 'plugin_dir', 'ssl_required', 'ssl_verify', 'ns_pass',
         'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
-        'ban_file', 'require_account',
+        'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
+        'sasl_account', 'sasl_password',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -50,36 +67,75 @@ class Bot(irc.bot.SingleServerIRCBot):
     # set once the server agrees to tag messages with the sender's account
     account_tag = False
     _negotiating_caps = False
+    # set once the bot has logged in to its account with sasl
+    sasl_logged_in = False
+    sasl_password = None
+    # set by the pinhook command, so !reload can read plugin_config from the config file again
+    config_file = None
+    config_loader = None
 
     def __init__(self, channels, nickname, server, **kwargs):
         self.port = kwargs.get('port', 6667)
         self.ops = kwargs.get('ops', [])
-        self.plugin_dir = kwargs.get('plugin_dir', 'plugins')
+        self.setup_paths(nickname, kwargs)
         self.ssl_required = kwargs.get('ssl_required', False)
         self.ssl_verify = kwargs.get('ssl_verify', True)
         self.ns_pass = kwargs.get('ns_pass', None)
         self.nickserv = kwargs.get('nickserv', 'NickServ')
         self.log_level = kwargs.get('log_level', 'info')
-        self.log_file = kwargs.get('log_file', None)
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
         self.disable_help = kwargs.get('disable_help', False)
         self.bot_mode = kwargs.get('bot_mode', True)
         self.require_account = kwargs.get('require_account', False)
+        self.sasl_password = kwargs.get('sasl_password') or None
+        self.sasl_account = kwargs.get('sasl_account') or nickname
         factory = self.ssl_factory(server) if self.ssl_required else irc.connection.Factory()
-        irc.bot.SingleServerIRCBot.__init__(self, [(server, self.port, self.server_pass)], nickname, nickname, connect_factory=self.cap_factory(factory))
+        irc.bot.SingleServerIRCBot.__init__(
+            self, [(server, self.port, self.server_pass)], nickname, nickname,
+            connect_factory=self.cap_factory(factory))
         self.chanlist = channels
         self.bot_nick = nickname
         self.start_logging()
         self.warn_unknown_options(kwargs)
         self.setup_bans(nickname, kwargs)
-        self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
-        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
+        if self.sasl_password and not self.ssl_required:
+            self.logger.warning('sasl_password will be sent without ssl, '
+                                'turn on ssl_required to keep it private')
+        self.internal_commands = {self.cmd_prefix + k: v for k, v in self.internal_commands.items()}
+        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
+                            cmd_prefix=self.cmd_prefix, logger=self.logger)
+        self.check_plugin_config()
 
     class Message:
-        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg, notice, msg_type, cmd=None, arg=None, text=None, nick_list=None, is_op=False):
-            self.bot = bot
+        """A message sent to the bot, as a plugin gets it.
+
+        Attributes:
+            nick: who sent it.
+            user: the username part of their hostmask (nick!user@host).
+            account: the services account they're logged in to, or None.
+            channel: where it was sent. For a private message, the sender's nick.
+            is_private: True if it was a private message to the bot.
+            cmd: (commands) the command word that triggered it.
+            arg: (commands) everything after the command word.
+            text: (listeners) the whole message.
+            msg_type: 'message', or 'action' for a /me.
+            nick_list: nicks in the channel. Just the sender for private messages.
+            is_op: True if the sender is a bot operator.
+            ops: the list of bot operators, as written in the config.
+            botnick: the bot's current nick.
+            store: the plugin's saved data, a dict kept between restarts.
+            config: the plugin's settings from plugin_config, read only.
+            logger: the bot's logger.
+            datetime: when the message arrived, a timezone-aware datetime.
+            timestamp: the same as a unix timestamp.
+        """
+
+        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg,
+                     notice, msg_type, cmd=None, arg=None, text=None, nick_list=None,
+                     is_op=False, account=None, store=None, config=None):
+            self._bot = bot
             self.datetime = datetime.now(timezone.utc)
             self.timestamp = self.datetime.timestamp()
             self.channel = channel
@@ -89,18 +145,57 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.botnick = botnick
             self.ops = ops
             self.is_op = is_op
+            self.account = account
+            self.store = store
+            self.config = config if config is not None else PluginConfig('plugin')
+            self.is_private = not irc.client.is_channel(channel)
             self.logger = logger
-            self.action = action
+            self._action = action
             self.privmsg = privmsg
-            self.notice = notice
+            self._notice = notice
             self.msg_type = msg_type
             if cmd:
                 self.cmd = cmd
                 self.arg = arg
-            if text != None:
+            if text is not None:
                 self.text = text
             if cmd is None and text is None:
                 raise TypeError('missing cmd or text parameter')
+
+        @property
+        def bot(self):
+            """The bot itself. Deprecated, it will be read only in 2.0."""
+            self._bot.warn_deprecated(
+                'msg.bot', 'msg.bot is deprecated and will be read only in 2.0, '
+                'use msg.reply(), msg.send() and msg.botnick instead')
+            return self._bot
+
+        def reply(self, text):
+            """Send text where the message came from: the channel, or the sender if private."""
+            self._bot.process_output(self._bot.connection, self.channel, plugin.message(text))
+
+        def send(self, target, text):
+            """Send text to another channel or nick."""
+            self._bot.process_output(self._bot.connection, target, plugin.message(text))
+
+        def action(self, *args):
+            """action(text) replies with a /me, action(target, text) sends one somewhere else."""
+            target, text = self._target_and_text(args, self.channel)
+            self._bot.process_output(self._bot.connection, target, plugin.action(text))
+
+        def notice(self, *args):
+            """notice(text) sends the sender a notice, notice(target, text) sends one to anyone."""
+            target, text = self._target_and_text(args, self.nick)
+            for line in plugin.message(text).msg:
+                self._notice(target, line)
+
+        @staticmethod
+        def _target_and_text(args, default_target):
+            if len(args) == 1:
+                return default_target, args[0]
+            if len(args) == 2:
+                return args
+            raise TypeError('expected (text) or (target, text), got {} arguments'.format(len(args)))
 
     def connect(self, *args, **kwargs):
         # the irc library quietly retries failed connections, so say why it failed
@@ -115,21 +210,33 @@ class Bot(irc.bot.SingleServerIRCBot):
         start = "couldn't connect to {}:{}: ".format(host, port)
         end = ' (will keep retrying every 1-5 minutes)'
         if isinstance(cause, ssl.SSLCertVerificationError):
-            start += "the server's ssl certificate failed verification ({}). ".format(cause.verify_message.rstrip('.'))
+            reason = cause.verify_message.rstrip('.')
+            start += "the server's ssl certificate failed verification ({}). ".format(reason)
             # openssl codes for hostname and ip address mismatch, and expired
             if cause.verify_code in (62, 64):
-                return start + 'Set server to the name the certificate was issued for, not an IP address or alias' + end
+                return (start + 'Set server to the name the certificate was issued for, '
+                        'not an IP address or alias' + end)
             if cause.verify_code == 10:
                 return start + 'This needs fixing on the server' + end
-            return start + 'If this server uses a self-signed certificate, set ssl_verify to false' + end
+            return (start + 'If this server uses a self-signed certificate, '
+                    'set ssl_verify to false' + end)
         if isinstance(cause, ssl.SSLError):
+            reason = getattr(cause, 'reason', None) or cause
             return (start + 'ssl handshake failed ({}). '
-                    "Check {} is the server's ssl port, usually 6697".format(getattr(cause, 'reason', None) or cause, port) + end)
+                    "Check {} is the server's ssl port, usually 6697".format(reason, port) + end)
         if isinstance(cause, socket.gaierror):
             return start + 'server name not found, check the server setting' + end
         if isinstance(cause, ConnectionRefusedError):
             return start + 'connection refused, check the server and port settings' + end
         return start + str(cause or error) + end
+
+    def warn_deprecated(self, key, message):
+        # log each one once per bot, and warn every time so tests show where it came from
+        warned = self.__dict__.setdefault('_deprecations_warned', set())
+        if key not in warned:
+            warned.add(key)
+            self.logger.warning(message)
+        warnings.warn(message, DeprecationWarning, stacklevel=3)
 
     def warn_unknown_options(self, kwargs):
         for key in sorted(set(kwargs) - self.options):
@@ -137,8 +244,70 @@ class Bot(irc.bot.SingleServerIRCBot):
             hint = ", did you mean '{}'?".format(close[0]) if close else ''
             self.logger.warning("unknown option '{}' ignored{}".format(key, hint))
 
+    def setup_paths(self, nickname, kwargs):
+        # with bot_dir set, everything lives in one folder: plugins/, data/ and logs/.
+        # without it, files go where they did in 1.11
+        self.bot_dir = os.path.expanduser(kwargs['bot_dir']) if kwargs.get('bot_dir') else None
+        if self.bot_dir:
+            log_file = os.path.join('logs', '{}.log'.format(nickname))
+            ban_file = os.path.join('data', '{}.bans.json'.format(nickname))
+        else:
+            log_file = '{}.log'.format(nickname)
+            ban_file = '{}.bans.json'.format(nickname)
+        self.plugin_dir = self.path(kwargs.get('plugin_dir', 'plugins'))
+        self.data_dir = self.path(kwargs.get('data_dir', 'data'))
+        self.log_file = self.path(kwargs.get('log_file') or log_file)
+        ban_file = kwargs.get('ban_file', ban_file)
+        self.ban_file = self.path(ban_file) if ban_file else None
+        self.stores = {}
+        self.plugin_config = dict(kwargs.get('plugin_config') or {})
+
+    def path(self, path):
+        """Where a path from the options really is: relative ones are inside bot_dir, if set."""
+        path = os.path.expanduser(path)
+        if self.bot_dir and not os.path.isabs(path):
+            return os.path.join(self.bot_dir, path)
+        return path
+
+    def store(self, name):
+        """The saved data for the plugin file called name, the same dict as its msg.store."""
+        if name not in self.stores:
+            self.stores[name] = self.open_store(name)
+        return self.stores[name]
+
+    def config_for(self, name):
+        """The plugin_config section for the plugin file called name, as msg.config."""
+        return PluginConfig(name, self.plugin_config.get(name), self.plugin_config.get('shared'))
+
+    def reload_plugin_config(self):
+        # only when the bot was started from a config file, says what happened for the !reload reply
+        if not self.config_loader:
+            return ''
+        name = os.path.basename(self.config_file)
+        try:
+            config = self.config_loader()
+        except Exception as e:
+            self.logger.error(
+                "couldn't read plugin_config from {} again, keeping the old settings: {}".format(
+                    self.config_file, e))
+            return (", but {} has a problem so plugin_config wasn't changed, "
+                    "see the log".format(name))
+        self.plugin_config = dict(config.get('plugin_config') or {})
+        return ' (and plugin_config from {})'.format(name)
+
+    def check_plugin_config(self):
+        # a section for a plugin that isn't loaded is probably a typo
+        loaded = {p.file_name for p in plugin.plugins.values()}
+        for name in sorted(set(self.plugin_config) - loaded - {'shared'}):
+            close = difflib.get_close_matches(name, loaded, n=1)
+            hint = ", did you mean '{}'?".format(close[0]) if close else ''
+            self.logger.warning("plugin_config has settings for '{}', but there's no plugin "
+                                "called that{}".format(name, hint))
+
+    def open_store(self, name):
+        return Store(name, os.path.join(self.data_dir, name + '.json'))
+
     def setup_bans(self, nickname, kwargs):
-        self.ban_file = kwargs.get('ban_file', '{}.bans.json'.format(nickname)) or None
         self.config_bans = list(kwargs.get('banned_users', []))
         self.banned_users = list(self.config_bans)
         saved = bans.load(self.ban_file)
@@ -152,7 +321,8 @@ class Bot(irc.bot.SingleServerIRCBot):
 
     def save_bans(self):
         # bans from the config stay in the config, the file keeps the ones made with !ban
-        bans.save(self.ban_file, [b for b in self.banned_users if not self.nick_in(b, self.config_bans)])
+        saved = [b for b in self.banned_users if not self.nick_in(b, self.config_bans)]
+        bans.save(self.ban_file, saved)
 
     def remember(self, nick, user, host, account):
         key = irc.strings.lower(nick)
@@ -168,7 +338,8 @@ class Bot(irc.bot.SingleServerIRCBot):
             return target, target
         seen = self.seen.get(irc.strings.lower(target))
         if not seen:
-            return target, "{} (nick only, they haven't spoken since the bot started)".format(target)
+            description = "{} (nick only, they haven't spoken since the bot started)"
+            return target, description.format(target)
         nick, user, host, account = seen
         if account:
             return '$a:' + account, '{} (account {})'.format(target, account)
@@ -178,7 +349,8 @@ class Bot(irc.bot.SingleServerIRCBot):
     def remove_bans(self, target):
         # the entry itself, plus anything banning the person last seen as target
         seen = self.seen.get(irc.strings.lower(target))
-        removed = [b for b in self.banned_users if self.nick_in(b, [target]) or (seen and bans.matches(b, *seen))]
+        removed = [b for b in self.banned_users
+                   if self.nick_in(b, [target]) or (seen and bans.matches(b, *seen))]
         self.banned_users = [b for b in self.banned_users if b not in removed]
         return removed
 
@@ -196,8 +368,9 @@ class Bot(irc.bot.SingleServerIRCBot):
             sock = factory(address)
             sock.send(b'CAP LS 302\r\n')
             self._negotiating_caps = True
-            self._server_caps = set()
+            self._server_caps = {}
             self.account_tag = False
+            self.sasl_logged_in = False
             return sock
         return connect
 
@@ -206,27 +379,86 @@ class Bot(irc.bot.SingleServerIRCBot):
             return
         subcommand = e.arguments[0]
         if subcommand == 'LS':
-            self._server_caps.update(cap.split('=')[0] for cap in e.arguments[-1].split())
+            for cap in e.arguments[-1].split():
+                name, _, value = cap.partition('=')
+                self._server_caps[name] = value
             # a * means the list carries on in another line
             if len(e.arguments) > 2 and e.arguments[1] == '*':
                 return
-            if 'account-tag' in self._server_caps:
-                c.cap('REQ', 'account-tag')
+            wanted = [cap for cap in ('account-tag',) if cap in self._server_caps]
+            if self.sasl_password:
+                if self.sasl_offered():
+                    wanted.append('sasl')
+                else:
+                    self.logger.error("sasl_password is set, but this server doesn't offer "
+                                      "SASL PLAIN logins, so the bot isn't logged in")
+            if wanted:
+                c.cap('REQ', *wanted)
                 return
-        elif subcommand in ('ACK', 'NAK'):
-            self.account_tag = subcommand == 'ACK' and 'account-tag' in e.arguments[-1].split()
+        elif subcommand == 'ACK':
+            acked = e.arguments[-1].split()
+            self.account_tag = 'account-tag' in acked
+            if 'sasl' in acked:
+                # carries on in on_authenticate, then on_saslsuccess or a failure
+                c.send_raw('AUTHENTICATE PLAIN')
+                return
+        elif subcommand == 'NAK':
+            if self.sasl_password:
+                self.logger.error("the server refused SASL, so the bot isn't logged in")
         else:
             return
+        self.end_caps(c)
+
+    def sasl_offered(self):
+        # sasl=PLAIN,EXTERNAL lists the methods, plain sasl means the server didn't say
+        if 'sasl' not in self._server_caps:
+            return False
+        methods = self._server_caps['sasl']
+        return not methods or 'PLAIN' in methods.upper().split(',')
+
+    def end_caps(self, c):
         # registration waits until we say we're done
         self._negotiating_caps = False
         c.cap('END')
 
-    def ssl_factory(self, server):
+    def on_authenticate(self, c, e):
+        if e.target != '+' or not self._negotiating_caps:
+            return
+        login = '\0{}\0{}'.format(self.sasl_account, self.sasl_password)
+        encoded = base64.b64encode(login.encode('utf-8')).decode('ascii')
+        # the spec sends it in 400 byte pieces, and + after a last piece that's exactly 400
+        for i in range(0, len(encoded), 400):
+            c.send_raw('AUTHENTICATE ' + encoded[i:i + 400])
+        if len(encoded) % 400 == 0:
+            c.send_raw('AUTHENTICATE +')
+
+    def on_saslsuccess(self, c, e):
+        self.sasl_logged_in = True
+        self.logger.info('logged in as {} with SASL'.format(self.sasl_account))
+        self.end_caps(c)
+
+    def on_saslfail(self, c, e):
+        reason = e.arguments[-1] if e.arguments else 'no reason given'
+        self.logger.error("SASL login as {} failed ({}), check sasl_account and sasl_password"
+                          .format(self.sasl_account, reason))
+        if self._negotiating_caps:
+            self.end_caps(c)
+
+    # the other ways a sasl login can end without logging in
+    on_sasltoolong = on_saslfail
+    on_saslaborted = on_saslfail
+    on_nicklocked = on_saslfail
+
+    def ssl_context(self):
+        """The ssl settings the bot connects with: checks certificates unless ssl_verify is off."""
         context = ssl.create_default_context()
         if not self.ssl_verify:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
-        wrapper = functools.partial(context.wrap_socket, server_hostname=server)
+        return context
+
+    def ssl_factory(self, server):
+        wrapper = functools.partial(self.ssl_context().wrap_socket, server_hostname=server)
         return irc.connection.Factory(wrapper=wrapper)
 
     @staticmethod
@@ -244,17 +476,17 @@ class Bot(irc.bot.SingleServerIRCBot):
         if log_level not in self.log_levels:
             raise ValueError("log_level must be one of: off, {}".format(', '.join(self.log_levels)))
         self.logger.disabled = False
-        if self.log_file:
-            log.set_log_file(self.log_file, self.logger)
-        else:
-            log.set_log_file('{}.log'.format(self.bot_nick), self.logger)
+        log.set_log_file(self.log_file, self.logger)
         self.logger.setLevel(self.log_levels[log_level])
         self.logger.info('Logging started!')
 
     def on_welcome(self, c, e):
+        # registering is done, so any capability negotiation is too
+        self._negotiating_caps = False
         if self.require_account and not self.account_tag:
-            self.logger.error("require_account is on but this server doesn't tell the bot who is logged in (account-tag), so the bot will ignore everyone")
-        if self.ns_pass:
+            self.logger.error("require_account is on but this server doesn't tell the bot who is "
+                              "logged in (account-tag), so the bot will ignore everyone")
+        if self.ns_pass and not self.sasl_logged_in:
             self.logger.info('identifying with nickserv')
             c.privmsg(self.nickserv, 'identify {}'.format(self.ns_pass))
         for channel in self.chanlist:
@@ -290,17 +522,23 @@ class Bot(irc.bot.SingleServerIRCBot):
     def on_action(self, c, e):
         self.process_event(c, e)
 
+    def pause(self, seconds):
+        # flood protection between lines of output
+        time.sleep(seconds)
+
     def call_help(self, nick, op):
-        cmds = {k:v.help_text for k,v in plugin.cmds.items() if not (plugin.cmds[k].ops or plugin.cmds[k].hide) }
+        cmds = {k: v.help_text for k, v in plugin.cmds.items()
+                if not (plugin.cmds[k].ops or plugin.cmds[k].hide)}
         cmds.update({self.cmd_prefix + 'help': 'returns this output to private message'})
         if op:
-            cmds.update({k:v.help_text for k,v in plugin.cmds.items() if plugin.cmds[k].ops})
-            cmds.update({k:v for k,v in self.internal_commands.items()})
+            cmds.update({k: v.help_text for k, v in plugin.cmds.items() if plugin.cmds[k].ops})
+            cmds.update({k: v for k, v in self.internal_commands.items()})
         helpout = OrderedDict(sorted(cmds.items()))
         for h in helpout:
             self.connection.privmsg(nick, '{} -- {}'.format(h, helpout[h]))
-            time.sleep(.1)
-        self.connection.privmsg(nick, 'List of listeners: {}'.format(', '.join([l for l in plugin.lstnrs])))
+            self.pause(.1)
+        listeners = ', '.join(plugin.lstnrs)
+        self.connection.privmsg(nick, 'List of listeners: {}'.format(listeners))
         return None
 
     def call_internal_commands(self, channel, nick, cmd, text, arg, c, op=None):
@@ -316,8 +554,9 @@ class Bot(irc.bot.SingleServerIRCBot):
                 c.join(*arg.split())
                 self.logger.info('joining {} per request of {}'.format(arg, nick))
                 output = plugin.message('{}: joined {}'.format(nick, arg.split()[0]))
-            except:
-                self.logger.exception('issue with join command: {}join #channel <channel key>'.format(self.cmd_prefix))
+            except Exception:
+                self.logger.exception('issue with join command: {}join #channel <channel key>'
+                                      .format(self.cmd_prefix))
         elif cmd == 'quit' and op:
             self.logger.info('quitting per request of {}'.format(nick))
             if not arg:
@@ -328,8 +567,11 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.call_help(nick, op)
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
-            plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
-            output = plugin.message('Plugins reloaded')
+            config_note = self.reload_plugin_config()
+            plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
+                                cmd_prefix=self.cmd_prefix, logger=self.logger)
+            self.check_plugin_config()
+            output = plugin.message('Plugins reloaded' + config_note)
         elif cmd == 'enable' and op:
             if arg in plugin.plugins:
                 if plugin.plugins[arg].enabled:
@@ -381,18 +623,22 @@ class Bot(irc.bot.SingleServerIRCBot):
                 reply = '{}: removed ban on {}'.format(nick, ', '.join(removed))
                 from_config = [b for b in removed if self.nick_in(b, self.config_bans)]
                 if from_config:
-                    reply += " ({} is in the config file, so it'll be back after a restart)".format(', '.join(from_config))
+                    reply += (" ({} is in the config file, so it'll be back after a restart)"
+                              .format(', '.join(from_config)))
                 output = plugin.message(reply)
         elif cmd == 'banlist' and op:
-            output = plugin.message('currently banned: {}'.format(', '.join(self.banned_users) or 'nobody'))
+            banned = ', '.join(self.banned_users) or 'nobody'
+            output = plugin.message('currently banned: {}'.format(banned))
         return output
 
     def check_output(self, output):
         if output and not isinstance(output, plugin.Output):
-            raise TypeError('plugins must return message() or action(), got {}'.format(type(output).__name__))
+            raise TypeError('plugins must return message() or action(), got {}'.format(
+                type(output).__name__))
         return output
 
-    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg, msg_type, botnick, op=None):
+    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg,
+                     msg_type, botnick, op=None, account=None):
         output = None
         if op is None:
             op = self.nick_in(nick, self.ops)
@@ -400,9 +646,10 @@ class Bot(irc.bot.SingleServerIRCBot):
             try:
                 if plugin.cmds[cmd].ops and not op:
                     if plugin.cmds[cmd].ops_msg:
-                        output =  plugin.message(plugin.cmds[cmd].ops_msg)
+                        output = plugin.message(plugin.cmds[cmd].ops_msg)
                 elif plugin.cmds[cmd].enabled:
                     self.logger.debug('executing {}'.format(cmd))
+                    store = self.store(plugin.cmds[cmd].file_name)
                     output = self.check_output(plugin.cmds[cmd].run(self.Message(
                         bot=self,
                         channel=chan,
@@ -418,8 +665,12 @@ class Bot(irc.bot.SingleServerIRCBot):
                         ops=self.ops,
                         logger=self.logger,
                         msg_type=msg_type,
-                        is_op=op
+                        is_op=op,
+                        account=account,
+                        store=store,
+                        config=self.config_for(plugin.cmds[cmd].file_name)
                     )))
+                    store.save_if_changed()
             except Exception:
                 self.logger.exception('issue with command {}'.format(cmd))
         else:
@@ -427,6 +678,7 @@ class Bot(irc.bot.SingleServerIRCBot):
                 if plugin.lstnrs[lstnr].enabled:
                     try:
                         self.logger.debug('whispering to listener: {}'.format(lstnr))
+                        store = self.store(plugin.lstnrs[lstnr].file_name)
                         listen_output = self.check_output(plugin.lstnrs[lstnr].run(self.Message(
                             bot=self,
                             channel=chan,
@@ -441,8 +693,12 @@ class Bot(irc.bot.SingleServerIRCBot):
                             ops=self.ops,
                             logger=self.logger,
                             msg_type=msg_type,
-                            is_op=op
+                            is_op=op,
+                            account=account,
+                            store=store,
+                            config=self.config_for(plugin.lstnrs[lstnr].file_name)
                         )))
+                        store.save_if_changed()
                         if listen_output:
                             output = listen_output
                     except Exception:
@@ -507,7 +763,8 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'notice': c.notice,
                 'msg_type': msg_type,
                 'botnick': botnick,
-                'op': op
+                'op': op,
+                'account': account
             }
             output = self.call_plugins(**plugin_info)
         if output:
@@ -534,24 +791,32 @@ class Bot(irc.bot.SingleServerIRCBot):
                     break
             else:
                 self.logger.warning("Unsupported output type '{}'".format(output.msg_type))
-            time.sleep(.5)
+            self.pause(.5)
 
 
 class TwitchBot(Bot):
+    """A bot for Twitch chat, connecting to irc.chat.twitch.tv over ssl.
+
+    Args:
+        nickname: the bot account's name.
+        channel: the channel to join, like '#channel'.
+        token: the bot account's oauth token, without 'oauth:'.
+        **kwargs: any of the options TwitchBot takes, see
+            https://archangelic.github.io/pinhook/latest/twitch/
+    """
     server = 'irc.chat.twitch.tv'
     options = {
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
-        'ban_file',
+        'ban_file', 'bot_dir', 'data_dir', 'plugin_config',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):
         self.port = kwargs.get('port', 6697)
         self.ssl_verify = True
         self.ops = kwargs.get('ops', [])
-        self.plugin_dir = kwargs.get('plugin_dir', 'plugins')
+        self.setup_paths(nickname, kwargs)
         self.log_level = kwargs.get('log_level', 'info')
-        self.log_file = kwargs.get('log_file', None)
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
@@ -565,9 +830,13 @@ class TwitchBot(Bot):
         self.channel = channel
         self.logger.info('Joining Twitch Server')
         # always use tls, the oauth token is a password
-        irc.bot.SingleServerIRCBot.__init__(self, [(self.server, self.port, 'oauth:'+token)], nickname, nickname, connect_factory=self.ssl_factory(self.server))
-        self.internal_commands = {self.cmd_prefix + k: v for k,v in self.internal_commands.items()}
-        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
+        irc.bot.SingleServerIRCBot.__init__(
+            self, [(self.server, self.port, 'oauth:' + token)], nickname, nickname,
+            connect_factory=self.ssl_factory(self.server))
+        self.internal_commands = {self.cmd_prefix + k: v for k, v in self.internal_commands.items()}
+        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
+                            cmd_prefix=self.cmd_prefix, logger=self.logger)
+        self.check_plugin_config()
 
     def on_welcome(self, c, e):
         self.logger.info('requesting permissions')

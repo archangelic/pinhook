@@ -14,13 +14,18 @@ unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?
 | [`ssl_required`](#ssl_required) | `False` | connect over ssl |
 | [`ssl_verify`](#ssl_verify) | `True` | check the server's certificate |
 | [`server_pass`](#server_pass) | none | server password |
+| [`sasl_password`](#sasl_password) | none | log in with SASL |
+| [`sasl_account`](#sasl_account) | the nickname | account to log in as |
 | [`ns_pass`](#ns_pass) | none | nickserv password |
 | [`nickserv`](#nickserv) | `"NickServ"` | nick of the nickserv service |
 | [`ops`](#ops) | `[]` | bot operators |
 | [`banned_users`](#banned_users) | `[]` | people the bot ignores |
 | [`ban_file`](#ban_file) | `"<nickname>.bans.json"` | where `!ban` saves bans |
 | [`require_account`](#require_account) | `False` | only answer logged-in users |
+| [`bot_dir`](#bot_dir) | none | one folder for everything the bot keeps |
 | [`plugin_dir`](#plugin_dir) | `"plugins"` | where plugins live |
+| [`plugin_config`](#plugin_config) | none | settings for plugins |
+| [`data_dir`](#data_dir) | `"data"` | where plugins keep their data |
 | [`cmd_prefix`](#cmd_prefix) | `"!"` | prefix for built-in commands |
 | [`use_prefix_for_plugins`](#use_prefix_for_plugins) | `False` | add the prefix to plugin commands |
 | [`disable_help`](#disable_help) | `False` | turn off `!help` |
@@ -51,9 +56,28 @@ Only turn it off for a server with a self-signed certificate. If the check fails
 
 Password for the server itself, if it needs one. This is not your nickserv password.
 
+### sasl_password
+
+Log in to the bot's services account with SASL, while it connects. This is the best way to log in where the server supports it, which most modern networks do, Libera included:
+
+* the bot is logged in before it joins any channels
+* it gets its own nick even when the network reserves registered nicks, which stops a bot that logs in later from using its nick at all
+
+```yaml
+ssl_required: true
+port: 6697
+sasl_password: "${PH_BOT_PASSWORD}"
+```
+
+If the login fails, the bot logs why and connects anyway, then tries [`ns_pass`](#ns_pass) if that's set. Use it with [`ssl_required`](#ssl_required), or the password is sent in plain text. The bot warns if you don't. New in 1.12.
+
+### sasl_account
+
+The account to log in to with SASL, if it isn't the same as the bot's nickname. New in 1.12.
+
 ### ns_pass
 
-Password to identify with nickserv. The bot sends it straight after connecting.
+Password to identify with nickserv. The bot sends it straight after connecting. Prefer [`sasl_password`](#sasl_password) where the server supports it. If both are set and SASL works, `ns_pass` isn't sent.
 
 ### nickserv
 
@@ -78,7 +102,7 @@ People the bot ignores completely. Same kinds of entries as `ops`. Bans added wi
 
 ### ban_file
 
-File where bans made with `!ban` are saved, so they last through restarts. Bans from `banned_users` stay in the config and aren't copied into it.
+File where bans made with `!ban` are saved, so they last through restarts. With [`bot_dir`](#bot_dir) set, the default is `data/<nickname>.bans.json` inside it. Bans from `banned_users` stay in the config and aren't copied into it.
 
 Set it to `""` to keep `!ban` bans in memory only. If the file can't be read the bot won't start, rather than quietly forgetting bans.
 
@@ -86,11 +110,53 @@ Set it to `""` to keep `!ban` bans in memory only. If the file can't be read the
 
 Only answer people who are logged in to a services account. This makes bans much harder to dodge, but guests can't use the bot at all. Needs a server that supports account tags, see [Bans and ops](bans-and-ops.md#require_account).
 
-## Plugins and commands
+## Files and folders
+
+### bot_dir
+
+A folder to keep everything the bot uses in one place. With it set, the bot uses this layout:
+
+```
+ph-bot/                     <- bot_dir
+├── plugins/                <- plugin_dir
+├── data/                   <- data_dir
+│   └── ph-bot.bans.json    <- ban_file
+└── logs/
+    └── ph-bot.log          <- log_file
+```
+
+Without `bot_dir`, files go where they always have, in the folder the bot runs from: `plugins/`, `data/`, `<nickname>.log` and `<nickname>.bans.json`.
+
+Relative paths in `plugin_dir`, `data_dir`, `log_file` and `ban_file` are inside `bot_dir` when it's set, so you can still move one thing. Absolute paths stay where they point. `~` means your home folder. Folders are created when they're first needed.
+
+!!! tip
+    Two bots can share a `bot_dir`. They share plugins and plugin data, but each keeps its own log and ban file, since those are named after the bot.
+
+`bot_dir` is new in 1.12.
 
 ### plugin_dir
 
 Folder the bot loads plugins from. Every `.py` file in it is loaded. It's created if it doesn't exist.
+
+### data_dir
+
+Folder where plugins keep their [saved data](plugins.md#saving-data), one `.json` file per plugin. New in 1.12.
+
+## Plugins and commands
+
+### plugin_config
+
+Settings for plugins, a section per plugin file, plus a `shared` section every plugin can read. See [Settings](plugins.md#settings).
+
+```yaml
+plugin_config:
+    weather:
+        units: "metric"
+    shared:
+        modteam: ["mal", "ana"]
+```
+
+A section for a plugin that isn't loaded logs a warning, with a suggestion if it looks like a typo. New in 1.12.
 
 ### cmd_prefix
 
@@ -116,7 +182,7 @@ One of `"debug"`, `"info"`, `"warning"`, `"error"` or `"critical"`, in any case.
 
 ### log_file
 
-File to write logs to. Each bot has its own log file and log level, even several bots in one python process. Log lines name the bot they came from:
+File to write logs to. With [`bot_dir`](#bot_dir) set, the default is `logs/<nickname>.log` inside it. Each bot has its own log file and log level, even several bots in one python process. Log lines name the bot they came from:
 
 ```
 2026-10-27 22:33:18,491 - INFO - bot.ph-bot - bot - setting bot mode +B

@@ -27,4 +27,4 @@ Most bots upgrade with no changes. Check this list for the ones that might affec
 
 * **Use accounts for ops**: `$a:yourname` instead of a nick, so nobody can borrow an op's nick. See [Bans and ops](bans-and-ops.md).
 * **Use `msg.is_op` in plugins** instead of `msg.nick in msg.ops`.
-* **Swap `@register` and `@ops` for `@command`.** They'll be removed in 2.0.
+* **Swap `@register` and `@ops` for `@command`.** They'll be removed in 2.0. [Preparing for 2.0](preparing-for-2.md) lists everything worth changing.

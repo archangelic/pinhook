@@ -19,10 +19,14 @@ nav:
   - Options: options.md
   - Built-in commands: commands.md
   - Writing plugins: plugins.md
+  - Testing plugins: testing.md
   - Bans and ops: bans-and-ops.md
   - Twitch bots: twitch.md
   - Troubleshooting: troubleshooting.md
-  - Upgrading to 1.11: upgrading.md
+  - Upgrading:
+    - To 1.11: upgrading.md
+    - Preparing for 2.0: preparing-for-2.md
+  - API reference: reference.md
   - Changelog: changelog.md
 
 theme:
@@ -50,6 +54,27 @@ theme:
 extra:
   version:
     provider: mike
+
+plugins:
+  # listed here because adding any plugin turns off the default search
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          # read from the source, so pinhook doesn't need installing to build the docs
+          paths: [.]
+          options:
+            docstring_style: google
+            # type hints come in 2.0, so don't expect them yet
+            docstring_options:
+              warn_missing_types: false
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            heading_level: 3
+            filters: ["!^_"]
+            separate_signature: true
 
 markdown_extensions:
   - admonition
