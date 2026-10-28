@@ -449,12 +449,16 @@ class Bot(irc.bot.SingleServerIRCBot):
     on_saslaborted = on_saslfail
     on_nicklocked = on_saslfail
 
-    def ssl_factory(self, server):
+    def ssl_context(self):
+        """The ssl settings the bot connects with: checks certificates unless ssl_verify is off."""
         context = ssl.create_default_context()
         if not self.ssl_verify:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
-        wrapper = functools.partial(context.wrap_socket, server_hostname=server)
+        return context
+
+    def ssl_factory(self, server):
+        wrapper = functools.partial(self.ssl_context().wrap_socket, server_hostname=server)
         return irc.connection.Factory(wrapper=wrapper)
 
     @staticmethod
@@ -477,6 +481,8 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.logger.info('Logging started!')
 
     def on_welcome(self, c, e):
+        # registering is done, so any capability negotiation is too
+        self._negotiating_caps = False
         if self.require_account and not self.account_tag:
             self.logger.error("require_account is on but this server doesn't tell the bot who is "
                               "logged in (account-tag), so the bot will ignore everyone")
