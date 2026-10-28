@@ -14,6 +14,8 @@ unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?
 | [`ssl_required`](#ssl_required) | `False` | connect over ssl |
 | [`ssl_verify`](#ssl_verify) | `True` | check the server's certificate |
 | [`server_pass`](#server_pass) | none | server password |
+| [`sasl_password`](#sasl_password) | none | log in with SASL |
+| [`sasl_account`](#sasl_account) | the nickname | account to log in as |
 | [`ns_pass`](#ns_pass) | none | nickserv password |
 | [`nickserv`](#nickserv) | `"NickServ"` | nick of the nickserv service |
 | [`ops`](#ops) | `[]` | bot operators |
@@ -54,9 +56,28 @@ Only turn it off for a server with a self-signed certificate. If the check fails
 
 Password for the server itself, if it needs one. This is not your nickserv password.
 
+### sasl_password
+
+Log in to the bot's services account with SASL, while it connects. This is the best way to log in where the server supports it, which most modern networks do, Libera included:
+
+* the bot is logged in before it joins any channels
+* it gets its own nick even when the network reserves registered nicks, which stops a bot that logs in later from using its nick at all
+
+```yaml
+ssl_required: true
+port: 6697
+sasl_password: "${PH_BOT_PASSWORD}"
+```
+
+If the login fails, the bot logs why and connects anyway, then tries [`ns_pass`](#ns_pass) if that's set. Use it with [`ssl_required`](#ssl_required), or the password is sent in plain text. The bot warns if you don't. New in 1.12.
+
+### sasl_account
+
+The account to log in to with SASL, if it isn't the same as the bot's nickname. New in 1.12.
+
 ### ns_pass
 
-Password to identify with nickserv. The bot sends it straight after connecting.
+Password to identify with nickserv. The bot sends it straight after connecting. Prefer [`sasl_password`](#sasl_password) where the server supports it. If both are set and SASL works, `ns_pass` isn't sent.
 
 ### nickserv
 

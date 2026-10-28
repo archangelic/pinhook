@@ -1,6 +1,7 @@
 """The bots: Bot for IRC servers and TwitchBot for Twitch chat."""
 from collections import OrderedDict
 from datetime import datetime, timezone
+import base64
 import difflib
 import functools
 import logging
@@ -53,6 +54,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
+        'sasl_account', 'sasl_password',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -65,6 +67,9 @@ class Bot(irc.bot.SingleServerIRCBot):
     # set once the server agrees to tag messages with the sender's account
     account_tag = False
     _negotiating_caps = False
+    # set once the bot has logged in to its account with sasl
+    sasl_logged_in = False
+    sasl_password = None
     # set by the pinhook command, so !reload can read plugin_config from the config file again
     config_file = None
     config_loader = None
@@ -84,6 +89,8 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.disable_help = kwargs.get('disable_help', False)
         self.bot_mode = kwargs.get('bot_mode', True)
         self.require_account = kwargs.get('require_account', False)
+        self.sasl_password = kwargs.get('sasl_password') or None
+        self.sasl_account = kwargs.get('sasl_account') or nickname
         factory = self.ssl_factory(server) if self.ssl_required else irc.connection.Factory()
         irc.bot.SingleServerIRCBot.__init__(
             self, [(server, self.port, self.server_pass)], nickname, nickname,
@@ -93,6 +100,9 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.start_logging()
         self.warn_unknown_options(kwargs)
         self.setup_bans(nickname, kwargs)
+        if self.sasl_password and not self.ssl_required:
+            self.logger.warning('sasl_password will be sent without ssl, '
+                                'turn on ssl_required to keep it private')
         self.internal_commands = {self.cmd_prefix + k: v for k, v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
                             cmd_prefix=self.cmd_prefix, logger=self.logger)
@@ -358,8 +368,9 @@ class Bot(irc.bot.SingleServerIRCBot):
             sock = factory(address)
             sock.send(b'CAP LS 302\r\n')
             self._negotiating_caps = True
-            self._server_caps = set()
+            self._server_caps = {}
             self.account_tag = False
+            self.sasl_logged_in = False
             return sock
         return connect
 
@@ -368,20 +379,75 @@ class Bot(irc.bot.SingleServerIRCBot):
             return
         subcommand = e.arguments[0]
         if subcommand == 'LS':
-            self._server_caps.update(cap.split('=')[0] for cap in e.arguments[-1].split())
+            for cap in e.arguments[-1].split():
+                name, _, value = cap.partition('=')
+                self._server_caps[name] = value
             # a * means the list carries on in another line
             if len(e.arguments) > 2 and e.arguments[1] == '*':
                 return
-            if 'account-tag' in self._server_caps:
-                c.cap('REQ', 'account-tag')
+            wanted = [cap for cap in ('account-tag',) if cap in self._server_caps]
+            if self.sasl_password:
+                if self.sasl_offered():
+                    wanted.append('sasl')
+                else:
+                    self.logger.error("sasl_password is set, but this server doesn't offer "
+                                      "SASL PLAIN logins, so the bot isn't logged in")
+            if wanted:
+                c.cap('REQ', *wanted)
                 return
-        elif subcommand in ('ACK', 'NAK'):
-            self.account_tag = subcommand == 'ACK' and 'account-tag' in e.arguments[-1].split()
+        elif subcommand == 'ACK':
+            acked = e.arguments[-1].split()
+            self.account_tag = 'account-tag' in acked
+            if 'sasl' in acked:
+                # carries on in on_authenticate, then on_saslsuccess or a failure
+                c.send_raw('AUTHENTICATE PLAIN')
+                return
+        elif subcommand == 'NAK':
+            if self.sasl_password:
+                self.logger.error("the server refused SASL, so the bot isn't logged in")
         else:
             return
+        self.end_caps(c)
+
+    def sasl_offered(self):
+        # sasl=PLAIN,EXTERNAL lists the methods, plain sasl means the server didn't say
+        if 'sasl' not in self._server_caps:
+            return False
+        methods = self._server_caps['sasl']
+        return not methods or 'PLAIN' in methods.upper().split(',')
+
+    def end_caps(self, c):
         # registration waits until we say we're done
         self._negotiating_caps = False
         c.cap('END')
+
+    def on_authenticate(self, c, e):
+        if e.target != '+' or not self._negotiating_caps:
+            return
+        login = '\0{}\0{}'.format(self.sasl_account, self.sasl_password)
+        encoded = base64.b64encode(login.encode('utf-8')).decode('ascii')
+        # the spec sends it in 400 byte pieces, and + after a last piece that's exactly 400
+        for i in range(0, len(encoded), 400):
+            c.send_raw('AUTHENTICATE ' + encoded[i:i + 400])
+        if len(encoded) % 400 == 0:
+            c.send_raw('AUTHENTICATE +')
+
+    def on_saslsuccess(self, c, e):
+        self.sasl_logged_in = True
+        self.logger.info('logged in as {} with SASL'.format(self.sasl_account))
+        self.end_caps(c)
+
+    def on_saslfail(self, c, e):
+        reason = e.arguments[-1] if e.arguments else 'no reason given'
+        self.logger.error("SASL login as {} failed ({}), check sasl_account and sasl_password"
+                          .format(self.sasl_account, reason))
+        if self._negotiating_caps:
+            self.end_caps(c)
+
+    # the other ways a sasl login can end without logging in
+    on_sasltoolong = on_saslfail
+    on_saslaborted = on_saslfail
+    on_nicklocked = on_saslfail
 
     def ssl_factory(self, server):
         context = ssl.create_default_context()
@@ -414,7 +480,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         if self.require_account and not self.account_tag:
             self.logger.error("require_account is on but this server doesn't tell the bot who is "
                               "logged in (account-tag), so the bot will ignore everyone")
-        if self.ns_pass:
+        if self.ns_pass and not self.sasl_logged_in:
             self.logger.info('identifying with nickserv')
             c.privmsg(self.nickserv, 'identify {}'.format(self.ns_pass))
         for channel in self.chanlist:

@@ -30,6 +30,8 @@ class Config(Schema):
     require_account = fields.Bool()
     plugin_config = fields.Dict(keys=fields.Str(), values=fields.Dict(keys=fields.Str()))
     bot_dir = fields.Str()
+    sasl_account = fields.Str()
+    sasl_password = fields.Str()
     data_dir = fields.Str()
 
     class Meta:

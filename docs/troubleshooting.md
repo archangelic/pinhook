@@ -30,7 +30,11 @@ Once connected:
 
 | Message | What it means |
 | --- | --- |
-| `nickname x in use, trying x_` | Someone else has the nick, so the bot picked a new one. Nothing to fix, unless you'd rather use a different nickname |
+| `nickname x in use, trying x_` | Someone else has the nick, so the bot picked a new one. If the nick is the bot's own registered one, the network is probably keeping it for whoever logs in to that account: use [`sasl_password`](options.md#sasl_password) so the bot logs in while it connects |
+| `logged in as x with SASL` | All good: the bot is logged in to its account |
+| `SASL login as x failed (...), check sasl_account and sasl_password` | The server turned the login down, and its reason is in brackets. The bot connects anyway, without its account |
+| `sasl_password is set, but this server doesn't offer SASL PLAIN logins` | Use [`ns_pass`](options.md#ns_pass) on this server instead |
+| `sasl_password will be sent without ssl` | Turn on [`ssl_required`](options.md#ssl_required), and set `port` to the ssl port |
 | `require_account is on but this server doesn't tell the bot who is logged in (account-tag), so the bot will ignore everyone` | Turn off [`require_account`](options.md#require_account) on this server |
 
 ## The bot doesn't answer
