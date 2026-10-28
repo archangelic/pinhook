@@ -53,6 +53,9 @@ class Bot(irc.bot.SingleServerIRCBot):
     # set once the server agrees to tag messages with the sender's account
     account_tag = False
     _negotiating_caps = False
+    # set by the pinhook command, so !reload can read plugin_config from the config file again
+    config_file = None
+    config_loader = None
 
     def __init__(self, channels, nickname, server, **kwargs):
         self.port = kwargs.get('port', 6667)
@@ -218,6 +221,19 @@ class Bot(irc.bot.SingleServerIRCBot):
     def config_for(self, name):
         """The plugin_config section for the plugin file called name, as msg.config."""
         return PluginConfig(name, self.plugin_config.get(name), self.plugin_config.get('shared'))
+
+    def reload_plugin_config(self):
+        # only when the bot was started from a config file, says what happened for the !reload reply
+        if not self.config_loader:
+            return ''
+        name = os.path.basename(self.config_file)
+        try:
+            config = self.config_loader()
+        except Exception as e:
+            self.logger.error("couldn't read plugin_config from {} again, keeping the old settings: {}".format(self.config_file, e))
+            return ", but {} has a problem so plugin_config wasn't changed, see the log".format(name)
+        self.plugin_config = dict(config.get('plugin_config') or {})
+        return ' (and plugin_config from {})'.format(name)
 
     def check_plugin_config(self):
         # a section for a plugin that isn't loaded is probably a typo
@@ -421,9 +437,10 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.call_help(nick, op)
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
+            config_note = self.reload_plugin_config()
             plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins, cmd_prefix=self.cmd_prefix, logger=self.logger)
             self.check_plugin_config()
-            output = plugin.message('Plugins reloaded')
+            output = plugin.message('Plugins reloaded' + config_note)
         elif cmd == 'enable' and op:
             if arg in plugin.plugins:
                 if plugin.plugins[arg].enabled:

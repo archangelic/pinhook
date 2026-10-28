@@ -16,7 +16,7 @@ Who counts as an op is set by [`ops`](options.md#ops).
 | --- | --- |
 | `!join #channel [key]` | Join a channel, with its key if it has one |
 | `!quit [message]` | Disconnect and stop the bot. The quit message defaults to "See y'all later!" |
-| `!reload` | Reload every plugin from the plugin folder. Picks up new, changed and deleted plugins. Disabled plugins stay disabled |
+| `!reload` | Reload every plugin from the plugin folder. Picks up new, changed and deleted plugins. Disabled plugins stay disabled, and saved plugin data is kept. If the bot was started from a config file, it also reads [`plugin_config`](options.md#plugin_config) from it again |
 | `!enable <plugin>` | Turn a plugin back on |
 | `!disable <plugin>` | Turn a plugin off without removing it |
 | `!op <nick>` | Add a bot operator, until the bot restarts |

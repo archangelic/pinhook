@@ -163,6 +163,7 @@ def weather(msg):
 * Each plugin reads the section named after its file, so `weather.py` reads `weather`
 * `msg.config.shared` is the `shared` section, which every plugin can read. Use it for settings several plugins need
 * Settings are read only. For things the plugin changes itself, use [`msg.store`](#saving-data)
+* After changing settings in the config file, an op can run `!reload` to use them without restarting. If the file has a mistake, the bot keeps the old settings and says so. Other options, like `server`, still need a restart
 * A missing setting fails with a message naming it: `plugin_config has no 'api_key' setting for the weather plugin`. Use `msg.config.get('name', default)` for optional ones
 
 `msg.config` is new in 1.12.

@@ -1,3 +1,4 @@
+import functools
 import os
 import re
 
@@ -69,6 +70,10 @@ def check_conf(schema, data, name):
         problems = ['  {}: {}'.format(key, msgs) for key, msgs in sorted(flatten_problems(e.messages))]
         raise click.ClickException('{} has problems:\n{}'.format(name, '\n'.join(problems)))
 
+def load_conf_file(path, conf_format):
+    with open(path, 'rb') as f:
+        return read_conf(f, conf_format)
+
 def read_conf(config, conf_format):
     schema = Config()
     if not conf_format:
@@ -111,11 +116,14 @@ def read_conf(config, conf_format):
 @click.argument('config', type=click.File('rb'))
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml', 'toml']))
 def cli(config, conf_format):
+    config_file = config.name
     config = read_conf(config, conf_format)
     try:
         bot = Bot(**config)
     except ValueError as e:
         # a bad log_level or ban file, say what's wrong without a traceback
         raise click.ClickException(str(e))
+    bot.config_file = config_file
+    bot.config_loader = functools.partial(load_conf_file, config_file, conf_format)
     bot.start()
 
