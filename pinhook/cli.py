@@ -23,6 +23,8 @@ class Config(Schema):
     bot_mode = fields.Bool()
     ban_file = fields.Str(allow_none=True)
     require_account = fields.Bool()
+    bot_dir = fields.Str()
+    data_dir = fields.Str()
 
     class Meta:
         unknown = INCLUDE

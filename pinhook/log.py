@@ -1,4 +1,5 @@
 import logging
+import os
 
 logger = logging.getLogger('bot')
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s')
@@ -18,6 +19,10 @@ def get_bot_logger(nickname):
     return bot_logger
 
 def set_log_file(filename, target=logger):
+    # make the logs folder the first time
+    folder = os.path.dirname(filename)
+    if folder:
+        os.makedirs(folder, exist_ok=True)
     # Set file logger
     filehandler = logging.FileHandler(filename)
     filehandler.setFormatter(formatter)

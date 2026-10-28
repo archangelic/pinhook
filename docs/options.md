@@ -20,7 +20,9 @@ unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?
 | [`banned_users`](#banned_users) | `[]` | people the bot ignores |
 | [`ban_file`](#ban_file) | `"<nickname>.bans.json"` | where `!ban` saves bans |
 | [`require_account`](#require_account) | `False` | only answer logged-in users |
+| [`bot_dir`](#bot_dir) | none | one folder for everything the bot keeps |
 | [`plugin_dir`](#plugin_dir) | `"plugins"` | where plugins live |
+| [`data_dir`](#data_dir) | `"data"` | where plugins keep their data |
 | [`cmd_prefix`](#cmd_prefix) | `"!"` | prefix for built-in commands |
 | [`use_prefix_for_plugins`](#use_prefix_for_plugins) | `False` | add the prefix to plugin commands |
 | [`disable_help`](#disable_help) | `False` | turn off `!help` |
@@ -78,7 +80,7 @@ People the bot ignores completely. Same kinds of entries as `ops`. Bans added wi
 
 ### ban_file
 
-File where bans made with `!ban` are saved, so they last through restarts. Bans from `banned_users` stay in the config and aren't copied into it.
+File where bans made with `!ban` are saved, so they last through restarts. With [`bot_dir`](#bot_dir) set, the default is `data/<nickname>.bans.json` inside it. Bans from `banned_users` stay in the config and aren't copied into it.
 
 Set it to `""` to keep `!ban` bans in memory only. If the file can't be read the bot won't start, rather than quietly forgetting bans.
 
@@ -86,11 +88,39 @@ Set it to `""` to keep `!ban` bans in memory only. If the file can't be read the
 
 Only answer people who are logged in to a services account. This makes bans much harder to dodge, but guests can't use the bot at all. Needs a server that supports account tags, see [Bans and ops](bans-and-ops.md#require_account).
 
-## Plugins and commands
+## Files and folders
+
+### bot_dir
+
+A folder to keep everything the bot uses in one place. With it set, the bot uses this layout:
+
+```
+ph-bot/                     <- bot_dir
+├── plugins/                <- plugin_dir
+├── data/                   <- data_dir
+│   └── ph-bot.bans.json    <- ban_file
+└── logs/
+    └── ph-bot.log          <- log_file
+```
+
+Without `bot_dir`, files go where they always have, in the folder the bot runs from: `plugins/`, `data/`, `<nickname>.log` and `<nickname>.bans.json`.
+
+Relative paths in `plugin_dir`, `data_dir`, `log_file` and `ban_file` are inside `bot_dir` when it's set, so you can still move one thing. Absolute paths stay where they point. `~` means your home folder. Folders are created when they're first needed.
+
+!!! tip
+    Two bots can share a `bot_dir`. They share plugins and plugin data, but each keeps its own log and ban file, since those are named after the bot.
+
+`bot_dir` is new in 1.12.
 
 ### plugin_dir
 
 Folder the bot loads plugins from. Every `.py` file in it is loaded. It's created if it doesn't exist.
+
+### data_dir
+
+Folder where plugins keep their saved data. New in 1.12.
+
+## Plugins and commands
 
 ### cmd_prefix
 
@@ -116,7 +146,7 @@ One of `"debug"`, `"info"`, `"warning"`, `"error"` or `"critical"`, in any case.
 
 ### log_file
 
-File to write logs to. Each bot has its own log file and log level, even several bots in one python process. Log lines name the bot they came from:
+File to write logs to. With [`bot_dir`](#bot_dir) set, the default is `logs/<nickname>.log` inside it. Each bot has its own log file and log level, even several bots in one python process. Log lines name the bot they came from:
 
 ```
 2026-10-27 22:33:18,491 - INFO - bot.ph-bot - bot - setting bot mode +B

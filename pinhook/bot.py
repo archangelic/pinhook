@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import difflib
 import functools
 import logging
+import os
 import socket
 import ssl
 import sys
@@ -38,7 +39,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         'port', 'ops', 'plugin_dir', 'ssl_required', 'ssl_verify', 'ns_pass',
         'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
-        'ban_file', 'require_account',
+        'ban_file', 'require_account', 'bot_dir', 'data_dir',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -55,13 +56,12 @@ class Bot(irc.bot.SingleServerIRCBot):
     def __init__(self, channels, nickname, server, **kwargs):
         self.port = kwargs.get('port', 6667)
         self.ops = kwargs.get('ops', [])
-        self.plugin_dir = kwargs.get('plugin_dir', 'plugins')
+        self.setup_paths(nickname, kwargs)
         self.ssl_required = kwargs.get('ssl_required', False)
         self.ssl_verify = kwargs.get('ssl_verify', True)
         self.ns_pass = kwargs.get('ns_pass', None)
         self.nickserv = kwargs.get('nickserv', 'NickServ')
         self.log_level = kwargs.get('log_level', 'info')
-        self.log_file = kwargs.get('log_file', None)
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
@@ -180,8 +180,30 @@ class Bot(irc.bot.SingleServerIRCBot):
             hint = ", did you mean '{}'?".format(close[0]) if close else ''
             self.logger.warning("unknown option '{}' ignored{}".format(key, hint))
 
+    def setup_paths(self, nickname, kwargs):
+        # with bot_dir set, everything lives in one folder: plugins/, data/ and logs/.
+        # without it, files go where they did in 1.11
+        self.bot_dir = os.path.expanduser(kwargs['bot_dir']) if kwargs.get('bot_dir') else None
+        if self.bot_dir:
+            log_file = os.path.join('logs', '{}.log'.format(nickname))
+            ban_file = os.path.join('data', '{}.bans.json'.format(nickname))
+        else:
+            log_file = '{}.log'.format(nickname)
+            ban_file = '{}.bans.json'.format(nickname)
+        self.plugin_dir = self.path(kwargs.get('plugin_dir', 'plugins'))
+        self.data_dir = self.path(kwargs.get('data_dir', 'data'))
+        self.log_file = self.path(kwargs.get('log_file') or log_file)
+        ban_file = kwargs.get('ban_file', ban_file)
+        self.ban_file = self.path(ban_file) if ban_file else None
+
+    def path(self, path):
+        """Where a file or folder from the options really is: relative paths are inside bot_dir, when it's set."""
+        path = os.path.expanduser(path)
+        if self.bot_dir and not os.path.isabs(path):
+            return os.path.join(self.bot_dir, path)
+        return path
+
     def setup_bans(self, nickname, kwargs):
-        self.ban_file = kwargs.get('ban_file', '{}.bans.json'.format(nickname)) or None
         self.config_bans = list(kwargs.get('banned_users', []))
         self.banned_users = list(self.config_bans)
         saved = bans.load(self.ban_file)
@@ -287,10 +309,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         if log_level not in self.log_levels:
             raise ValueError("log_level must be one of: off, {}".format(', '.join(self.log_levels)))
         self.logger.disabled = False
-        if self.log_file:
-            log.set_log_file(self.log_file, self.logger)
-        else:
-            log.set_log_file('{}.log'.format(self.bot_nick), self.logger)
+        log.set_log_file(self.log_file, self.logger)
         self.logger.setLevel(self.log_levels[log_level])
         self.logger.info('Logging started!')
 
@@ -592,16 +611,15 @@ class TwitchBot(Bot):
     options = {
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
-        'ban_file',
+        'ban_file', 'bot_dir', 'data_dir',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):
         self.port = kwargs.get('port', 6697)
         self.ssl_verify = True
         self.ops = kwargs.get('ops', [])
-        self.plugin_dir = kwargs.get('plugin_dir', 'plugins')
+        self.setup_paths(nickname, kwargs)
         self.log_level = kwargs.get('log_level', 'info')
-        self.log_file = kwargs.get('log_file', None)
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
         self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
