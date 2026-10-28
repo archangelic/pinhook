@@ -10,7 +10,7 @@ import pytest
 
 from pinhook import bot as pinhook_bot
 
-from wire import Wire, b64_login, lines, texts
+from wire import Wire, b64_login, lines
 
 PING = ("import pinhook.plugin as p\n"
         "@p.command('!ping')\n"
@@ -303,3 +303,8 @@ def test_twitch_bot_always_uses_checked_tls(tmp_path):
                               log_file=str(tmp_path / 't.log'))
     assert (b.server, b.port) == ('irc.chat.twitch.tv', 6697)
     assert b.ssl_context().verify_mode == ssl.CERT_REQUIRED
+
+
+def test_sasl_without_ssl_warns(tmp_path, caplog):
+    Wire(tmp_path, sasl_password='hunter2')
+    assert 'sasl_password will be sent without ssl' in caplog.text

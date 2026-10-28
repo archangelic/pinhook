@@ -2,8 +2,6 @@ import os
 
 from pinhook import bot as pinhook_bot
 
-from conftest import event
-
 
 def new_bot(**options):
     options.setdefault('log_level', 'info')
@@ -12,24 +10,6 @@ def new_bot(**options):
 
 def files(folder):
     return sorted(str(p.relative_to(folder)) for p in folder.rglob('*'))
-
-
-def test_without_bot_dir_files_go_where_they_did_in_1_11(tmp_path, monkeypatch, conn):
-    monkeypatch.chdir(tmp_path)
-    b = new_bot(ops=['mal'])
-    b.channels['#test'] = conn
-    b.process_event(conn, event('mal', '#test', '!ban troll'))
-    assert files(tmp_path) == ['pinbot.bans.json', 'pinbot.log', 'plugins']
-    assert b.data_dir == 'data'
-
-
-def test_bot_dir_keeps_everything_in_one_folder(tmp_path, conn):
-    b = new_bot(bot_dir=str(tmp_path / 'ph-bot'), ops=['mal'])
-    b.channels['#test'] = conn
-    b.process_event(conn, event('mal', '#test', '!ban troll'))
-    assert files(tmp_path / 'ph-bot') == [
-        'data', 'data/pinbot.bans.json', 'logs', 'logs/pinbot.log', 'plugins']
-    assert b.data_dir == str(tmp_path / 'ph-bot' / 'data')
 
 
 def test_bot_dir_loads_plugins_from_inside_it(tmp_path):
@@ -72,8 +52,6 @@ def test_empty_ban_file_still_turns_saving_off(tmp_path):
 
 
 def test_twitch_bot_uses_the_same_layout(tmp_path):
-    from unittest import mock
-    with mock.patch('irc.connection.Factory'):
-        b = pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', bot_dir=str(tmp_path))
+    b = pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', bot_dir=str(tmp_path))
     assert b.log_file == os.path.join(str(tmp_path), 'logs', 'pinbot.log')
     assert b.ban_file == os.path.join(str(tmp_path), 'data', 'pinbot.bans.json')

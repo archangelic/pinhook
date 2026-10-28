@@ -1,6 +1,5 @@
 import logging
 from types import SimpleNamespace
-from unittest import mock
 
 import pytest
 
@@ -46,30 +45,11 @@ def plugin_dir(tmp_path):
 
 @pytest.fixture
 def make_bot(tmp_path):
-    # builds a Bot without connecting, with a fake channel and connection
+    # builds a Bot without connecting
     def build(plugin_path=None, **kwargs):
         kwargs.setdefault('plugin_dir', plugin_path or str(tmp_path / 'plugins'))
         kwargs.setdefault('log_file', str(tmp_path / 'bot.log'))
         kwargs.setdefault('ban_file', str(tmp_path / 'bans.json'))
         b = pinhook_bot.Bot(['#test'], 'pinbot', 'localhost', **kwargs)
-        b.channels['#test'] = mock.MagicMock()
-        b.channels['#test'].users.return_value = []
         return b
     return build
-
-
-@pytest.fixture
-def conn():
-    c = mock.MagicMock()
-    c.get_nickname.return_value = 'pinbot'
-    return c
-
-
-def event(nick, target, text, type='pubmsg', user='user', host='example.com', account=None):
-    return SimpleNamespace(
-        source=SimpleNamespace(nick=nick, user=user, host=host),
-        target=target,
-        arguments=[text],
-        type=type,
-        tags=[{'key': 'account', 'value': account}] if account else None,
-    )
