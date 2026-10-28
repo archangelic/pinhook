@@ -105,3 +105,6 @@ ENV/
 
 # macOS
 .DS_Store
+
+# integration test server (tests/integration/ergo.sh)
+.ergo/

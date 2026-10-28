@@ -37,3 +37,25 @@ jobs:
       uses: astral-sh/setup-uv@v6
     - name: Check PEP 8, with lines up to 100 characters (set in setup.cfg)
       run: uv run --no-project --python 3.12 --with pycodestyle==2.15.0 pycodestyle pinhook tests examples setup.py
+
+  integration:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v6
+    - name: Set up Python
+      run: uv venv --python 3.12
+    - name: Install dependencies
+      run: uv pip install -e '.[toml,yaml]' pytest
+    - name: Start an Ergo IRC server
+      run: tests/integration/ergo.sh
+    - name: Run tests against Ergo
+      run: uv run --no-project pytest tests/integration
+      env:
+        PINHOOK_ERGO: 127.0.0.1
+    - name: Show Ergo's log
+      if: failure()
+      run: cat .ergo/ergo.log
