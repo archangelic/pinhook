@@ -43,6 +43,6 @@ Say `!hello` in `#foo` and the bot answers.
 * [Testing plugins](testing.md): check your plugins with pytest, no server needed
 * [Bans and ops](bans-and-ops.md): who can run what, and bans that are hard to dodge
 * [Troubleshooting](troubleshooting.md): what the log messages mean
-* Coming from an older version? See [Upgrading to 1.11](upgrading.md)
+* Coming from an older version? See [Upgrading to 1.11](upgrading.md), and [Preparing for 2.0](preparing-for-2.md) to get your plugins ready for what's next
 
 pinhook is made with love on [tilde.town](https://tilde.town). Live bots using it include [pinhook-tilde](https://github.com/archangelic/pinhook-tilde) and [adminbot](https://github.com/tildetown/adminbot).

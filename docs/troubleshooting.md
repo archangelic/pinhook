@@ -50,5 +50,6 @@ Work through these in order:
 | `issue with command !x` / `issue with listener x` | The plugin raised an exception. The traceback under it says where |
 | `plugins must return message() or action(), got str` | The plugin returned a plain string. Wrap it: `return pinhook.plugin.message(text)` |
 | `output message too long: ...` | One line was over IRC's 512-byte limit, so it and the lines after it weren't sent. Split long output into a list of lines |
-| `@register decorator has been deprecated ...` | Swap `@register('!x')` for `@command('!x')` |
-| `use of the @ops decorator has been deprecated ...` | Swap `@ops('!x', 'msg')` for `@command('!x', ops=True, ops_msg='msg')` |
+| `@register is deprecated and will be removed in 2.0 ...` | Swap `@register('!x')` for `@command('!x')` |
+| `@ops is deprecated and will be removed in 2.0 ...` | Swap `@ops('!x', 'msg')` for `@command('!x', ops=True, ops_msg='msg')` |
+| `msg.bot is deprecated and will be read only in 2.0 ...` | See [Preparing for 2.0](preparing-for-2.md) for what to use instead |

@@ -54,6 +54,8 @@ def say_hi(msg):
 
 ## Replying
 
+There are two ways to reply: return what to say, or say it straight away.
+
 Return one of these to reply where the message came from, the channel or the private message:
 
 * `pinhook.plugin.message(text)`: a normal message
@@ -67,11 +69,26 @@ return pinhook.plugin.message(['line one', 'line two'])
 
 Returning anything else, like a plain string, is logged as an error and nothing is sent.
 
-To send somewhere else, use the functions on the message: `msg.privmsg(target, text)`, `msg.action(target, text)` and `msg.notice(target, text)`.
+Or use the message's methods, which send straight away, so a plugin can reply more than once or send to several places:
+
+| Method | Sends |
+| --- | --- |
+| `msg.reply(text)` | a message where this one came from |
+| `msg.action(text)` | a `/me` action where this one came from |
+| `msg.notice(text)` | a notice to the sender only |
+| `msg.send(target, text)` | a message to another channel or nick |
+| `msg.action(target, text)` | a `/me` action to another channel or nick |
+| `msg.notice(target, text)` | a notice to another channel or nick |
 
 ```python
-msg.notice(msg.nick, 'psst, only you can see this')
+@pinhook.plugin.command('!countdown')
+def countdown(msg):
+    msg.reply('3... 2... 1...')
+    msg.send('#announcements', 'liftoff in {}'.format(msg.channel))
+    msg.notice('thanks for launching!')
 ```
+
+They get the same line splitting and flood protection as returned replies. `msg.reply`, `msg.send` and the one-argument forms are new in 1.12. `msg.privmsg(target, text)` still works too.
 
 ## The message
 
@@ -79,7 +96,9 @@ msg.notice(msg.nick, 'psst, only you can see this')
 | --- | --- |
 | `nick` | who sent it |
 | `user` | the username part of their hostmask (`nick!user@host`) |
+| `account` | the services account they're logged in to, or `None`. Needs a server with account tags, see [Bans and ops](bans-and-ops.md) |
 | `channel` | where it was sent. For a private message, the sender's nick |
+| `is_private` | `True` if it was a private message to the bot |
 | `cmd` | (commands) the command word that triggered it |
 | `arg` | (commands) everything after the command word |
 | `text` | (listeners) the whole message |
@@ -91,8 +110,9 @@ msg.notice(msg.nick, 'psst, only you can see this')
 | `logger` | the bot's logger, see [Logging](#logging) |
 | `datetime` | when the message arrived, a timezone-aware `datetime` |
 | `timestamp` | the same as a unix timestamp |
-| `bot` | the bot itself |
-| `privmsg`, `action`, `notice` | functions to [send somewhere else](#replying) |
+| `bot` | the bot itself. Deprecated, see [Preparing for 2.0](preparing-for-2.md) |
+
+`account` and `is_private` are new in 1.12.
 
 ## Logging
 

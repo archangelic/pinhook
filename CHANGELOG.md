@@ -5,6 +5,15 @@
 ### New
 
 * `pinhook.testing`: a `TestBot` that runs your plugins without a server, so you can test them with pytest
+* `msg.reply(text)` and `msg.send(target, text)` send straight away, so a plugin can reply more than once or to several places
+* Given just the text, `msg.action(text)` replies where the message came from and `msg.notice(text)` sends the sender a notice
+* `msg.account` (the sender's services account) and `msg.is_private`
+* A [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) guide to getting plugins ready for 2.0
+
+### Deprecated
+
+* `msg.bot`, which will be read only in 2.0. Use `msg.reply()`, `msg.send()` and `msg.botnick` instead. It still works, and logs a warning once
+* `@register` and `@ops` now raise a `DeprecationWarning` too, saying what to use instead. They'll be removed in 2.0
 
 ### Fixed
 

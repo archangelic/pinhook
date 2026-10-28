@@ -23,7 +23,9 @@ nav:
   - Bans and ops: bans-and-ops.md
   - Twitch bots: twitch.md
   - Troubleshooting: troubleshooting.md
-  - Upgrading to 1.11: upgrading.md
+  - Upgrading:
+    - To 1.11: upgrading.md
+    - Preparing for 2.0: preparing-for-2.md
   - Changelog: changelog.md
 
 theme:
