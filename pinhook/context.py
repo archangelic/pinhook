@@ -60,8 +60,11 @@ class Context:
         logger: the bot's logger.
     """
 
-    def __init__(self, bot, event, plugin=None, addressed=False, command=None, arg=''):
+    def __init__(self, bot, event, plugin=None, addressed=False, command=None, arg='',
+                 capture=None):
         self._bot = bot
+        # a list to put what the handler says in, instead of sending it, for run_as
+        self._capture = capture
         source = event.source
         self.event = 'notice' if event.kind == 'notice' else event.type
         self.nick = source.nick if source else None
@@ -148,7 +151,14 @@ class Context:
                 tags['+reply'] = self.msgid
             else:
                 text = '{}: {}'.format(self.nick, text)
-        self._bot.send_text('privmsg', target, text, tags)
+        self.out('privmsg', target, text, tags)
+
+    def out(self, kind, target, text, tags=None):
+        # everything a handler says goes through here, so capture catches all of it
+        if self._capture is not None:
+            self._capture.extend(text_lines(text))
+        else:
+            self._bot.send_text(kind, target, text, tags)
 
     @contextlib.asynccontextmanager
     async def typing(self):
@@ -160,7 +170,7 @@ class Context:
 
         Does nothing where the network can't show it."""
         target = self.channel
-        if not target or not self.supports('typing'):
+        if not target or not self.supports('typing') or self._capture is not None:
             yield
             return
         transport = self._bot.transport
@@ -180,12 +190,12 @@ class Context:
 
     async def send(self, target, text):
         """Send text to another channel or nick."""
-        self._bot.send_text('privmsg', target, text)
+        self.out('privmsg', target, text)
 
     async def action(self, *args):
         """action(text) answers with a /me, action(target, text) sends one somewhere else."""
         target, text = target_and_text(args, self.channel)
-        self._bot.send_text('action', self.where(target), text)
+        self.out('action', self.where(target), text)
 
     async def notice(self, *args):
         """notice(text) sends the sender a notice, notice(target, text) sends one to anyone.
@@ -196,9 +206,9 @@ class Context:
         target, text = target_and_text(args, self.nick)
         target = self.where(target)
         if self.supports('notice'):
-            self._bot.send_text('notice', target, text)
+            self.out('notice', target, text)
         elif is_channel(target):
-            self._bot.send_text('privmsg', target, text)
+            self.out('privmsg', target, text)
         elif self.plugin not in self._bot.notice_warned:
             self._bot.notice_warned.add(self.plugin)
             self.logger.warning('plugin {} sent a notice to {}, but this network has no '
@@ -210,6 +220,13 @@ class Context:
             raise RuntimeError('there is no channel or sender to answer here, '
                                'use ctx.send(target, text)')
         return target
+
+
+def text_lines(text):
+    """The lines text is sent as: each line of a string, or of each item in a list."""
+    if isinstance(text, (list, tuple)):
+        return [line for item in text for line in str(item).splitlines()]
+    return str(text).splitlines()
 
 
 def target_and_text(args, default_target):

@@ -1,6 +1,7 @@
 """The bots: Bot for IRC servers and TwitchBot for Twitch chat."""
 import asyncio
 from collections import OrderedDict
+from dataclasses import dataclass
 import difflib
 import logging
 import os
@@ -16,12 +17,26 @@ from . import compat
 from . import log
 from . import plugin
 from .access import Access
-from .context import Context
+from .context import Context, text_lines
 from .output import OutputQueue
 from .registry import Handler, Registry, Switches
 from .store import PluginConfig, Store
 from .transport.base import Event, Outgoing, Source, Transport, is_channel
 from .transport.irc import IrcTransport, TwitchTransport
+
+
+@dataclass(frozen=True)
+class RunResult:
+    """How running a command as someone went, from bot.run_as.
+
+    status is 'ran', 'refused' (no access, banned, or switched off here), 'busy' (their
+    last run of it is still going), 'failed' (bad arguments, an error or a timeout) or
+    'unknown' (no such command). lines are what it said, when captured. error says
+    what went wrong, or is None.
+    """
+    status: str
+    lines: tuple[str, ...]
+    error: str | None
 
 
 class Bot:
@@ -504,11 +519,7 @@ class Bot:
 
     def send_text(self, kind, target, text, tags=None):
         """Queue text to send, a message per line. text can be a list of lines too."""
-        if isinstance(text, (list, tuple)):
-            lines = [line for item in text for line in str(item).splitlines()]
-        else:
-            lines = str(text).splitlines()
-        for line in lines:
+        for line in text_lines(text):
             self.send_message(kind, target, line, tags)
 
     def call_help(self, nick, op, arg='', source=None, channel=None):
@@ -913,14 +924,49 @@ class Bot:
         channel = target if is_channel(target) else None
         return self.switches.is_on((handler.name, handler.plugin), channel)
 
-    async def run_handler(self, handler, event, trigger, arg, nick_list, addressed=False):
-        """Run one command or handler for a message or event, and send what it answers."""
-        command = handler.kind == 'command'
-        if not self.enabled_for(handler, event.target):
-            return
-        ctx = Context(self, event, plugin=handler.plugin, addressed=addressed,
-                      command=handler.name if command else None, arg=arg)
+    async def run_as(self, who, command, arg='', channel=None, capture=True):
+        """Run a command as someone, with their access, the way a recipe step or a tool
+        call does, and say how it went.
+
+        Args:
+            who: a Source, the person it runs as. Their bans, grants and denies apply.
+            command: the command's name, or how it's typed, like 'roll' or '!roll'.
+            arg: the text after the command.
+            channel: the channel it runs in, or None for a private message.
+            capture: True to return what the command says instead of sending it. Captured
+                lines never go to the output queue.
+
+        Returns a RunResult.
+        """
+        handler = self.registry.find(command) or self.registry.commands.get(command)
+        if handler is None or handler.kind != 'command':
+            return RunResult('unknown', (), "there's no command called {}".format(command))
+        if self.ignores(who):
+            return RunResult('refused', (), '{} is banned from the bot, or not logged in where '
+                                            'require_account is on'.format(who.nick))
         label = handler.label(self.cmd_prefix)
+        target = channel if channel and is_channel(channel) else self.transport.nick
+        event = Event('message', who, target, '{} {}'.format(label, arg).strip(), 'privmsg')
+        nick_list = ([m.nick for m in self.transport.members(target)] if is_channel(target)
+                     else [who.nick])
+        lines = [] if capture else None
+        status, error = await self.run_handler(handler, event, label, arg, nick_list,
+                                               capture=lines)
+        return RunResult(status, tuple(lines or ()), error)
+
+    async def run_handler(self, handler, event, trigger, arg, nick_list, addressed=False,
+                          capture=None):
+        """Run one command or handler for a message or event, and send what it answers.
+
+        Returns how it went, as ('ran' | 'refused' | 'busy' | 'failed', error or None).
+        capture is a list to put what it says in, instead of sending it.
+        """
+        command = handler.kind == 'command'
+        label = handler.label(self.cmd_prefix)
+        if not self.enabled_for(handler, event.target):
+            return 'refused', '{} is switched off here'.format(label)
+        ctx = Context(self, event, plugin=handler.plugin, addressed=addressed,
+                      command=handler.name if command else None, arg=arg, capture=capture)
         # commands and what listens to people's messages go by access, timers and server events
         # don't, since nobody in particular starts them
         checked = command or handler.kind == 'listener' or handler.event in ('message', 'notice')
@@ -929,23 +975,24 @@ class Bot:
             if not self.access.allows(event.source, handler, channel):
                 self.logger.debug('{} has no access to {}'.format(ctx.nick, label))
                 if command and handler.denied_msg:
-                    self.send_text('privmsg', ctx.channel, handler.denied_msg)
-                return
+                    ctx.out('privmsg', ctx.channel, handler.denied_msg)
+                return 'refused', "{} doesn't have access to {}".format(ctx.nick, label)
         kwargs = {}
         if command and handler.native:
             try:
                 kwargs = commands.parse(handler.params, arg)
             except commands.UsageError as e:
-                self.send_text('privmsg', ctx.channel, 'usage: {} ({})'.format(
-                    commands.usage(handler.name, handler.params), e))
-                return
+                problem = 'usage: {} ({})'.format(commands.usage(handler.name, handler.params), e)
+                if capture is None:
+                    ctx.out('privmsg', ctx.channel, problem)
+                return 'failed', problem
         key = None
         if command:
             # one run at a time per person, so spamming a slow command can't pile them up
             key = (self.transport.casefold(ctx.nick), handler.name)
             if key in self.running:
                 self.logger.debug('{} is still running for {}, ignoring'.format(label, ctx.nick))
-                return
+                return 'busy', '{} is still running for {}'.format(label, ctx.nick)
             self.running.add(key)
         self.logger.debug('running {} {}'.format(handler.kind, label))
         timeout = handler.timeout or self.handler_timeout
@@ -962,11 +1009,11 @@ class Bot:
             self.logger.error('{} took longer than {} seconds, giving up waiting for it'.format(
                 label if command else handler.kind + ' ' + label, timeout))
             self.say_error(handler, ctx)
-            return
-        except Exception:
+            return 'failed', '{} took longer than {} seconds'.format(label, timeout)
+        except Exception as e:
             self.logger.exception('issue with {} {}'.format(handler.kind, label))
             self.say_error(handler, ctx)
-            return
+            return 'failed', '{}: {}'.format(type(e).__name__, e)
         finally:
             self.running.discard(key)
         if handler.native:
@@ -975,14 +1022,16 @@ class Bot:
                                     'and the rest, so it was ignored'.format(label))
         elif output:
             self.logger.debug(f'sending output: {output.msg}')
-            self.process_output(ctx.channel, output)
+            self.process_output(ctx.channel, output, ctx)
+        return 'ran', None
 
     def say_error(self, handler, ctx):
         # failures stay out of chat unless the plugin's author chose words for it
         if handler.error_msg and ctx.channel:
-            self.send_text('privmsg', ctx.channel, handler.error_msg)
+            ctx.out('privmsg', ctx.channel, handler.error_msg)
 
-    def process_output(self, chan, output):
+    def process_output(self, chan, output, ctx=None):
+        # what a 1.x command returned. Through its ctx, so run_as can capture it
         if not output.msg:
             return
         kinds = {plugin.OutputType.Message: 'privmsg', plugin.OutputType.Action: 'action'}
@@ -991,7 +1040,10 @@ class Bot:
             return
         for msg in output.msg:
             self.logger.debug('output {}: {}'.format(output.msg_type.value, msg))
-            self.send_message(kinds[output.msg_type], chan, msg)
+            if ctx is None:
+                self.send_message(kinds[output.msg_type], chan, msg)
+            else:
+                ctx.out(kinds[output.msg_type], chan, msg)
 
 
 class TwitchBot(Bot):

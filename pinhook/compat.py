@@ -83,25 +83,25 @@ class Message:
 
     def reply(self, text):
         """Send text where the message came from: the channel, or the sender if private."""
-        self._ctx._bot.send_text('privmsg', self.channel, text)
+        self._ctx.out('privmsg', self.channel, text)
 
     def send(self, target, text):
         """Send text to another channel or nick."""
-        self._ctx._bot.send_text('privmsg', target, text)
+        self._ctx.out('privmsg', target, text)
 
     def privmsg(self, target, text):
         """Send text to a channel or nick, like send."""
-        self._ctx._bot.send_text('privmsg', target, text)
+        self._ctx.out('privmsg', target, text)
 
     def action(self, *args):
         """action(text) replies with a /me, action(target, text) sends one somewhere else."""
         target, text = self._target_and_text(args, self.channel)
-        self._ctx._bot.send_text('action', target, text)
+        self._ctx.out('action', target, text)
 
     def notice(self, *args):
         """notice(text) sends the sender a notice, notice(target, text) sends one to anyone."""
         target, text = self._target_and_text(args, self.nick)
-        self._ctx._bot.send_text('notice', target, text)
+        self._ctx.out('notice', target, text)
 
     @staticmethod
     def _target_and_text(args, default_target):
