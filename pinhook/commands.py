@@ -6,6 +6,7 @@ reads `!roll 2d20 3` as dice='2d20', times=3. Arguments are split shlex-style,
 so quotes group words, and a final str argument takes the rest of the line as
 written. Bad input gets the usage line, `roll [dice=1d6] [times=1]`.
 """
+from dataclasses import dataclass
 import inspect
 import types
 import typing
@@ -204,3 +205,70 @@ def pack(groups, room):
     if line:
         lines.append(line)
     return lines
+
+
+@dataclass(frozen=True)
+class Arg:
+    """One argument of a command, as the command listing gives it.
+
+    type is 'str', 'int', 'float' or 'bool'. default is None for a required argument.
+    rest is True for a last str argument, which takes the rest of the line.
+    """
+    name: str
+    type: str
+    required: bool
+    default: object = None
+    description: str | None = None
+    choices: tuple | None = None
+    rest: bool = False
+
+
+@dataclass(frozen=True)
+class CommandInfo:
+    """A command, as the command listing gives it: everything needed to show it, or to
+    build a tool definition from it.
+
+    Attributes:
+        name: the name, without a prefix, like 'roll'.
+        label: how it's typed, like '!roll'.
+        help: its one-line help.
+        usage: its usage line, like 'roll [dice=1d6] [times=1]'.
+        args: its arguments. A 1.x command has one, arg, the text after the command.
+        plugin: the plugin file it comes from.
+        level: its access level, 'open', 'restricted' or 'ops'.
+        hidden: True if it's left out of !help.
+        typed: False for a 1.x command, whose arguments aren't typed.
+    """
+    name: str
+    label: str
+    help: str
+    usage: str
+    args: tuple[Arg, ...]
+    plugin: str
+    level: str
+    hidden: bool
+    typed: bool
+
+
+# what a 1.x command's text is listed as
+LEGACY_ARG = Arg('arg', 'str', False, '', 'everything after the command', rest=True)
+
+
+def command_info(handler, prefix, level):
+    """The listing entry for a command handler."""
+    if handler.native:
+        args = tuple(arg_info(param, index == len(handler.params) - 1)
+                     for index, param in enumerate(handler.params))
+        line = usage(handler.name, handler.params)
+    else:
+        args = (LEGACY_ARG,)
+        line = '{} [arg]'.format(handler.name)
+    return CommandInfo(handler.name, handler.label(prefix), handler.help_text, line, args,
+                       handler.plugin, level, handler.hide, handler.native)
+
+
+def arg_info(param, last):
+    return Arg(param.name, param.type.__name__, param.required,
+               None if param.required else param.default, param.description,
+               tuple(param.choices) if param.choices else None,
+               rest=last and param.type is str and not param.choices)

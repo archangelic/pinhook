@@ -520,14 +520,11 @@ class Bot:
         if arg:
             return self.command_help(nick, op, arg, who, where)
         names = {prefix + 'help': prefix + 'help'}
-        for handler in self.registry.handlers():
-            if handler.kind != 'command' or handler.hide:
+        for info in self.commands():
+            if info.hidden or (info.level == 'ops' and not op):
                 continue
-            if self.access.level(handler) == 'ops' and not op:
-                continue
-            label = handler.label(prefix)
-            allowed = self.access.allows(who, handler, where)
-            names[label] = label + ('' if allowed else ' (no access)')
+            allowed = self.access.allows(who, self.registry.find(info.label), where)
+            names[info.label] = info.label + ('' if allowed else ' (no access)')
         if op:
             names.update({prefix + name: prefix + name for name in self.internal_commands})
         groups = [('commands', [names[label] for label in sorted(names)])]
@@ -537,6 +534,24 @@ class Bot:
         target = self.help_target(nick, where)
         self.send_help(target, commands.pack(groups, self.transport.text_room('privmsg', target)))
         return None
+
+    def commands(self, who=None, channel=None):
+        """Every command, as CommandInfo: name, help, typed arguments, plugin, access level
+        and whether it's hidden, sorted by name. Structured data for code, like a tool
+        list, where !help is for people.
+
+        Args:
+            who: a Source, to list only what that person can trigger.
+            channel: where they'd trigger it, for chanops and voiced, or None if private.
+        """
+        found = []
+        handlers = [h for h in self.registry.handlers() if h.kind == 'command']
+        for handler in sorted(handlers, key=lambda h: h.name):
+            if who is not None and not self.access.can_run(who, handler, channel):
+                continue
+            found.append(commands.command_info(handler, self.cmd_prefix,
+                                               self.access.level(handler)))
+        return found
 
     def help_target(self, nick, channel):
         # help goes privately, except where the network has no private messages from bots
