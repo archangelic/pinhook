@@ -13,9 +13,9 @@ import warnings
 
 from .log import logger
 
-plugins = {}
-cmds = {}
-lstnrs = {}
+plugins: dict[str, '_BasePlugin'] = {}
+cmds: dict[str, 'Command'] = {}
+lstnrs: dict[str, 'Listener'] = {}
 
 
 class OutputType(Enum):

@@ -38,6 +38,21 @@ jobs:
     - name: Check PEP 8, with lines up to 100 characters (set in setup.cfg)
       run: uv run --no-project --python 3.12 --with pycodestyle==2.15.0 pycodestyle pinhook tests examples setup.py
 
+  mypy:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v6
+    - name: Set up Python
+      run: uv venv --python 3.11
+    - name: Install dependencies
+      run: uv pip install -e '.[yaml]' mypy==2.4.1 types-PyYAML==6.0.12.20260906
+    - name: Check types (settings in setup.cfg)
+      run: uv run --no-project mypy
+
   integration:
 
     runs-on: ubuntu-latest
