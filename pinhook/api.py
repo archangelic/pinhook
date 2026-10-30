@@ -1,6 +1,6 @@
-"""The 2.0 plugin API: Plugin, and the command and on decorators.
+"""The 2.0 plugin API: Plugin, and the command, on and every decorators.
 
-    from pinhook import Plugin, command, on
+    from pinhook import Plugin, command, on, every
 
     class Dice(Plugin):
         @command('roll', help='roll dice, e.g. roll 2d6')
@@ -66,6 +66,26 @@ def command(name, help=None, ops=False, denied_msg='', error_msg='', timeout=Non
         doc = (inspect.getdoc(func) or '').strip().splitlines()
         return _mark(func, kind='command', name=name, help_text=help or (doc[0] if doc else 'N/A'),
                      ops=ops, ops_msg=denied_msg, error_msg=error_msg, timeout=timeout, hide=hide)
+    return mark
+
+
+def every(seconds=0, minutes=0, hours=0, timeout=None):
+    """Make an async function run on a timer, first one interval after its plugin loads.
+
+    It gets a ctx with no channel or sender, so it answers with ctx.send(target, text).
+    It only runs while the bot is connected, and a run still going when the next one is
+    due is left to finish instead of starting another.
+
+    Args:
+        seconds, minutes, hours: how often, added together, like every(minutes=30).
+        timeout: seconds before the bot stops waiting for it, instead of the bot's default.
+    """
+    interval = seconds + minutes * 60 + hours * 3600
+    if interval <= 0:
+        raise ValueError('every() needs a time, like every(minutes=30)')
+
+    def mark(func):
+        return _mark(func, kind='timer', name=func.__name__, interval=interval, timeout=timeout)
     return mark
 
 

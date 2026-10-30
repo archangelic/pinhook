@@ -19,7 +19,7 @@ from .context import Context
 from .output import OutputQueue
 from .registry import Registry, Switches
 from .store import PluginConfig, Store
-from .transport.base import Outgoing, Transport, is_channel
+from .transport.base import Event, Outgoing, Transport, is_channel
 from .transport.irc import IrcTransport, TwitchTransport
 
 
@@ -188,6 +188,7 @@ class Bot:
         self.builtins = set(self.internal_commands) | {'help'}
         self.registry = Registry(self.bot_nick, self.prefixes, self.builtins, self.logger)
         self.registry.load(self.plugin_dir)
+        self.reset_timers()
         self.check_plugin_config()
 
     def switches_path(self):
@@ -302,6 +303,11 @@ class Bot:
         self.running = set()
         self.stopping = False
         self.quit_reason = ''
+        # set while connected, timers only run then
+        self.online = False
+        # each @every timer: when it's next due, and the ones still running
+        self.timer_due = {}
+        self.timer_busy = set()
         self.quitting = asyncio.Event()
         self.output = OutputQueue(self.transport.send, self.transport.limits, self.logger,
                                   clock=lambda: self.clock(), sleep=lambda s: self.pause(s))
@@ -322,6 +328,7 @@ class Bot:
             core.create_task(self.transport.run())
             core.create_task(self.read_events())
             sender = core.create_task(self.output.run())
+            timers = core.create_task(self.run_timers())
             await self.quitting.wait()
             try:
                 # answers already on their way, then everything waiting to be sent
@@ -333,6 +340,7 @@ class Bot:
                 self.logger.warning('quitting with {} messages still waiting to be sent'
                                     .format(self.output.waiting()))
             sender.cancel()
+            timers.cancel()
             self.registry.teardown()
             await self.transport.close(self.quit_reason)
 
@@ -376,9 +384,11 @@ class Bot:
 
     def dispatch(self, event):
         if event.type == 'connected':
+            self.online = True
             self.connected()
             self.spawn(self.run_event_handlers(event))
         elif event.type == 'disconnected':
+            self.online = False
             # answers to what was asked before the drop would be out of date
             dropped = self.output.clear()
             if dropped:
@@ -391,6 +401,40 @@ class Bot:
             self.spawn(self.process_event(event))
         else:
             self.spawn(self.process_other(event))
+
+    def reset_timers(self):
+        # each timer's first run is one interval after its plugin loaded
+        now = self.clock()
+        self.timer_due = {handler: now + handler.interval for handler in self.registry.timers}
+
+    def fire_due_timers(self):
+        """Start the timers that are due, and return the seconds until the next one."""
+        now = self.clock()
+        waits = []
+        for handler in self.registry.timers:
+            due = self.timer_due.setdefault(handler, now + handler.interval)
+            if due <= now:
+                if self.online and not self.stopping and handler not in self.timer_busy:
+                    self.timer_busy.add(handler)
+                    self.spawn(self.run_timer(handler))
+                due += handler.interval
+                if due <= now:
+                    # a long gap, like while disconnected: carry on from now, without catching up
+                    due = now + handler.interval
+                self.timer_due[handler] = due
+            waits.append(due - now)
+        return min(waits, default=1.0)
+
+    async def run_timer(self, handler):
+        try:
+            await self.run_handler(handler, Event('timer'), None, '', None)
+        finally:
+            self.timer_busy.discard(handler)
+
+    async def run_timers(self):
+        # checks at least once a second, so timers from a !reload start on time
+        while True:
+            await asyncio.sleep(min(self.fire_due_timers(), 1.0))
 
     def spawn(self, coroutine):
         # each message or event is handled in its own task
@@ -483,6 +527,7 @@ class Bot:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             config_note = self.reload_plugin_config()
             self.registry.load(self.plugin_dir)
+            self.reset_timers()
             self.check_plugin_config()
             output = plugin.message('Plugins reloaded' + config_note)
         elif cmd in ('enable', 'disable') and op:

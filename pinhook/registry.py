@@ -26,7 +26,7 @@ class Handler:
     """A command, listener or event handler, registered by a plugin file.
 
     Attributes:
-        kind: 'command', 'listener' (1.x) or 'event' (2.0 @on).
+        kind: 'command', 'listener' (1.x), 'event' (2.0 @on) or 'timer' (2.0 @every).
         name: a command's name without a prefix, a listener's name, or an event
             handler's function name.
         trigger: for a 1.x command whose word doesn't start with one of the bot's
@@ -36,6 +36,7 @@ class Handler:
         native: True for 2.0 handlers, which are async and take a ctx.
         params: a 2.0 command's typed arguments.
         event: the event an @on handler handles.
+        interval: how many seconds apart an @every timer runs.
         ops_msg: what someone who isn't an op is told when they try an ops command.
         error_msg: said in chat when a 2.0 command fails.
         timeout: seconds to wait for it, or None for the bot's default.
@@ -43,7 +44,7 @@ class Handler:
 
     def __init__(self, kind, name, plugin_name, func, trigger=None, help_text='N/A', ops=False,
                  ops_msg='', hide=False, native=False, params=(), event=None, error_msg='',
-                 timeout=None):
+                 timeout=None, interval=None):
         self.kind = kind
         self.name = name
         self.trigger = trigger
@@ -58,6 +59,7 @@ class Handler:
         self.event = event
         self.error_msg = error_msg
         self.timeout = timeout
+        self.interval = interval
 
     def label(self, prefix):
         """How the bot writes it in logs and !help: the word that runs a command."""
@@ -96,6 +98,7 @@ class Registry:
         self.listeners = {}
         # event: its @on handlers
         self.events = {}
+        self.timers = []
         # plugin file name: its handlers
         self.plugins = {}
 
@@ -166,7 +169,7 @@ class Registry:
             found.append((owner, self.native_handler(plugin_name, func, spec)))
         taken = {}
         for owner, handler in found:
-            if handler.kind == 'event':
+            if handler.kind in ('event', 'timer'):
                 continue
             key = (handler.kind, handler.trigger or handler.name)
             if key in taken:
@@ -196,6 +199,8 @@ class Registry:
                 self.listeners[handler.name] = handler
             elif handler.kind == 'event':
                 self.events.setdefault(handler.event, []).append(handler)
+            elif handler.kind == 'timer':
+                self.timers.append(handler)
             elif handler.trigger:
                 self.literals[handler.trigger] = handler
             else:

@@ -56,10 +56,21 @@ class Driver:
         bot.loop = self.loop
         bot.clock = lambda: self.now
         bot.pause = self.pause
+        # timers were scheduled on the real clock, start them again on this one
+        bot.reset_timers()
 
     async def pause(self, seconds):
         self.pauses.append(seconds)
         self.now += seconds
+
+    def tick(self, seconds):
+        """Move the clock on by seconds, run the timers that are due, and wait for them."""
+        self.now += seconds
+        self.loop.run_until_complete(self.fire_timers())
+
+    async def fire_timers(self):
+        self.bot.fire_due_timers()
+        await self.settle(())
 
     def run(self, *events):
         """Handle events, and any the transport has waiting, until the bot has sent every
@@ -167,6 +178,8 @@ class TestBot(Bot):
         self._errors = _ErrorCatcher()
         super().__init__(list(channels), nickname, 'localhost', plugin_dir=plugin_dir, **options)
         self.driver = Driver(self)
+        # a TestBot is always connected, so its timers run
+        self.online = True
         for channel in channels:
             self.add_channel(channel)
         # a plugin that couldn't load fails here, not later
@@ -250,6 +263,17 @@ class TestBot(Bot):
             event = Event(kind, source, target, text, tags=tags, data=data)
         start = len(self.sent)
         self.driver.run(event)
+        self._raise_plugin_errors()
+        return self.sent[start:]
+
+    def tick(self, seconds):
+        """Let seconds pass, run any @every timers that come due, and return what the bot sent.
+
+        Time only moves when you call this, so a timer every 30 minutes runs on
+        bot.tick(1800).
+        """
+        start = len(self.sent)
+        self.driver.tick(seconds)
         self._raise_plugin_errors()
         return self.sent[start:]
 
