@@ -15,7 +15,7 @@ Most problems show up in the bot's log, on the console and in [`log_file`](optio
 
 ## Connecting
 
-pinhook keeps retrying every 1 to 5 minutes when it can't connect, and logs why each time:
+pinhook keeps retrying when it can't connect, waiting 10 seconds at first and longer each time, up to 5 minutes. It logs why each time:
 
 | Message says | What to do |
 | --- | --- |
@@ -25,6 +25,7 @@ pinhook keeps retrying every 1 to 5 minutes when it can't connect, and logs why 
 | `ssl handshake failed (...). Check 6667 is the server's ssl port, usually 6697` | [`ssl_required`](options.md#ssl_required) is on but `port` is the plain-text port |
 | `server name not found, check the server setting` | A typo in `server`, or no network |
 | `connection refused, check the server and port settings` | Nothing is listening on that port |
+| `the server took too long to answer` | The server or the network is down, or a firewall is dropping the connection |
 
 Once connected:
 

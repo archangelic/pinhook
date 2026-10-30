@@ -17,7 +17,7 @@ from . import plugin
 from .output import OutputQueue
 from .store import PluginConfig, Store
 from .transport.base import Outgoing, Transport, is_channel
-from .transport.irclib import IrcLibTransport, TwitchIrcLibTransport
+from .transport.irc import IrcTransport, TwitchTransport
 
 
 class Bot:
@@ -167,16 +167,16 @@ class Bot:
 
         def reply(self, text):
             """Send text where the message came from: the channel, or the sender if private."""
-            self._bot.process_output(self._bot.connection, self.channel, plugin.message(text))
+            self._bot.process_output(self.channel, plugin.message(text))
 
         def send(self, target, text):
             """Send text to another channel or nick."""
-            self._bot.process_output(self._bot.connection, target, plugin.message(text))
+            self._bot.process_output(target, plugin.message(text))
 
         def action(self, *args):
             """action(text) replies with a /me, action(target, text) sends one somewhere else."""
             target, text = self._target_and_text(args, self.channel)
-            self._bot.process_output(self._bot.connection, target, plugin.action(text))
+            self._bot.process_output(target, plugin.action(text))
 
         def notice(self, *args):
             """notice(text) sends the sender a notice, notice(target, text) sends one to anyone."""
@@ -287,7 +287,7 @@ class Bot:
         bans.save(self.ban_file, saved)
 
     def remember(self, nick, user, host, account):
-        key = bans.lower(nick)
+        key = self.transport.casefold(nick)
         self.seen[key] = (nick, user, host, account)
         self.seen.move_to_end(key)
         while len(self.seen) > 1000:
@@ -298,7 +298,7 @@ class Bot:
         # logged in, or their user and host if not
         if bans.is_account(target) or bans.is_mask(target):
             return target, target
-        seen = self.seen.get(bans.lower(target))
+        seen = self.seen.get(self.transport.casefold(target))
         if not seen:
             description = "{} (nick only, they haven't spoken since the bot started)"
             return target, description.format(target)
@@ -310,9 +310,10 @@ class Bot:
 
     def remove_bans(self, target):
         # the entry itself, plus anything banning the person last seen as target
-        seen = self.seen.get(bans.lower(target))
+        fold = self.transport.casefold
+        seen = self.seen.get(fold(target))
         removed = [b for b in self.banned_users
-                   if self.nick_in(b, [target]) or (seen and bans.matches(b, *seen))]
+                   if self.nick_in(b, [target]) or (seen and bans.matches(b, *seen, fold=fold))]
         self.banned_users = [b for b in self.banned_users if b not in removed]
         return removed
 
@@ -324,11 +325,10 @@ class Bot:
             context.verify_mode = ssl.CERT_NONE
         return context
 
-    @staticmethod
-    def nick_in(nick, nicks):
+    def nick_in(self, nick, nicks):
         # irc nicks are case insensitive, so Troll and troll are the same person
-        nick = bans.lower(nick)
-        return any(bans.lower(n) == nick for n in nicks)
+        fold = self.transport.casefold
+        return any(fold(n) == fold(nick) for n in nicks)
 
     def start_logging(self):
         self.logger = log.get_bot_logger(self.bot_nick)
@@ -346,11 +346,11 @@ class Bot:
     # the network, through the transport
 
     def make_transport(self, server, nickname):
-        return IrcLibTransport(
+        return IrcTransport(
             self.logger, server, self.port, nickname, password=self.server_pass,
             ssl_context=self.ssl_context() if self.ssl_required else None,
             sasl_account=self.sasl_account, sasl_password=self.sasl_password,
-            nickserv=self.nickserv, ns_pass=self.ns_pass, bot_mode=self.bot_mode, owner=self)
+            nickserv=self.nickserv, ns_pass=self.ns_pass, bot_mode=self.bot_mode)
 
     def setup_core(self):
         # set once the bot is running, plugins in worker threads send through it
@@ -376,8 +376,8 @@ class Bot:
         except (NotImplementedError, RuntimeError, ValueError):
             # only the main thread can catch signals, and not on windows
             pass
-        await self.transport.connect()
         async with asyncio.TaskGroup() as core:
+            core.create_task(self.transport.run())
             core.create_task(self.read_events())
             sender = core.create_task(self.output.run())
             await self.quitting.wait()
@@ -426,16 +426,6 @@ class Bot:
     def sasl_logged_in(self):
         """True once the bot has logged in to its account with SASL."""
         return getattr(self.transport, 'sasl_logged_in', False)
-
-    # 1.x plugins reach these through msg.bot, until msg.bot goes in 2.0
-
-    @property
-    def connection(self):
-        return getattr(self.transport, 'connection')
-
-    @property
-    def channels(self):
-        return getattr(self.transport, 'channels')
 
     async def read_events(self):
         async for event in self.transport.events():
@@ -486,8 +476,7 @@ class Bot:
         self.send_message('privmsg', nick, 'List of listeners: {}'.format(listeners))
         return None
 
-    def call_internal_commands(self, channel, nick, cmd, text, arg, c, op=None):
-        # c, the connection, is still passed for 1.x Bot subclasses that override this
+    def call_internal_commands(self, channel, nick, cmd, text, arg, op=None):
         if not cmd.startswith(self.cmd_prefix):
             return None
         else:
@@ -658,16 +647,17 @@ class Bot:
         host = event.source.host
         account = event.source.account
         self.remember(nick, user, host, account)
-        if bans.matches_any(self.banned_users, nick, user, host, account):
+        fold = self.transport.casefold
+        if bans.matches_any(self.banned_users, nick, user, host, account, fold=fold):
             self.logger.debug('ignoring banned user {}'.format(nick))
             return
         botnick = self.transport.nick
-        if bans.lower(nick) == bans.lower(botnick):
+        if self.transport.casefold(nick) == self.transport.casefold(botnick):
             return
         if self.require_account and not account:
             self.logger.debug('ignoring {}, not logged in to an account'.format(nick))
             return
-        op = bans.matches_any(self.ops, nick, user, host, account)
+        op = bans.matches_any(self.ops, nick, user, host, account, fold=fold)
         text = event.text
         msg_type = 'action' if event.kind == 'action' else 'message'
         if not is_channel(event.target):
@@ -687,7 +677,7 @@ class Bot:
             arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
         else:
             arg = ''
-        output = self.call_internal_commands(chan, nick, cmd, text, arg, self.connection, op=op)
+        output = self.call_internal_commands(chan, nick, cmd, text, arg, op=op)
         if self.stopping:
             return
         if not output:
@@ -710,14 +700,14 @@ class Bot:
             output = await self.run_plugins(plugin_info)
         if output:
             self.logger.debug(f'sending output: {output.msg}')
-            self.process_output(self.connection, chan, output)
+            self.process_output(chan, output)
 
     async def run_plugins(self, info):
         # 1.x plugins are plain functions, so they run in a worker thread
         key = None
         if info['cmd'] in plugin.cmds:
             # one run at a time per person, so spamming a slow command can't pile them up
-            key = (bans.lower(info['nick']), info['cmd'])
+            key = (self.transport.casefold(info['nick']), info['cmd'])
             if key in self.running:
                 self.logger.debug('{} is still running for {}, ignoring'.format(
                     info['cmd'], info['nick']))
@@ -733,8 +723,7 @@ class Bot:
         finally:
             self.running.discard(key)
 
-    def process_output(self, c, chan, output):
-        # c, the connection, is still passed for 1.x Bot subclasses that override this
+    def process_output(self, chan, output):
         if not output.msg:
             return
         kinds = {plugin.OutputType.Message: 'privmsg', plugin.OutputType.Action: 'action'}
@@ -777,16 +766,16 @@ class TwitchBot(Bot):
         self.require_account = False
         self.bot_nick = nickname
         self.start_logging()
-        self.warn_unknown_options(kwargs)
-        self.setup_bans(nickname, kwargs)
         self.channel = channel
         self.chanlist = [channel]
         self.logger.info('Joining Twitch Server')
         # always use tls, the oauth token is a password
-        self.transport = TwitchIrcLibTransport(
+        self.transport = TwitchTransport(
             self.logger, self.server, self.port, nickname, password='oauth:' + token,
-            ssl_context=self.ssl_context(), bot_mode=self.bot_mode, owner=self)
+            ssl_context=self.ssl_context(), bot_mode=self.bot_mode)
         self.setup_core()
+        self.warn_unknown_options(kwargs)
+        self.setup_bans(nickname, kwargs)
         self.internal_commands = {self.cmd_prefix + k: v for k, v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
                             cmd_prefix=self.cmd_prefix, logger=self.logger)

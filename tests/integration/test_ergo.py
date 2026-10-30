@@ -210,3 +210,16 @@ def test_long_replies_are_paced_and_all_arrive(names, users, start_bot):
     started = time.time()
     assert messages(mal.say('!lines', channel, bot, seconds=6)) == [str(i) for i in range(6)]
     assert time.time() - started >= 4
+
+
+def test_long_replies_are_split_and_arrive_whole(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'long': (
+        "import pinhook.plugin\n\n\n"
+        "@pinhook.plugin.command('!long')\n"
+        "def long(msg):\n"
+        "    return pinhook.plugin.message(' '.join('word{}'.format(i) for i in range(250)))\n")})
+    got = messages(mal.say('!long', channel, bot))
+    assert len(got) > 1
+    assert ' '.join(got) == ' '.join('word{}'.format(i) for i in range(250))

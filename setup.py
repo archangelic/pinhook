@@ -22,7 +22,7 @@ VERSION = None
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'irc',
+    'irctokens>=2.0.2,<3',
     'click',
     'marshmallow',
     'pyyaml',

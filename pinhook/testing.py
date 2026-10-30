@@ -14,7 +14,7 @@ import weakref
 
 from .bot import Bot
 from .store import Store
-from .transport.base import Event, Limits, Source
+from .transport.base import Event, Limits, Source, casefold
 
 # one thing the bot sent, kind is 'message', 'action' or 'notice'
 Sent = namedtuple('Sent', ['kind', 'target', 'text'])
@@ -97,11 +97,10 @@ class FakeTransport:
         self.nick = nickname
         self.channels = {}
         self.queue = asyncio.Queue()
-        # 1.x plugins send through msg.bot.connection, so this is that too
-        self.connection = self
+        self.closed = asyncio.Event()
 
-    async def connect(self):
-        pass
+    async def run(self):
+        await self.closed.wait()
 
     async def events(self):
         while True:
@@ -118,40 +117,18 @@ class FakeTransport:
         self.bot.add_channel(channel)
 
     def members(self, channel):
-        return self.channels[channel].users()
+        return self.channels[channel].users() if channel in self.channels else []
 
     def supports(self, feature):
         return feature == 'account-tag'
 
+    def casefold(self, name):
+        return casefold(name)
+
     async def close(self, reason=''):
         self.bot.quit_message = reason
+        self.closed.set()
         self.queue.put_nowait(None)
-
-    # the irc library connection's methods, for msg.bot.connection
-
-    def get_nickname(self):
-        return self.nick
-
-    def privmsg(self, target, text):
-        self.bot.sent.append(Sent('message', target, text))
-
-    def action(self, target, text):
-        self.bot.sent.append(Sent('action', target, text))
-
-    def notice(self, target, text):
-        self.bot.sent.append(Sent('notice', target, text))
-
-    def part(self, channel, message=''):
-        self.channels.pop(channel, None)
-
-    def quit(self, message=''):
-        self.bot.quit_message = message
-
-    def mode(self, target, command):
-        pass
-
-    def cap(self, subcommand, *args):
-        pass
 
 
 class _ErrorCatcher(logging.Handler):
@@ -199,6 +176,11 @@ class TestBot(Bot):
     def open_store(self, name):
         # stores stay in memory, look at one with bot.store('karma')
         return Store(name)
+
+    @property
+    def channels(self):
+        """The channels the bot is in, each with the nicks seen there."""
+        return self.transport.channels
 
     @property
     def pauses(self):

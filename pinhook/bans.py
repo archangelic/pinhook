@@ -2,19 +2,13 @@ import fnmatch
 import json
 import os
 
-import irc.strings
-
 from .store import write_json
+from .transport.base import casefold
 
 # ban and op entries can be one of:
 #   a nick                  troll
 #   a hostmask              *!*@203.0.113.7  (* and ? are wildcards)
 #   a services account      $a:troll
-
-
-def lower(name):
-    # irc's rfc 1459 lowercasing, where [ ] \ ^ are the uppercase { } | ~
-    return irc.strings.lower(name)
 
 
 def is_account(entry):
@@ -25,19 +19,20 @@ def is_mask(entry):
     return '!' in entry or '@' in entry
 
 
-def matches(entry, nick, user=None, host=None, account=None):
-    # irc lowercasing also turns [ ] into { }, so nicks can't break the wildcard match
-    entry = irc.strings.lower(entry)
+def matches(entry, nick, user=None, host=None, account=None, fold=casefold):
+    # fold is the server's lowercasing. Its rfc1459 one turns [ ] into { }, so nicks
+    # can't break the wildcard match
+    entry = fold(entry)
     if is_account(entry):
-        return bool(account) and irc.strings.lower(account) == entry[len('$a:'):]
+        return bool(account) and fold(account) == entry[len('$a:'):]
     if is_mask(entry):
-        mask = irc.strings.lower('{}!{}@{}'.format(nick, user or '', host or ''))
+        mask = fold('{}!{}@{}'.format(nick, user or '', host or ''))
         return fnmatch.fnmatchcase(mask, entry)
-    return irc.strings.lower(nick) == entry
+    return fold(nick) == entry
 
 
-def matches_any(entries, nick, user=None, host=None, account=None):
-    return any(matches(e, nick, user, host, account) for e in entries)
+def matches_any(entries, nick, user=None, host=None, account=None, fold=casefold):
+    return any(matches(e, nick, user, host, account, fold) for e in entries)
 
 
 def load(path):

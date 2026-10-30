@@ -6,6 +6,7 @@ messages. The interface is internal and can change before 2.0.
 """
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+import string
 from typing import Protocol
 
 
@@ -69,8 +70,8 @@ class Transport(Protocol):
         """The bot's nick right now."""
         ...
 
-    async def connect(self) -> None:
-        """Start connecting. Keeps reconnecting until closed."""
+    async def run(self) -> None:
+        """Connect, and keep reconnecting, until closed."""
         ...
 
     def events(self) -> AsyncIterator[Event]:
@@ -85,7 +86,24 @@ class Transport(Protocol):
 
     def supports(self, feature: str) -> bool: ...
 
+    def casefold(self, name: str) -> str: ...
+
     async def close(self, reason: str = '') -> None: ...
+
+
+# how servers lowercase nicks and channel names, named by ISUPPORT CASEMAPPING.
+# rfc1459 also counts [ ] \ ^ as the uppercase { } | ~
+UPPER, LOWER = string.ascii_uppercase, string.ascii_lowercase
+CASEMAPPINGS = {
+    'ascii': str.maketrans(UPPER, LOWER),
+    'rfc1459': str.maketrans(UPPER + '[]\\^', LOWER + '{}|~'),
+    'rfc1459-strict': str.maketrans(UPPER + '[]\\', LOWER + '{}|'),
+}
+
+
+def casefold(name: str, casemapping: str = 'rfc1459') -> str:
+    """name in lowercase, the way a server with this CASEMAPPING compares names."""
+    return name.translate(CASEMAPPINGS.get(casemapping, CASEMAPPINGS['rfc1459']))
 
 
 def is_channel(name: str) -> bool:
