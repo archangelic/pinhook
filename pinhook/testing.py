@@ -184,7 +184,11 @@ class FakeTransport:
         return frozenset(self.channels[channel].modes.get(nick, ()))
 
     def supports(self, feature):
+        # no client tags, so threaded replies show the way most networks see them
         return feature == 'account-tag'
+
+    def typing(self, target, state):
+        pass
 
     def casefold(self, name):
         return casefold(name)

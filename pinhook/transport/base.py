@@ -100,12 +100,14 @@ class Event:
 class Outgoing:
     """A message for the transport to send. kind is 'privmsg', 'action' or 'notice'.
 
-    The prefix goes in front of every line the text is sent as.
+    The prefix goes in front of every line the text is sent as. tags are IRCv3 client
+    tags to send with it, like {'+reply': msgid}, sent only where the server allows them.
     """
     kind: str
     target: str
     text: str
     prefix: str = ''
+    tags: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -163,7 +165,14 @@ class Transport(Protocol):
         """The channel modes nick has in channel, like {'o'} for a channel operator."""
         ...
 
-    def supports(self, feature: str) -> bool: ...
+    def supports(self, feature: str) -> bool:
+        """True if the network has feature: a capability like 'account-tag', or one of the
+        client tag features 'typing', 'reply' and 'channel-context'."""
+        ...
+
+    def typing(self, target: str, state: str) -> None:
+        """Show the bot as typing in target: state is 'active', 'paused' or 'done'."""
+        ...
 
     def casefold(self, name: str) -> str: ...
 

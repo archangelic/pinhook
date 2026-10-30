@@ -338,3 +338,25 @@ def test_whois_asks_the_server(names, accounts, users, start_bot):
     assert messages(mal.say('!whois mallory', channel, bot)) == [
         'mallory account=malacct in=True']
     assert messages(mal.say('!whois nobodyhere', channel, bot)) == ['no nobodyhere']
+
+
+THREAD = '''
+from pinhook import command
+
+
+@command('thread')
+async def thread(ctx):
+    await ctx.reply('threaded', thread=True)
+'''
+
+
+def test_threaded_replies_carry_the_reply_tag(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'thread': THREAD})
+    mal.send('CAP REQ message-tags')
+    mal.wait_for('ACK')
+    mal.send('PRIVMSG {} :!thread'.format(channel))
+    # the reply comes back tagged with the msgid ergo gave mallory's message
+    line = mal.wait_for(':threaded')
+    assert '+reply=' in line and line.split(' ', 1)[1].startswith(':' + bot + '!')

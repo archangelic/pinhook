@@ -27,6 +27,8 @@ HOSTMASK_GUESS = len('!') + 10 + len('@') + 63
 WANTED_CAPS = ('account-tag', 'multi-prefix', 'userhost-in-names', 'extended-join',
                'account-notify', 'away-notify', 'chghost', 'setname', 'server-time',
                'message-tags', 'invite-notify', 'cap-notify', 'batch', 'labeled-response')
+# features plugins ask about that are client tags, like ctx.supports('typing')
+CLIENT_TAG_FEATURES = ('typing', 'reply', 'channel-context')
 # the WHOIS replies, by numeric
 WHOIS_REPLIES = {'311', '312', '313', '317', '319', '330', '301', '335', '671', '318', '401'}
 # marks the bot's own WHOX queries, so their replies can be told apart
@@ -155,7 +157,8 @@ class IrcTransport:
         # a plugin's broken text, like a lone surrogate, goes out as ? instead of failing
         text = message.text.encode('utf-8', 'replace').decode('utf-8')
         for piece in split_text(text, room):
-            self.write(command, [message.target, start + message.prefix + piece + end])
+            self.write(command, [message.target, start + message.prefix + piece + end],
+                       tags=self.allowed_tags(message.tags))
         await self.writer.drain()
 
     def join(self, channel, key=''):
@@ -174,7 +177,23 @@ class IrcTransport:
         return self.tracker.modes(channel, nick)
 
     def supports(self, feature):
+        if feature in CLIENT_TAG_FEATURES:
+            return self.client_tag_allowed('+' + feature)
         return feature in self.caps
+
+    def client_tag_allowed(self, tag):
+        # client tags need message-tags, and CLIENTTAGDENY=*,-reply denies all but +reply
+        if 'message-tags' not in self.caps:
+            return False
+        denied = self.isupport.get('CLIENTTAGDENY', '').split(',')
+        name = tag.lstrip('+')
+        if '-' + name in denied:
+            return True
+        return '*' not in denied and name not in denied
+
+    def typing(self, target, state):
+        if self.client_tag_allowed('+typing'):
+            self.write('TAGMSG', [target], tags={'+typing': state})
 
     def casefold(self, name):
         return casefold(name, self.isupport.get('CASEMAPPING', 'rfc1459'))
@@ -284,6 +303,11 @@ class IrcTransport:
             self.write('PASS', [self.password])
         self.write('NICK', [self.nickname])
         self.write('USER', [self.nickname, '0', '*', self.nickname])
+
+    def allowed_tags(self, tags):
+        # the client tags the server takes, so a plugin's tags never get a line refused
+        allowed = {name: value for name, value in tags.items() if self.client_tag_allowed(name)}
+        return allowed or None
 
     def write(self, command, params, tags=None):
         if not self.writer:

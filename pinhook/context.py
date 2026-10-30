@@ -1,4 +1,6 @@
 """The context: everything a plugin gets for one message, and nothing else."""
+import asyncio
+import contextlib
 from datetime import datetime, timezone
 
 from .store import PluginConfig
@@ -121,9 +123,55 @@ class Context:
         """True if the network supports feature, like 'account-tag'."""
         return self._bot.transport.supports(feature)
 
-    async def reply(self, text):
-        """Answer where the message came from: the channel, or the sender if private."""
-        self._bot.send_text('privmsg', self.where(self.channel), text)
+    async def reply(self, text, thread=False, private=False):
+        """Answer where the message came from: the channel, or the sender if private.
+
+        Args:
+            text: what to say. Each line is sent as its own message.
+            thread: answer this message in particular. Clients that show threads show it
+                under the message, and elsewhere it starts with the sender's nick.
+            private: answer the sender in a private message instead, which their client
+                can show with the channel it's about.
+        """
+        target = self.where(self.channel)
+        tags = {}
+        if private and self.nick and not self.is_private:
+            target = self.nick
+            tags['+channel-context'] = self.channel
+        elif thread and self.nick and not self.is_private:
+            if self.msgid and self.supports('reply'):
+                tags['+reply'] = self.msgid
+            else:
+                text = '{}: {}'.format(self.nick, text)
+        self._bot.send_text('privmsg', target, text, tags)
+
+    @contextlib.asynccontextmanager
+    async def typing(self):
+        """Show the bot as typing while a slow command works:
+
+            async with ctx.typing():
+                forecast = await fetch_forecast(city)
+            await ctx.reply(forecast)
+
+        Does nothing where the network can't show it."""
+        target = self.channel
+        if not target or not self.supports('typing'):
+            yield
+            return
+        transport = self._bot.transport
+        transport.typing(target, 'active')
+        # clients forget a typing notice after a few seconds, so it's sent again
+        keep_going = asyncio.get_running_loop().create_task(self.keep_typing(target))
+        try:
+            yield
+        finally:
+            keep_going.cancel()
+            transport.typing(target, 'done')
+
+    async def keep_typing(self, target):
+        while True:
+            await asyncio.sleep(3)
+            self._bot.transport.typing(target, 'active')
 
     async def send(self, target, text):
         """Send text to another channel or nick."""

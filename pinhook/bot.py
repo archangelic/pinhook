@@ -495,18 +495,18 @@ class Bot:
             self.logger.info('joining channel {}'.format(channel.split()[0]))
             self.transport.join(*channel.split())
 
-    def send_message(self, kind, target, text):
+    def send_message(self, kind, target, text, tags=None):
         """Queue a message to send. Safe to call from a plugin's thread."""
-        self.in_loop(self.output.put, Outgoing(kind, target, text))
+        self.in_loop(self.output.put, Outgoing(kind, target, text, tags=dict(tags or {})))
 
-    def send_text(self, kind, target, text):
+    def send_text(self, kind, target, text, tags=None):
         """Queue text to send, a message per line. text can be a list of lines too."""
         if isinstance(text, (list, tuple)):
             lines = [line for item in text for line in str(item).splitlines()]
         else:
             lines = str(text).splitlines()
         for line in lines:
-            self.send_message(kind, target, line)
+            self.send_message(kind, target, line, tags)
 
     def call_help(self, nick, op, arg='', source=None, channel=None):
         # names only, packed into as few messages as fit, and !help <command> for the rest.
