@@ -40,6 +40,8 @@ class Context:
         text: the whole message, a part, kick or quit's reason, or a new topic.
         kind: a message's 'privmsg', 'action' or 'notice'.
         kicked: who was kicked, for a kick.
+        invited: who was invited, for an invite: the bot, or with invite-notify, anyone
+            invited to a channel the bot is in.
         new_nick: the new nick, for a nick change. nick is the old one.
         modes: for a mode change, like ['+o', 'mal'].
         command: the command's name, without a prefix, for a command. None otherwise.
@@ -76,6 +78,7 @@ class Context:
         self.text = event.text
         self.kind = event.kind
         self.kicked = event.data.get('kicked')
+        self.invited = event.data.get('invited')
         self.new_nick = event.data.get('new_nick')
         self.modes = list(event.data.get('modes', []))
         self.command = command

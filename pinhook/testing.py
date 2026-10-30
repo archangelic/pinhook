@@ -279,7 +279,8 @@ class TestBot(Bot):
         is the bot's first channel unless given, or none for nick and quit. data is
         the rest: kicked='troll' for a kick, new_nick='mal_' for a nick change,
         modes=['+o', 'mal'] for a mode change, which gives mal +o in the channel the
-        way a real one would. A notice's channel can be the bot's nick.
+        way a real one would, and invited='ana' for an invite of someone other than
+        the bot. A notice's channel can be the bot's nick.
         """
         if kind in ('nick', 'quit'):
             target = ''
@@ -292,6 +293,8 @@ class TestBot(Bot):
             self.channels[target].remove_user(nick)
         elif kind == 'mode' and target in self.channels:
             self.channels[target].set_modes(data.get('modes', []))
+        elif kind == 'invite':
+            data.setdefault('invited', self.transport.nick)
         tags = {'account': account} if account else {}
         source = Source(nick, user or nick, host, account)
         if kind == 'notice':

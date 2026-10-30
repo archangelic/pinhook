@@ -20,7 +20,8 @@ from .members import Tracker
 HOSTMASK_GUESS = len('!') + 10 + len('@') + 63
 # what the bot asks for when the server offers it
 WANTED_CAPS = ('account-tag', 'multi-prefix', 'userhost-in-names', 'extended-join',
-               'account-notify', 'away-notify', 'chghost', 'setname')
+               'account-notify', 'away-notify', 'chghost', 'setname', 'server-time',
+               'message-tags', 'invite-notify', 'cap-notify')
 # marks the bot's own WHOX queries, so their replies can be told apart
 WHOX_TOKEN = '152'
 
@@ -78,6 +79,7 @@ class IrcTransport:
         self.server_caps = {}
         self.caps = set()
         self.negotiating = False
+        self.authenticating = False
         self.sasl_logged_in = False
         self.hostmask_length = HOSTMASK_GUESS
 
@@ -114,7 +116,9 @@ class IrcTransport:
         command = 'NOTICE' if message.kind == 'notice' else 'PRIVMSG'
         start, end = ('\x01ACTION ', '\x01') if message.kind == 'action' else ('', '')
         room = self.text_room(message.kind, message.target, message.prefix)
-        for piece in split_text(message.text, room):
+        # a plugin's broken text, like a lone surrogate, goes out as ? instead of failing
+        text = message.text.encode('utf-8', 'replace').decode('utf-8')
+        for piece in split_text(text, room):
             self.write(command, [message.target, start + message.prefix + piece + end])
         await self.writer.drain()
 
@@ -248,7 +252,9 @@ class IrcTransport:
         if not self.writer:
             return
         line = irctokens.build(command, params).format()
-        self.writer.write(line.encode('utf-8') + b'\r\n')
+        # always valid utf-8, which a UTF8ONLY server insists on, even from a plugin's
+        # broken text
+        self.writer.write(line.encode('utf-8', 'replace') + b'\r\n')
 
     def emit(self, event):
         self.queue.put_nowait(event)
@@ -267,7 +273,8 @@ class IrcTransport:
         'JOIN': 'on_join', 'PART': 'on_part', 'KICK': 'on_kick', 'QUIT': 'on_quit',
         'NICK': 'on_nick', 'PRIVMSG': 'on_privmsg', 'NOTICE': 'on_notice', 'TOPIC': 'on_topic',
         'INVITE': 'on_invite', 'MODE': 'on_mode', 'ACCOUNT': 'on_account', 'AWAY': 'on_away',
-        'CHGHOST': 'on_chghost', 'SETNAME': 'on_setname',
+        'CHGHOST': 'on_chghost', 'SETNAME': 'on_setname', 'FAIL': 'on_standard_reply',
+        'WARN': 'on_standard_reply', 'NOTE': 'on_standard_reply',
     }
 
     def handle(self, line):
@@ -286,39 +293,68 @@ class IrcTransport:
     # capabilities and sasl
 
     def on_cap(self, line):
-        if not self.negotiating:
-            return
         subcommand, args = line.params[1], line.params[2:]
-        if subcommand == 'LS':
-            for cap in args[-1].split():
-                name, _, value = cap.partition('=')
-                self.server_caps[name] = value
+        if subcommand == 'LS' and self.negotiating:
+            self.offered(args[-1])
             # a * means the list carries on in another line
             if len(args) > 1 and args[0] == '*':
                 return
-            wanted = [cap for cap in WANTED_CAPS if cap in self.server_caps]
-            if self.sasl_password:
-                if self.sasl_offered():
-                    wanted.append('sasl')
-                else:
-                    self.logger.error("sasl_password is set, but this server doesn't offer "
-                                      "SASL PLAIN logins, so the bot isn't logged in")
-            if wanted:
-                self.write('CAP', ['REQ', ' '.join(wanted)])
+            if self.request(self.wanted(during_registration=True)):
                 return
+        elif subcommand == 'NEW':
+            # cap-notify: the server offers something new, like sasl once services are back
+            self.request(self.wanted(self.offered(args[-1])))
+            return
+        elif subcommand == 'DEL':
+            for cap in args[-1].split():
+                self.server_caps.pop(cap, None)
+                self.caps.discard(cap)
+            return
         elif subcommand == 'ACK':
             acked = args[-1].split()
-            self.caps.update(acked)
-            if 'sasl' in acked:
+            self.caps.update(cap for cap in acked if not cap.startswith('-'))
+            self.caps.difference_update(cap[1:] for cap in acked if cap.startswith('-'))
+            if 'sasl' in acked and self.sasl_password and not self.sasl_logged_in:
                 # carries on in on_authenticate, then on_sasl_success or a failure
+                self.authenticating = True
                 self.write('AUTHENTICATE', ['PLAIN'])
                 return
         elif subcommand == 'NAK':
-            if self.sasl_password:
+            if self.sasl_password and 'sasl' in args[-1].split():
                 self.logger.error("the server refused SASL, so the bot isn't logged in")
         else:
             return
-        self.end_caps()
+        if self.negotiating:
+            self.end_caps()
+
+    def offered(self, caps):
+        # what CAP LS or CAP NEW lists, like 'sasl=PLAIN,EXTERNAL multi-prefix'
+        names = []
+        for cap in caps.split():
+            name, _, value = cap.partition('=')
+            self.server_caps[name] = value
+            names.append(name)
+        return names
+
+    def wanted(self, names=None, during_registration=False):
+        # the caps worth asking for, out of names, or out of everything offered
+        names = self.server_caps if names is None else names
+        wanted = [cap for cap in WANTED_CAPS if cap in names and cap not in self.caps]
+        if self.sasl_password and not self.sasl_logged_in and 'sasl' in names:
+            if self.sasl_offered():
+                wanted.append('sasl')
+            else:
+                self.logger.error("sasl_password is set, but this server doesn't offer "
+                                  "SASL PLAIN logins, so the bot isn't logged in")
+        elif self.sasl_password and during_registration and 'sasl' not in names:
+            self.logger.error("sasl_password is set, but this server doesn't offer "
+                              "SASL PLAIN logins, so the bot isn't logged in")
+        return wanted
+
+    def request(self, caps):
+        if caps:
+            self.write('CAP', ['REQ', ' '.join(caps)])
+        return bool(caps)
 
     def sasl_offered(self):
         # sasl=PLAIN,EXTERNAL lists the methods, plain sasl means the server didn't say
@@ -333,7 +369,7 @@ class IrcTransport:
         self.write('CAP', ['END'])
 
     def on_authenticate(self, line):
-        if line.params[0] != '+' or not self.negotiating:
+        if line.params[0] != '+' or not self.authenticating:
             return
         login = '\0{}\0{}'.format(self.sasl_account, self.sasl_password)
         encoded = base64.b64encode(login.encode('utf-8')).decode('ascii')
@@ -345,13 +381,16 @@ class IrcTransport:
 
     def on_sasl_success(self, line):
         self.sasl_logged_in = True
+        self.authenticating = False
         self.logger.info('logged in as {} with SASL'.format(self.sasl_account))
-        self.end_caps()
+        if self.negotiating:
+            self.end_caps()
 
     def on_sasl_fail(self, line):
         reason = line.params[-1] if len(line.params) > 1 else 'no reason given'
         self.logger.error("SASL login as {} failed ({}), check sasl_account and sasl_password"
                           .format(self.sasl_account, reason))
+        self.authenticating = False
         if self.negotiating:
             self.end_caps()
 
@@ -473,7 +512,7 @@ class IrcTransport:
         if len(line.params) >= 3:
             self.tracker.update(nick, realname=line.params[2])
             self.logged_in(nick, line.params[1])
-        self.emit(Event('join', self.source(line), channel, tags=dict(line.tags or {})))
+        self.emit(Event('join', self.source(line), channel, tags=self.tags(line)))
 
     def logged_in(self, nick, account):
         if account in ('*', '0', ''):
@@ -491,24 +530,25 @@ class IrcTransport:
     def on_part(self, line):
         source = self.source(line)
         self.leave(line.params[0], line.hostmask.nickname)
-        self.emit(Event('part', source, line.params[0], self.last(line, 1)))
+        self.emit(Event('part', source, line.params[0], self.last(line, 1), tags=self.tags(line)))
 
     def on_kick(self, line):
         self.leave(line.params[0], line.params[1])
         self.emit(Event('kick', self.source(line), line.params[0], self.last(line, 2),
-                        data={'kicked': line.params[1]}))
+                        tags=self.tags(line), data={'kicked': line.params[1]}))
 
     def on_quit(self, line):
         source = self.source(line)
         self.tracker.quit(line.hostmask.nickname)
-        self.emit(Event('quit', source, '', self.last(line, 0)))
+        self.emit(Event('quit', source, '', self.last(line, 0), tags=self.tags(line)))
 
     def on_nick(self, line):
         old, new = line.hostmask.nickname, line.params[0]
         self.tracker.rename(old, new)
         if self.is_me(old):
             self.nick = new
-        self.emit(Event('nick', self.source(line), '', data={'new_nick': new}))
+        self.emit(Event('nick', self.source(line), '', tags=self.tags(line),
+                        data={'new_nick': new}))
 
     def on_account(self, line):
         # account-notify: ACCOUNT <account>, or ACCOUNT * on logging out
@@ -530,19 +570,22 @@ class IrcTransport:
             self.tracker.update(line.hostmask.nickname, realname=line.params[0])
 
     def on_topic(self, line):
-        self.emit(Event('topic', self.source(line), line.params[0], self.last(line, 1)))
+        self.emit(Event('topic', self.source(line), line.params[0], self.last(line, 1),
+                        tags=self.tags(line)))
 
     def on_invite(self, line):
-        # INVITE <the bot> <channel>
+        # INVITE <who> <channel>. Usually the bot, and with invite-notify, anyone invited to
+        # a channel the bot is in
         if len(line.params) > 1:
-            self.emit(Event('invite', self.source(line), line.params[1]))
+            self.emit(Event('invite', self.source(line), line.params[1], tags=self.tags(line),
+                            data={'invited': line.params[0]}))
 
     def on_mode(self, line):
         if len(line.params) > 1 and is_channel(line.params[0]):
             self.track_modes(line.params[0], line.params[1], line.params[2:])
         # only modes someone set, not the server setting the bot's own when it connects
         if line.source and '!' in line.source:
-            self.emit(Event('mode', self.source(line), line.params[0],
+            self.emit(Event('mode', self.source(line), line.params[0], tags=self.tags(line),
                             data={'modes': line.params[1:]}))
 
     def track_modes(self, channel, changes, args):
@@ -578,6 +621,20 @@ class IrcTransport:
                       None if account in (None, '', '*') else account)
 
     @staticmethod
+    def tags(line):
+        return dict(line.tags or {})
+
+    def on_standard_reply(self, line):
+        # FAIL, WARN or NOTE <command> <code> [<context>...] :<description>
+        if len(line.params) < 3:
+            return
+        command, code, description = line.params[0], line.params[1], line.params[-1]
+        level = {'FAIL': 'error', 'WARN': 'warning'}.get(line.command.upper(), 'info')
+        context = ' '.join(line.params[2:-1])
+        getattr(self.logger, level)('the server said {} {}{}: {}'.format(
+            command, code, ' ({})'.format(context) if context else '', description))
+
+    @staticmethod
     def last(line, index):
         # a reason or topic at params[index], if the line has one
         return line.params[index] if len(line.params) > index else ''
@@ -595,7 +652,7 @@ class IrcTransport:
                 self.answer_ctcp(line.hostmask.nickname, ctcp.upper(), rest)
                 return
             kind, text = 'action', rest
-        self.emit(Event('message', self.source(line), target, text, kind, dict(line.tags or {})))
+        self.emit(Event('message', self.source(line), target, text, kind, self.tags(line)))
 
     def on_notice(self, line):
         # notices from people, not the server's own before and while the bot registers.

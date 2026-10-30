@@ -281,3 +281,21 @@ def test_members_are_tracked_with_accounts_and_modes(names, accounts, users, sta
         'mallory=malacct/o trolly=trollacct/-']
     troll.send('PART ' + channel)
     assert messages(mal.say('!members', channel, bot)) == ['mallory=malacct/o']
+
+
+DETAILS = '''
+from pinhook import command
+
+
+@command('when')
+async def when(ctx):
+    await ctx.reply('time={} msgid={} tagged={}'.format(
+        ctx.time.tzinfo is not None, ctx.msgid is not None, 'time' in ctx.tags))
+'''
+
+
+def test_server_time_and_message_ids_come_from_the_server(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'details': DETAILS})
+    assert messages(mal.say('!when', channel, bot)) == ['time=True msgid=True tagged=True']
