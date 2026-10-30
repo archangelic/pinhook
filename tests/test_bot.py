@@ -48,18 +48,13 @@ def test_logging_works_again_after_off(make_bot, caplog):
     assert 'should appear' in caplog.text
 
 
-MESSAGE_ARGS = dict(bot=None, channel='#test', nick='mal', user='user', botnick='pinbot', ops=[],
-                    logger=None, action=None, privmsg=None, notice=None, msg_type='message')
-
-
-def test_message_needs_cmd_or_text():
-    with pytest.raises(TypeError, match='missing cmd or text'):
-        pinhook_bot.Bot.Message(**MESSAGE_ARGS)
-
-
-def test_message_with_cmd_and_text_is_fine():
-    msg = pinhook_bot.Bot.Message(cmd='!ping', arg='', text='!ping', **MESSAGE_ARGS)
-    assert msg.cmd == '!ping' and msg.text == '!ping'
+def test_commands_get_cmd_arg_and_text(tmp_path):
+    from pinhook.testing import TestBot
+    (tmp_path / 'show.py').write_text(
+        "import pinhook.plugin as p\n"
+        "@p.command('!show')\n"
+        "def show(msg): return p.message('|'.join([msg.cmd, msg.arg, msg.text]))\n")
+    assert TestBot(plugin_dir=str(tmp_path)).say('!show a  b') == ['!show|a  b|!show a  b']
 
 
 def test_several_bots_do_not_duplicate_log_lines(make_bot, tmp_path, monkeypatch):

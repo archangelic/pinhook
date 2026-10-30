@@ -66,8 +66,9 @@ class IrcTransport:
         self.nick = self.nickname
         self.registered = False
         self.isupport = {}
-        # casefolded channel name: {casefolded nick: nick}
+        # casefolded channel name: {casefolded nick: nick}, and the name as the server wrote it
         self.channels = {}
+        self.channel_names = {}
         self.server_caps = {}
         self.caps = set()
         self.negotiating = False
@@ -120,6 +121,9 @@ class IrcTransport:
 
     def members(self, channel):
         return list(self.channels.get(self.casefold(channel), {}).values())
+
+    def joined(self):
+        return list(self.channel_names.values())
 
     def supports(self, feature):
         return feature in self.caps
@@ -397,6 +401,7 @@ class IrcTransport:
         key = self.casefold(line.params[0])
         if self.is_me(nick):
             self.channels[key] = {}
+            self.channel_names[key] = line.params[0]
             if line.hostmask.username and line.hostmask.hostname:
                 hostmask = '!{}@{}'.format(line.hostmask.username, line.hostmask.hostname)
                 self.hostmask_length = len(hostmask.encode('utf-8'))
@@ -407,6 +412,7 @@ class IrcTransport:
         key = self.casefold(channel)
         if self.is_me(nick):
             self.channels.pop(key, None)
+            self.channel_names.pop(key, None)
         elif key in self.channels:
             self.channels[key].pop(self.casefold(nick), None)
 

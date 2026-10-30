@@ -99,11 +99,11 @@ def test_msg_bot_still_works_but_warns(tmp_path, caplog):
     assert caplog.text.count('msg.bot is deprecated') == 1
 
 
-def test_old_decorators_warn_with_the_replacement():
-    with pytest.warns(DeprecationWarning, match=r"use @command\('!old'\) instead"):
-        plugin.register('!old')(lambda msg: None)
-    with pytest.warns(DeprecationWarning, match=r"use @command\('!older', ops=True"):
-        plugin.ops('!older', 'ops only')(lambda msg: None)
+def test_removed_decorators_say_what_replaces_them():
+    with pytest.raises(RuntimeError, match=r"@register was removed .* use @command\('!old'\)"):
+        plugin.register('!old')
+    with pytest.raises(RuntimeError, match=r"@ops was removed .* use @command\('!older', ops=True"):
+        plugin.ops('!older', 'ops only')
 
 
 def test_returning_output_still_works_with_no_warnings(tmp_path):

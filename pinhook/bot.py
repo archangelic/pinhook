@@ -1,9 +1,7 @@
 """The bots: Bot for IRC servers and TwitchBot for Twitch chat."""
 import asyncio
 from collections import OrderedDict
-from datetime import datetime, timezone
 import difflib
-import functools
 import logging
 import os
 import signal
@@ -12,9 +10,12 @@ import time
 import warnings
 
 from . import bans
+from . import compat
 from . import log
 from . import plugin
+from .context import Context
 from .output import OutputQueue
+from .registry import Registry
 from .store import PluginConfig, Store
 from .transport.base import Outgoing, Transport, is_channel
 from .transport.irc import IrcTransport, TwitchTransport
@@ -98,99 +99,7 @@ class Bot:
         if self.sasl_password and not self.ssl_required:
             self.logger.warning('sasl_password will be sent without ssl, '
                                 'turn on ssl_required to keep it private')
-        self.internal_commands = {self.cmd_prefix + k: v for k, v in self.internal_commands.items()}
-        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
-                            cmd_prefix=self.cmd_prefix, logger=self.logger)
-        self.check_plugin_config()
-
-    class Message:
-        """A message sent to the bot, as a plugin gets it.
-
-        Attributes:
-            nick: who sent it.
-            user: the username part of their hostmask (nick!user@host).
-            account: the services account they're logged in to, or None.
-            channel: where it was sent. For a private message, the sender's nick.
-            is_private: True if it was a private message to the bot.
-            cmd: (commands) the command word that triggered it.
-            arg: (commands) everything after the command word.
-            text: (listeners) the whole message.
-            msg_type: 'message', or 'action' for a /me.
-            nick_list: nicks in the channel. Just the sender for private messages.
-            is_op: True if the sender is a bot operator.
-            ops: the list of bot operators, as written in the config.
-            botnick: the bot's current nick.
-            store: the plugin's saved data, a dict kept between restarts.
-            config: the plugin's settings from plugin_config, read only.
-            logger: the bot's logger.
-            datetime: when the message arrived, a timezone-aware datetime.
-            timestamp: the same as a unix timestamp.
-        """
-
-        def __init__(self, bot, channel, nick, user, botnick, ops, logger, action, privmsg,
-                     notice, msg_type, cmd=None, arg=None, text=None, nick_list=None,
-                     is_op=False, account=None, store=None, config=None):
-            self._bot = bot
-            self.datetime = datetime.now(timezone.utc)
-            self.timestamp = self.datetime.timestamp()
-            self.channel = channel
-            self.nick = nick
-            self.user = user
-            self.nick_list = nick_list
-            self.botnick = botnick
-            self.ops = ops
-            self.is_op = is_op
-            self.account = account
-            self.store = store
-            self.config = config if config is not None else PluginConfig('plugin')
-            self.is_private = not is_channel(channel)
-            self.logger = logger
-            self._action = action
-            self.privmsg = privmsg
-            self._notice = notice
-            self.msg_type = msg_type
-            if cmd:
-                self.cmd = cmd
-                self.arg = arg
-            if text is not None:
-                self.text = text
-            if cmd is None and text is None:
-                raise TypeError('missing cmd or text parameter')
-
-        @property
-        def bot(self):
-            """The bot itself. Deprecated, it will be read only in 2.0."""
-            self._bot.warn_deprecated(
-                'msg.bot', 'msg.bot is deprecated and will be read only in 2.0, '
-                'use msg.reply(), msg.send() and msg.botnick instead')
-            return self._bot
-
-        def reply(self, text):
-            """Send text where the message came from: the channel, or the sender if private."""
-            self._bot.process_output(self.channel, plugin.message(text))
-
-        def send(self, target, text):
-            """Send text to another channel or nick."""
-            self._bot.process_output(target, plugin.message(text))
-
-        def action(self, *args):
-            """action(text) replies with a /me, action(target, text) sends one somewhere else."""
-            target, text = self._target_and_text(args, self.channel)
-            self._bot.process_output(target, plugin.action(text))
-
-        def notice(self, *args):
-            """notice(text) sends the sender a notice, notice(target, text) sends one to anyone."""
-            target, text = self._target_and_text(args, self.nick)
-            for line in plugin.message(text).msg:
-                self._notice(target, line)
-
-        @staticmethod
-        def _target_and_text(args, default_target):
-            if len(args) == 1:
-                return default_target, args[0]
-            if len(args) == 2:
-                return args
-            raise TypeError('expected (text) or (target, text), got {} arguments'.format(len(args)))
+        self.setup_plugins()
 
     def warn_deprecated(self, key, message):
         # log each one once per bot, and warn every time so tests show where it came from
@@ -257,9 +166,19 @@ class Bot:
         self.plugin_config = dict(config.get('plugin_config') or {})
         return ' (and plugin_config from {})'.format(name)
 
+    def setup_plugins(self):
+        self.prefixes = [self.cmd_prefix]
+        # names turned off with !disable: plugin files, commands and listeners
+        self.disabled = set()
+        # !help isn't listed with the rest, it's shown to everyone
+        self.builtins = set(self.internal_commands) | {'help'}
+        self.registry = Registry(self.bot_nick, self.prefixes, self.builtins, self.logger)
+        self.registry.load(self.plugin_dir)
+        self.check_plugin_config()
+
     def check_plugin_config(self):
         # a section for a plugin that isn't loaded is probably a typo
-        loaded = {p.file_name for p in plugin.plugins.values()}
+        loaded = set(self.registry.plugins)
         for name in sorted(set(self.plugin_config) - loaded - {'shared'}):
             close = difflib.get_close_matches(name, loaded, n=1)
             hint = ", did you mean '{}'?".format(close[0]) if close else ''
@@ -324,6 +243,11 @@ class Bot:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
         return context
+
+    def is_op(self, source):
+        """True if the sender of a message is one of the bot's ops."""
+        return bans.matches_any(self.ops, source.nick, source.user, source.host, source.account,
+                                fold=self.transport.casefold)
 
     def nick_in(self, nick, nicks):
         # irc nicks are case insensitive, so Troll and troll are the same person
@@ -462,25 +386,32 @@ class Bot:
         """Queue a message to send. Safe to call from a plugin's thread."""
         self.in_loop(self.output.put, Outgoing(kind, target, text))
 
+    def send_text(self, kind, target, text):
+        """Queue text to send, a message per line. text can be a list of lines too."""
+        if isinstance(text, (list, tuple)):
+            lines = [line for item in text for line in str(item).splitlines()]
+        else:
+            lines = str(text).splitlines()
+        for line in lines:
+            self.send_message(kind, target, line)
+
     def call_help(self, nick, op):
-        cmds = {k: v.help_text for k, v in plugin.cmds.items()
-                if not (plugin.cmds[k].ops or plugin.cmds[k].hide)}
-        cmds.update({self.cmd_prefix + 'help': 'returns this output to private message'})
+        prefix = self.cmd_prefix
+        commands = [h for h in self.registry.handlers() if h.kind == 'command']
+        cmds = {h.label(prefix): h.help_text for h in commands if not (h.ops or h.hide)}
+        cmds.update({prefix + 'help': 'returns this output to private message'})
         if op:
-            cmds.update({k: v.help_text for k, v in plugin.cmds.items() if plugin.cmds[k].ops})
-            cmds.update({k: v for k, v in self.internal_commands.items()})
+            cmds.update({h.label(prefix): h.help_text for h in commands if h.ops})
+            cmds.update({prefix + k: v for k, v in self.internal_commands.items()})
         helpout = OrderedDict(sorted(cmds.items()))
         for h in helpout:
             self.send_message('privmsg', nick, '{} -- {}'.format(h, helpout[h]))
-        listeners = ', '.join(plugin.lstnrs)
+        listeners = ', '.join(self.registry.listeners)
         self.send_message('privmsg', nick, 'List of listeners: {}'.format(listeners))
         return None
 
-    def call_internal_commands(self, channel, nick, cmd, text, arg, op=None):
-        if not cmd.startswith(self.cmd_prefix):
-            return None
-        else:
-            cmd = cmd[len(self.cmd_prefix):]
+    def call_internal_commands(self, channel, nick, cmd, arg, op=None):
+        # cmd is the command's name, without the prefix
         output = None
         if op is None:
             op = self.nick_in(nick, self.ops)
@@ -502,28 +433,25 @@ class Bot:
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             config_note = self.reload_plugin_config()
-            plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
-                                cmd_prefix=self.cmd_prefix, logger=self.logger)
+            self.registry.load(self.plugin_dir)
             self.check_plugin_config()
             output = plugin.message('Plugins reloaded' + config_note)
         elif cmd == 'enable' and op:
-            if arg in plugin.plugins:
-                if plugin.plugins[arg].enabled:
-                    output = plugin.message("{}: '{}' already enabled".format(nick, arg))
-                else:
-                    plugin.plugins[arg].enable()
-                    output = plugin.message("{}: '{}' enabled!".format(nick, arg))
-            else:
+            if not self.known_name(arg):
                 output = plugin.message("{}: '{}' not found".format(nick, arg))
+            elif arg not in self.disabled:
+                output = plugin.message("{}: '{}' already enabled".format(nick, arg))
+            else:
+                self.disabled.discard(arg)
+                output = plugin.message("{}: '{}' enabled!".format(nick, arg))
         elif cmd == 'disable' and op:
-            if arg in plugin.plugins:
-                if not plugin.plugins[arg].enabled:
-                    output = plugin.message("{}: '{}' already disabled".format(nick, arg))
-                else:
-                    plugin.plugins[arg].disable()
-                    output = plugin.message("{}: '{}' disabled!".format(nick, arg))
-            else:
+            if not self.known_name(arg):
                 output = plugin.message("{}: '{}' not found".format(nick, arg))
+            elif arg in self.disabled:
+                output = plugin.message("{}: '{}' already disabled".format(nick, arg))
+            else:
+                self.disabled.add(arg)
+                output = plugin.message("{}: '{}' disabled!".format(nick, arg))
         elif cmd in ('op', 'deop', 'ban', 'unban') and op and not arg.split():
             output = plugin.message('{}: usage: {}{} <nick>'.format(nick, self.cmd_prefix, cmd))
         elif cmd == 'op' and op:
@@ -565,82 +493,6 @@ class Bot:
             output = plugin.message('currently banned: {}'.format(banned))
         return output
 
-    def check_output(self, output):
-        if output and not isinstance(output, plugin.Output):
-            raise TypeError('plugins must return message() or action(), got {}'.format(
-                type(output).__name__))
-        return output
-
-    def call_plugins(self, privmsg, action, notice, chan, cmd, text, nick_list, nick, user, arg,
-                     msg_type, botnick, op=None, account=None):
-        output = None
-        if op is None:
-            op = self.nick_in(nick, self.ops)
-        if cmd in plugin.cmds:
-            try:
-                if plugin.cmds[cmd].ops and not op:
-                    if plugin.cmds[cmd].ops_msg:
-                        output = plugin.message(plugin.cmds[cmd].ops_msg)
-                elif plugin.cmds[cmd].enabled:
-                    self.logger.debug('executing {}'.format(cmd))
-                    store = self.store(plugin.cmds[cmd].file_name)
-                    output = self.check_output(plugin.cmds[cmd].run(self.Message(
-                        bot=self,
-                        channel=chan,
-                        cmd=cmd,
-                        nick_list=nick_list,
-                        nick=nick,
-                        user=user,
-                        arg=arg,
-                        privmsg=privmsg,
-                        action=action,
-                        notice=notice,
-                        botnick=botnick,
-                        ops=self.ops,
-                        logger=self.logger,
-                        msg_type=msg_type,
-                        is_op=op,
-                        account=account,
-                        store=store,
-                        config=self.config_for(plugin.cmds[cmd].file_name)
-                    )))
-                    store.save_if_changed()
-            except Exception:
-                self.logger.exception('issue with command {}'.format(cmd))
-        else:
-            for lstnr in plugin.lstnrs:
-                if plugin.lstnrs[lstnr].enabled:
-                    try:
-                        self.logger.debug('whispering to listener: {}'.format(lstnr))
-                        store = self.store(plugin.lstnrs[lstnr].file_name)
-                        listen_output = self.check_output(plugin.lstnrs[lstnr].run(self.Message(
-                            bot=self,
-                            channel=chan,
-                            text=text,
-                            nick_list=nick_list,
-                            nick=nick,
-                            user=user,
-                            privmsg=privmsg,
-                            action=action,
-                            notice=notice,
-                            botnick=botnick,
-                            ops=self.ops,
-                            logger=self.logger,
-                            msg_type=msg_type,
-                            is_op=op,
-                            account=account,
-                            store=store,
-                            config=self.config_for(plugin.lstnrs[lstnr].file_name)
-                        )))
-                        store.save_if_changed()
-                        if listen_output:
-                            output = listen_output
-                    except Exception:
-                        self.logger.exception('issue with listener {}'.format(lstnr))
-        if output:
-            self.logger.debug(f'returning output: {output.msg}')
-        return output
-
     async def process_event(self, event):
         nick = event.source.nick
         user = event.source.user
@@ -657,71 +509,81 @@ class Bot:
         if self.require_account and not account:
             self.logger.debug('ignoring {}, not logged in to an account'.format(nick))
             return
-        op = bans.matches_any(self.ops, nick, user, host, account, fold=fold)
+        op = self.is_op(event.source)
         text = event.text
-        msg_type = 'action' if event.kind == 'action' else 'message'
-        if not is_channel(event.target):
-            chan = nick
-            nick_list = [nick]
-        else:
-            chan = event.target
-            nick_list = self.transport.members(chan)
-        if event.kind == 'action':
-            cmd = ''
-        else:
-            cmd = text.split(' ')[0]
+        chan = event.target if is_channel(event.target) else nick
+        # actions only reach listeners, a /me is never a command
+        word, _, rest = text.partition(' ') if event.kind != 'action' else ('', '', '')
+        arg = rest.strip()
         self.logger.debug(
-            'Message info: channel: {}, nick: {}, cmd: {}, text: {}'.format(chan, nick, cmd, text)
+            'Message info: channel: {}, nick: {}, cmd: {}, text: {}'.format(chan, nick, word, text)
         )
-        if len(text.split(' ')) > 1:
-            arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
-        else:
-            arg = ''
-        output = self.call_internal_commands(chan, nick, cmd, text, arg, op=op)
+        name = self.registry.strip_prefix(word) if word else None
+        if name in self.builtins:
+            output = self.call_internal_commands(chan, nick, name, arg, op=op)
+            if output and not self.stopping:
+                self.process_output(chan, output)
+                return
         if self.stopping:
             return
-        if not output:
-            plugin_info = {
-                'chan': chan,
-                'cmd': cmd,
-                'text': text,
-                'nick_list': nick_list,
-                'nick': nick,
-                'user': user,
-                'arg': arg,
-                'privmsg': functools.partial(self.send_message, 'privmsg'),
-                'action': functools.partial(self.send_message, 'action'),
-                'notice': functools.partial(self.send_message, 'notice'),
-                'msg_type': msg_type,
-                'botnick': botnick,
-                'op': op,
-                'account': account
-            }
-            output = await self.run_plugins(plugin_info)
-        if output:
-            self.logger.debug(f'sending output: {output.msg}')
-            self.process_output(chan, output)
+        nick_list = self.transport.members(chan) if is_channel(event.target) else [nick]
+        handler = self.registry.find(word) if word else None
+        if handler:
+            await self.run_handler(handler, event, word, arg, nick_list)
+            return
+        # each listener answers on its own, so a slow or broken one doesn't hold up the rest
+        await asyncio.gather(*(self.run_handler(h, event, None, '', nick_list)
+                               for h in self.registry.listeners.values()))
 
-    async def run_plugins(self, info):
-        # 1.x plugins are plain functions, so they run in a worker thread
+    def known_name(self, name):
+        # what !enable and !disable take: a plugin file, a command or a listener
+        names = set(self.registry.plugins)
+        for handler in self.registry.handlers():
+            names.update((handler.name, handler.label(self.cmd_prefix)))
+        return name in names
+
+    def enabled_for(self, handler, channel):
+        names = {handler.name, handler.label(self.cmd_prefix), handler.plugin}
+        return not names & self.disabled
+
+    async def run_handler(self, handler, event, trigger, arg, nick_list):
+        """Run one command or listener for a message, and send what it returns."""
+        command = handler.kind == 'command'
+        if not self.enabled_for(handler, event.target):
+            return
+        ctx = Context(self, event, plugin=handler.plugin, command=handler.name if command else None,
+                      arg=arg)
+        label = handler.label(self.cmd_prefix)
+        if command and handler.ops and not ctx.is_op:
+            if handler.ops_msg:
+                self.send_text('privmsg', ctx.channel, handler.ops_msg)
+            return
         key = None
-        if info['cmd'] in plugin.cmds:
+        if command:
             # one run at a time per person, so spamming a slow command can't pile them up
-            key = (self.transport.casefold(info['nick']), info['cmd'])
+            key = (self.transport.casefold(ctx.nick), handler.name)
             if key in self.running:
-                self.logger.debug('{} is still running for {}, ignoring'.format(
-                    info['cmd'], info['nick']))
-                return None
+                self.logger.debug('{} is still running for {}, ignoring'.format(label, ctx.nick))
+                return
             self.running.add(key)
+        self.logger.debug('running {} {}'.format(handler.kind, label))
         try:
+            # 1.x plugins are plain functions, so they run in a worker thread
             async with asyncio.timeout(self.handler_timeout):
-                return await asyncio.to_thread(self.call_plugins, **info)
+                output = await asyncio.to_thread(compat.run, handler, ctx, trigger, nick_list,
+                                                 self.ops)
         except TimeoutError:
             self.logger.error('{} took longer than {} seconds, giving up waiting for it'.format(
-                info['cmd'] if key else 'a listener', self.handler_timeout))
-            return None
+                label if command else 'listener ' + label, self.handler_timeout))
+            return
+        except Exception:
+            self.logger.exception('issue with {} {}'.format(handler.kind, label))
+            return
         finally:
             self.running.discard(key)
+        if output:
+            self.logger.debug(f'sending output: {output.msg}')
+            self.process_output(ctx.channel, output)
 
     def process_output(self, chan, output):
         if not output.msg:
@@ -776,7 +638,4 @@ class TwitchBot(Bot):
         self.setup_core()
         self.warn_unknown_options(kwargs)
         self.setup_bans(nickname, kwargs)
-        self.internal_commands = {self.cmd_prefix + k: v for k, v in self.internal_commands.items()}
-        plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
-                            cmd_prefix=self.cmd_prefix, logger=self.logger)
-        self.check_plugin_config()
+        self.setup_plugins()

@@ -3,19 +3,11 @@ import logging
 import pytest
 
 from pinhook import bot as pinhook_bot
-from pinhook import plugin
 
 
 @pytest.fixture(autouse=True)
-def clear_plugins():
-    # plugin registries are module level, so clear them between tests
-    plugin.cmds.clear()
-    plugin.lstnrs.clear()
-    plugin.plugins.clear()
+def close_logs():
     yield
-    plugin.cmds.clear()
-    plugin.lstnrs.clear()
-    plugin.plugins.clear()
     # close log files the bots opened during the test
     for name in list(logging.root.manager.loggerDict):
         if name == 'bot' or name.startswith('bot.'):

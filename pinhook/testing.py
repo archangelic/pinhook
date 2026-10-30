@@ -119,6 +119,9 @@ class FakeTransport:
     def members(self, channel):
         return self.channels[channel].users() if channel in self.channels else []
 
+    def joined(self):
+        return list(self.channels)
+
     def supports(self, feature):
         return feature == 'account-tag'
 
@@ -232,4 +235,5 @@ class TestBot(Bot):
         if self._errors.records:
             record = self._errors.records.pop(0)
             self._errors.records.clear()
-            raise PluginError(record.getMessage()) from record.exc_info[1]
+            error = record.exc_info[1]
+            raise PluginError('{}: {}'.format(record.getMessage(), error)) from error
