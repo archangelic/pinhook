@@ -299,3 +299,31 @@ def test_server_time_and_message_ids_come_from_the_server(names, users, start_bo
     mal = users('mallory', channel=channel)
     start_bot(mal, plugins={'details': DETAILS})
     assert messages(mal.say('!when', channel, bot)) == ['time=True msgid=True tagged=True']
+
+
+WHOIS = '''
+from pinhook import command
+
+
+@command('whois')
+async def whois(ctx, nick: str):
+    info = await ctx.whois(nick)
+    if info is None:
+        await ctx.reply('no ' + nick)
+    else:
+        await ctx.reply('{} account={} in={}'.format(info.nick, info.account,
+                                                    channel_in(info, ctx.channel)))
+
+
+def channel_in(info, channel):
+    return channel in info.channels
+'''
+
+
+def test_whois_asks_the_server(names, accounts, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', 'malacct', channel)
+    start_bot(mal, plugins={'whois': WHOIS})
+    assert messages(mal.say('!whois mallory', channel, bot)) == [
+        'mallory account=malacct in=True']
+    assert messages(mal.say('!whois nobodyhere', channel, bot)) == ['no nobodyhere']

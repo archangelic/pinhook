@@ -27,7 +27,8 @@ class Context:
 
     Attributes:
         event: what happened: 'message', 'notice', 'join', 'part', 'kick', 'quit',
-            'nick', 'topic', 'invite', 'mode', 'connected' or 'disconnected'.
+            'nick', 'topic', 'invite', 'mode', 'netsplit', 'netjoin', 'connected' or
+            'disconnected'.
         nick, user, host, account: who sent it, or who did it. account is their
             services account, or None when the server doesn't say.
         channel: where to answer: the channel, or the sender for a private message.
@@ -44,6 +45,8 @@ class Context:
             invited to a channel the bot is in.
         new_nick: the new nick, for a nick change. nick is the old one.
         modes: for a mode change, like ['+o', 'mal'].
+        nicks: everyone who left in a netsplit, or came back in a netjoin. text holds
+            the two servers.
         command: the command's name, without a prefix, for a command. None otherwise.
         arg: everything after the command word, for a command.
         time: when the message was sent, timezone-aware. The server's time when it says.
@@ -81,6 +84,7 @@ class Context:
         self.invited = event.data.get('invited')
         self.new_nick = event.data.get('new_nick')
         self.modes = list(event.data.get('modes', []))
+        self.nicks = tuple(event.data.get('nicks', ()))
         self.command = command
         self.arg = arg
         self.msgid = self.tags.get('msgid')
@@ -107,6 +111,11 @@ class Context:
             if fold(member.nick) == fold(nick):
                 return member
         return None
+
+    async def whois(self, nick):
+        """Ask the server about nick, and return a Whois, or None if there's no one by
+        that name. This waits for the server, unlike members()."""
+        return await self._bot.transport.whois(nick)
 
     def supports(self, feature):
         """True if the network supports feature, like 'account-tag'."""

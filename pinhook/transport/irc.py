@@ -13,7 +13,7 @@ import ssl
 import irctokens
 
 from ..__version__ import __version__
-from .base import Event, Limits, Source, casefold, is_channel
+from .base import Event, Limits, Source, Whois, casefold, is_channel
 from .members import Tracker
 
 # the longest !user@host a server shows for the bot, until it has seen its own
@@ -21,7 +21,9 @@ HOSTMASK_GUESS = len('!') + 10 + len('@') + 63
 # what the bot asks for when the server offers it
 WANTED_CAPS = ('account-tag', 'multi-prefix', 'userhost-in-names', 'extended-join',
                'account-notify', 'away-notify', 'chghost', 'setname', 'server-time',
-               'message-tags', 'invite-notify', 'cap-notify')
+               'message-tags', 'invite-notify', 'cap-notify', 'batch', 'labeled-response')
+# the WHOIS replies, by numeric
+WHOIS_REPLIES = {'311', '312', '313', '317', '319', '330', '301', '335', '671', '318', '401'}
 # marks the bot's own WHOX queries, so their replies can be told apart
 WHOX_TOKEN = '152'
 
@@ -69,7 +71,11 @@ class IrcTransport:
         self.reset()
 
     def reset(self):
-        # what a connection learns, forgotten when it drops
+        # what a connection learns, forgotten when it drops. A WHOIS still waiting won't
+        # be answered now
+        for waiting in getattr(self, 'whois_waiting', {}).values():
+            if not waiting.done():
+                waiting.set_result(None)
         self.nick = self.nickname
         self.registered = False
         self.isupport = {}
@@ -78,6 +84,13 @@ class IrcTransport:
         self.channel_names = {}
         self.server_caps = {}
         self.caps = set()
+        # open batches, by id: their type, parameters, label and the lines in them
+        self.batches = {}
+        # whois requests waiting for an answer, by casefolded nick, and their labels
+        self.whois_waiting = {}
+        self.whois_lines = {}
+        self.labels = {}
+        self.next_label = 0
         self.negotiating = False
         self.authenticating = False
         self.sasl_logged_in = False
@@ -248,10 +261,10 @@ class IrcTransport:
         self.write('NICK', [self.nickname])
         self.write('USER', [self.nickname, '0', '*', self.nickname])
 
-    def write(self, command, params):
+    def write(self, command, params, tags=None):
         if not self.writer:
             return
-        line = irctokens.build(command, params).format()
+        line = irctokens.build(command, params, tags=tags).format()
         # always valid utf-8, which a UTF8ONLY server insists on, even from a plugin's
         # broken text
         self.writer.write(line.encode('utf-8', 'replace') + b'\r\n')
@@ -279,9 +292,115 @@ class IrcTransport:
 
     def handle(self, line):
         """Act on one line from the server."""
+        tags = line.tags or {}
+        if line.command.upper() == 'BATCH':
+            self.on_batch(line)
+            return
+        batch = self.batches.get(tags.get('batch'))
+        if batch is not None:
+            # held until the batch ends, then handled together
+            batch['lines'].append(line)
+            return
+        if tags.get('label') in self.labels:
+            # labeled-response: a one line answer to a request the bot tagged
+            self.answered(self.labels[tags['label']], [line])
+            return
+        if line.command in WHOIS_REPLIES and self.whois_reply(line):
+            return
         name = self.handlers.get(line.command.upper())
         if name:
             getattr(self, name)(line)
+
+    # batches
+
+    def on_batch(self, line):
+        # BATCH +id type [params...] opens one, BATCH -id closes it
+        if not line.params:
+            return
+        ref = line.params[0]
+        if ref.startswith('+') and len(line.params) > 1:
+            self.batches[ref[1:]] = {'type': line.params[1], 'params': line.params[2:],
+                                     'label': (line.tags or {}).get('label'), 'lines': []}
+        elif ref.startswith('-'):
+            batch = self.batches.pop(ref[1:], None)
+            if batch is not None:
+                self.batch_ended(batch)
+
+    def batch_ended(self, batch):
+        if batch['type'] == 'labeled-response' and batch['label'] in self.labels:
+            self.answered(self.labels[batch['label']], batch['lines'])
+        elif batch['type'] in ('netsplit', 'netjoin'):
+            self.net_change(batch)
+        else:
+            # a batch pinhook doesn't treat specially is handled line by line
+            for line in batch['lines']:
+                self.handle(line)
+
+    def net_change(self, batch):
+        # everyone in a netsplit quits, and in a netjoin joins, as one event
+        nicks = []
+        for line in batch['lines']:
+            if line.command.upper() == ('QUIT' if batch['type'] == 'netsplit' else 'JOIN'):
+                nicks.append(line.hostmask.nickname)
+                if batch['type'] == 'netsplit':
+                    self.tracker.quit(line.hostmask.nickname)
+                else:
+                    self.on_join(line, emit=False)
+            else:
+                self.handle(line)
+        if nicks:
+            self.emit(Event(batch['type'], None, '', ' '.join(batch['params']),
+                            data={'nicks': list(dict.fromkeys(nicks))}))
+
+    # whois
+
+    async def whois(self, nick, timeout=10):
+        key = self.casefold(nick)
+        waiting = self.whois_waiting.get(key)
+        if waiting is None:
+            if not self.writer:
+                return None
+            waiting = asyncio.get_running_loop().create_future()
+            self.whois_waiting[key] = waiting
+            self.whois_lines[key] = []
+            if 'labeled-response' in self.caps:
+                self.next_label += 1
+                label = 'ph{}'.format(self.next_label)
+                self.labels[label] = key
+                self.write('WHOIS', [nick], tags={'label': label})
+            else:
+                self.write('WHOIS', [nick])
+        try:
+            async with asyncio.timeout(timeout):
+                return await asyncio.shield(waiting)
+        except TimeoutError:
+            self.logger.warning('the server never answered a WHOIS for {}'.format(nick))
+            self.whois_done(key, None)
+            return None
+
+    def whois_reply(self, line):
+        # without labeled-response, replies are matched to a request by their nick
+        if len(line.params) < 2:
+            return False
+        key = self.casefold(line.params[1])
+        if key not in self.whois_waiting or key in self.labels.values():
+            return False
+        self.whois_lines[key].append(line)
+        if line.command in ('318', '401'):
+            self.answered(key, [])
+        return True
+
+    def answered(self, key, lines):
+        lines = self.whois_lines.get(key, []) + lines
+        self.whois_done(key, parse_whois(lines, self.prefixes()))
+
+    def whois_done(self, key, result):
+        waiting = self.whois_waiting.pop(key, None)
+        self.whois_lines.pop(key, None)
+        for label in [label for label, owner in self.labels.items() if owner == key]:
+            del self.labels[label]
+        if waiting is not None and not waiting.done():
+            waiting.set_result(result)
 
     def on_ping(self, line):
         self.write('PONG', line.params)
@@ -497,7 +616,7 @@ class IrcTransport:
         elif account:
             self.tracker.update(nick, account=account)
 
-    def on_join(self, line):
+    def on_join(self, line, emit=True):
         nick = line.hostmask.nickname
         channel = line.params[0]
         if self.is_me(nick):
@@ -512,7 +631,8 @@ class IrcTransport:
         if len(line.params) >= 3:
             self.tracker.update(nick, realname=line.params[2])
             self.logged_in(nick, line.params[1])
-        self.emit(Event('join', self.source(line), channel, tags=self.tags(line)))
+        if emit:
+            self.emit(Event('join', self.source(line), channel, tags=self.tags(line)))
 
     def logged_in(self, nick, account):
         if account in ('*', '0', ''):
@@ -680,6 +800,38 @@ class TwitchTransport(IrcTransport):
         self.logger.info('requesting permissions')
         for cap in ('twitch.tv/membership', 'twitch.tv/tags', 'twitch.tv/commands'):
             self.write('CAP', ['REQ', cap])
+
+
+def parse_whois(lines, symbols):
+    """A Whois from the server's WHOIS replies, or None for no such nick."""
+    found = {}
+    for line in lines:
+        p = line.params
+        if line.command == '401':
+            return None
+        if line.command == '311' and len(p) >= 6:
+            found.update(nick=p[1], user=p[2], host=p[3], realname=p[5])
+        elif line.command == '319' and len(p) >= 3:
+            channels = found.setdefault('channels', [])
+            channels.extend(name.lstrip(''.join(symbols)) for name in p[2].split())
+        elif line.command == '330' and len(p) >= 3:
+            found['account'] = p[2]
+        elif line.command == '301' and len(p) >= 3:
+            found['away'] = p[2]
+        elif line.command == '312' and len(p) >= 3:
+            found['server'] = p[2]
+        elif line.command == '317' and len(p) >= 3 and p[2].isdigit():
+            found['idle'] = int(p[2])
+        elif line.command == '313':
+            found['operator'] = True
+        elif line.command == '335':
+            found['is_bot'] = True
+        elif line.command == '671':
+            found['secure'] = True
+    if 'nick' not in found:
+        return None
+    found['channels'] = tuple(found.get('channels', ()))
+    return Whois(**found)
 
 
 def text_room(nick, kind, target, prefix='', hostmask_length=HOSTMASK_GUESS):

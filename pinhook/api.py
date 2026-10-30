@@ -15,7 +15,7 @@ import re
 
 # what @on handles. message is every message that isn't a command, notice is notices only
 EVENTS = {'message', 'notice', 'join', 'part', 'kick', 'quit', 'nick', 'topic', 'invite', 'mode',
-          'connected', 'disconnected'}
+          'netsplit', 'netjoin', 'connected', 'disconnected'}
 # command names are written without a prefix
 NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]*$')
 
@@ -99,7 +99,8 @@ def on(event, timeout=None):
 
     Args:
         event: one of message, notice, join, part, kick, quit, nick, topic, invite, mode,
-            connected or disconnected.
+            netsplit, netjoin, connected or disconnected. A netsplit or netjoin is one event
+            for everyone who left or came back, with their nicks in ctx.nicks.
         timeout: seconds before the bot stops waiting for it, instead of the bot's default.
     """
     if event not in EVENTS:

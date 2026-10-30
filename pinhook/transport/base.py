@@ -47,6 +47,28 @@ class Member:
         return bool(self.modes & VOICED_MODES)
 
 
+@dataclass(frozen=True)
+class Whois:
+    """What the server says about someone, from await ctx.whois(nick).
+
+    channels are the ones the server shows, which leaves out secret channels the
+    bot isn't in. away is their away message, or None. idle is seconds since they
+    last spoke, when the server says.
+    """
+    nick: str
+    user: str | None = None
+    host: str | None = None
+    realname: str | None = None
+    account: str | None = None
+    channels: tuple[str, ...] = ()
+    away: str | None = None
+    server: str | None = None
+    idle: int | None = None
+    operator: bool = False
+    is_bot: bool = False
+    secure: bool = False
+
+
 # the member modes that make someone a channel operator, or voiced or better
 CHANOP_MODES = frozenset('qao')
 VOICED_MODES = frozenset('qaohv')
@@ -131,6 +153,10 @@ class Transport(Protocol):
 
     def joined(self) -> list[str]:
         """The channels the bot is in."""
+        ...
+
+    async def whois(self, nick: str, timeout: float = 10) -> Whois | None:
+        """Ask the server about nick. None if there's no one by that name, or no answer."""
         ...
 
     def member_modes(self, channel: str, nick: str) -> frozenset[str]:

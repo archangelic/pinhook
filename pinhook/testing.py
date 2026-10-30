@@ -14,7 +14,7 @@ import weakref
 
 from .bot import Bot
 from .store import Store
-from .transport.base import Event, Limits, Member, Source, casefold
+from .transport.base import Event, Limits, Member, Source, Whois, casefold
 from .transport.irc import text_room
 
 # one thing the bot sent, kind is 'message', 'action' or 'notice'
@@ -112,7 +112,11 @@ class Driver:
                     bot.dispatch(event)
             running = {task for task in bot.handlers if not task.done()}
             if running:
-                await asyncio.wait(running)
+                done, _ = await asyncio.wait(running, timeout=0.01)
+                # a plugin waiting for the server to answer, which the test sends next
+                if (not done and getattr(bot.transport, 'whois_waiting', None)
+                        and bot.transport.queue.empty()):
+                    return
             elif bot.output.targets:
                 await bot.output.flush()
             else:
@@ -160,6 +164,19 @@ class FakeTransport:
 
     def joined(self):
         return list(self.channels)
+
+    async def whois(self, nick, timeout=10):
+        # what the fake network knows: the channels they're in and their account
+        fold = self.casefold
+        channels = [name for name, channel in self.channels.items()
+                    if any(fold(n) == fold(nick) for n in channel.nicks)]
+        if not channels:
+            return None
+        account = next((channel.nicks[n] for channel in self.channels.values()
+                        for n in channel.nicks if fold(n) == fold(nick) and channel.nicks[n]),
+                       None)
+        return Whois(nick, user=nick, host='example.com', account=account,
+                     channels=tuple(channels))
 
     def member_modes(self, channel, nick):
         if channel not in self.channels:
@@ -275,14 +292,16 @@ class TestBot(Bot):
               account=None, **data):
         """Something other than a message happens, and returns what the bot sent, as Sent.
 
-        kind is join, part, kick, quit, nick, topic, invite, mode or notice. channel
-        is the bot's first channel unless given, or none for nick and quit. data is
+        kind is join, part, kick, quit, nick, topic, invite, mode, netsplit, netjoin
+        or notice. channel is the bot's first channel unless given, or none for nick,
+        quit, netsplit and netjoin. data is
         the rest: kicked='troll' for a kick, new_nick='mal_' for a nick change,
         modes=['+o', 'mal'] for a mode change, which gives mal +o in the channel the
-        way a real one would, and invited='ana' for an invite of someone other than
-        the bot. A notice's channel can be the bot's nick.
+        way a real one would, invited='ana' for an invite of someone other than
+        the bot, and nicks=['ana', 'bob'] for a netsplit or netjoin, with the two
+        servers as text. A notice's channel can be the bot's nick.
         """
-        if kind in ('nick', 'quit'):
+        if kind in ('nick', 'quit', 'netsplit', 'netjoin'):
             target = ''
         else:
             target = channel or self.chanlist[0]
@@ -296,7 +315,9 @@ class TestBot(Bot):
         elif kind == 'invite':
             data.setdefault('invited', self.transport.nick)
         tags = {'account': account} if account else {}
-        source = Source(nick, user or nick, host, account)
+        # a netsplit or netjoin comes from the network, not anyone in particular
+        source = None if kind in ('netsplit', 'netjoin') else Source(nick, user or nick, host,
+                                                                     account)
         if kind == 'notice':
             event = Event('message', source, target, text, 'notice', tags)
         else:
