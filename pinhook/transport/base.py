@@ -42,6 +42,15 @@ class Outgoing:
     text: str
 
 
+@dataclass(frozen=True)
+class Limits:
+    """How fast the output queue sends: burst lines at once, then one every interval
+    seconds. Each target holds at most backlog lines waiting to be sent."""
+    burst: int = 4
+    interval: float = 2.0
+    backlog: int = 50
+
+
 class MessageTooLong(ValueError):
     """The text doesn't fit in one line, and this transport doesn't split it."""
 
