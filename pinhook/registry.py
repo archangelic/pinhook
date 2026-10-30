@@ -107,14 +107,18 @@ class Registry:
                 sys.modules[package] = module
 
     def import_file(self, name, path):
-        # the decorators in pinhook.plugin record what the file registers while it runs
+        # compiled from the source every time: python's bytecode cache goes by the file's
+        # size and mtime in whole seconds, so a quick edit before !reload could load the old code
         spec = importlib.util.spec_from_file_location(self.package + '.' + name, path)
         module = importlib.util.module_from_spec(spec)
+        with open(path, 'rb') as f:
+            code = compile(f.read(), path, 'exec')
+        # the decorators in pinhook.plugin record what the file registers while it runs
         with plugin._lock:
             plugin._collector = []
             try:
                 sys.modules[spec.name] = module
-                spec.loader.exec_module(module)
+                exec(code, module.__dict__)
                 return plugin._collector
             finally:
                 plugin._collector = None

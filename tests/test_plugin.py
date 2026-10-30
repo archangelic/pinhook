@@ -39,6 +39,22 @@ def test_reload_picks_up_plugin_changes(tmp_path):
     assert bot.registry.commands['cmd'].help_text == 'new'
 
 
+def test_reload_never_uses_a_stale_bytecode_cache(tmp_path):
+    # an edit that keeps the file's size, within the same second, is still picked up
+    import os
+    path = tmp_path / 'same.py'
+    path.write_text("import pinhook.plugin as p\n"
+                    "@p.command('!a', help_text='aaa')\ndef a(m): pass\n")
+    stamp = os.stat(path).st_mtime
+    bot = TestBot(plugin_dir=str(tmp_path))
+    path.write_text("import pinhook.plugin as p\n"
+                    "@p.command('!a', help_text='bbb')\ndef a(m): pass\n")
+    os.utime(path, (stamp, stamp))
+    bot.registry.load(bot.plugin_dir)
+    assert bot.registry.commands['a'].help_text == 'bbb'
+    assert not (tmp_path / '__pycache__').exists()
+
+
 def test_plugin_named_like_stdlib_module_does_not_replace_it(tmp_path):
     import json
     json_file = json.__file__

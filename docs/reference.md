@@ -14,7 +14,7 @@ Everything a plugin or bot script uses, generated from pinhook's own code. For h
 
 ## The message
 
-::: pinhook.bot.Bot.Message
+::: pinhook.compat.Message
     options:
       members: [reply, send, action, notice, bot]
 
@@ -49,7 +49,7 @@ Everything a plugin or bot script uses, generated from pinhook's own code. For h
 
 ::: pinhook.testing.PluginError
 
-## Deprecated
+## Removed in 2.0
 
 ::: pinhook.plugin.register
 
