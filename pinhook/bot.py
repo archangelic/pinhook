@@ -60,6 +60,7 @@ class Bot:
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
         'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
+        'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -96,6 +97,13 @@ class Bot:
         self.require_account = kwargs.get('require_account', False)
         self.sasl_password = kwargs.get('sasl_password') or None
         self.sasl_account = kwargs.get('sasl_account') or nickname
+        mechanism = str(kwargs.get('sasl_mechanism') or 'auto')
+        self.sasl_mechanism = 'auto' if mechanism.lower() == 'auto' else mechanism.upper()
+        if self.sasl_mechanism not in ('auto', 'PLAIN', 'SCRAM-SHA-256', 'EXTERNAL'):
+            raise ValueError('sasl_mechanism must be auto, PLAIN, SCRAM-SHA-256 or EXTERNAL')
+        # a client certificate, for SASL EXTERNAL or a server that wants one
+        self.ssl_certfile = kwargs.get('ssl_certfile') or None
+        self.ssl_keyfile = kwargs.get('ssl_keyfile') or None
         self.server = server
         self.chanlist = channels
         self.bot_nick = nickname
@@ -287,6 +295,9 @@ class Bot:
         if not self.ssl_verify:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
+        if getattr(self, 'ssl_certfile', None):
+            context.load_cert_chain(self.path(self.ssl_certfile),
+                                    self.path(self.ssl_keyfile) if self.ssl_keyfile else None)
         return context
 
     def is_op(self, source):
@@ -319,7 +330,10 @@ class Bot:
             self.logger, server, self.port, nickname, password=self.server_pass,
             ssl_context=self.ssl_context() if self.ssl_required else None,
             sasl_account=self.sasl_account, sasl_password=self.sasl_password,
-            nickserv=self.nickserv, ns_pass=self.ns_pass, bot_mode=self.bot_mode)
+            nickserv=self.nickserv, ns_pass=self.ns_pass, bot_mode=self.bot_mode,
+            sasl_mechanism=self.sasl_mechanism,
+            client_cert=bool(self.ssl_certfile) and self.ssl_required,
+            sts_path=os.path.join(self.data_dir, 'sts.json'))
 
     def setup_core(self):
         # set once the bot is running, plugins in worker threads send through it

@@ -121,8 +121,19 @@ def test_sasl_gets_the_reserved_nick_and_logs_in(names, users, start_bot):
     watcher.send('WHOIS ' + bot)
     assert 'is logged in as' in watcher.wait_for(' 330 ')
     log = running.log()
-    assert 'logged in as {} with SASL'.format(bot) in log
+    # ergo offers SCRAM-SHA-256, so the password never crossed the network
+    assert 'logged in as {} with SASL SCRAM-SHA-256'.format(bot) in log
     assert 'in use' not in log and 'identifying with nickserv' not in log
+
+
+def test_sasl_plain_still_works_when_chosen(names, users, start_bot):
+    bot, channel = names
+    register(bot, 'botpassword')
+    watcher = users('watcher', channel=channel)
+    running = start_bot(watcher, sasl_password='botpassword', sasl_mechanism='PLAIN')
+    watcher.send('WHOIS ' + bot)
+    assert 'is logged in as' in watcher.wait_for(' 330 ')
+    assert 'logged in as {} with SASL PLAIN'.format(bot) in running.log()
 
 
 def test_wrong_sasl_password_is_reported_and_the_bot_still_connects(names, users, start_bot):

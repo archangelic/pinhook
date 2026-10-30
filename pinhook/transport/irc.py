@@ -7,13 +7,18 @@ split to fit IRC's 512 byte lines.
 import asyncio
 import base64
 import contextlib
+import json
+import os
 import socket
 import ssl
+import time
 
 import irctokens
 
 from ..__version__ import __version__
 from .base import Event, Limits, Source, Whois, casefold, is_channel
+from ..store import write_json
+from . import sasl
 from .members import Tracker
 
 # the longest !user@host a server shows for the bot, until it has seen its own
@@ -35,7 +40,12 @@ class IrcTransport:
         logger: the bot's logger.
         server, port, nickname, password: where to connect and who as.
         ssl_context: connect with ssl, using this context. None means no ssl.
-        sasl_account, sasl_password: log in with SASL PLAIN, if a password is given.
+        sasl_account, sasl_password: log in with SASL, if a password is given. SCRAM-SHA-256
+            when the server offers it, PLAIN otherwise.
+        sasl_mechanism: 'auto', or the one SASL mechanism to use.
+        client_cert: True if ssl_context has a client certificate, so SASL EXTERNAL can
+            log in with it.
+        sts_path: where servers' STS policies are kept, or None to keep them in memory.
         nickserv, ns_pass: identify with NickServ instead, if SASL didn't log in.
         bot_mode: set the server's bot mode on the bot, if it has one.
     """
@@ -51,7 +61,7 @@ class IrcTransport:
 
     def __init__(self, logger, server, port, nickname, password=None, ssl_context=None,
                  sasl_account=None, sasl_password=None, nickserv='NickServ', ns_pass=None,
-                 bot_mode=True):
+                 bot_mode=True, sasl_mechanism='auto', client_cert=False, sts_path=None):
         self.logger = logger
         self.server = server
         self.port = port
@@ -60,6 +70,12 @@ class IrcTransport:
         self.ssl_context = ssl_context
         self.sasl_account = sasl_account or nickname
         self.sasl_password = sasl_password
+        self.sasl_mechanism = sasl_mechanism
+        self.client_cert = client_cert
+        # STS: servers that asked to only be reached over TLS, and on which port
+        self.sts_path = sts_path
+        self.sts_policies = self.load_sts()
+        self.sts_upgrade = False
         self.nickserv = nickserv
         self.ns_pass = ns_pass
         self.bot_mode = bot_mode
@@ -94,6 +110,9 @@ class IrcTransport:
         self.negotiating = False
         self.authenticating = False
         self.sasl_logged_in = False
+        # the SASL login under way, and the challenge it's been sent so far
+        self.sasl = None
+        self.challenge = ''
         self.hostmask_length = HOSTMASK_GUESS
 
     # the transport interface
@@ -111,6 +130,10 @@ class IrcTransport:
                     retry = self.retry_first
             if self.closing:
                 break
+            if self.sts_upgrade:
+                # the server asked for TLS, so reconnect with it straight away
+                self.sts_upgrade = False
+                continue
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(self.closed.wait(), retry)
             retry = min(retry * 2, self.retry_most)
@@ -174,6 +197,7 @@ class IrcTransport:
     # connecting
 
     async def open(self):
+        self.follow_sts()
         try:
             async with asyncio.timeout(30):
                 return await self.open_connection(
@@ -282,6 +306,7 @@ class IrcTransport:
         'AUTHENTICATE': 'on_authenticate', '903': 'on_sasl_success',
         '902': 'on_sasl_fail', '904': 'on_sasl_fail', '905': 'on_sasl_fail', '906': 'on_sasl_fail',
         '001': 'on_welcome', '005': 'on_isupport', '433': 'on_nick_in_use', '353': 'on_names',
+        '376': 'on_registered', '422': 'on_registered', '731': 'on_monitor_offline',
         '352': 'on_who', '354': 'on_whox',
         'JOIN': 'on_join', 'PART': 'on_part', 'KICK': 'on_kick', 'QUIT': 'on_quit',
         'NICK': 'on_nick', 'PRIVMSG': 'on_privmsg', 'NOTICE': 'on_notice', 'TOPIC': 'on_topic',
@@ -415,6 +440,8 @@ class IrcTransport:
         subcommand, args = line.params[1], line.params[2:]
         if subcommand == 'LS' and self.negotiating:
             self.offered(args[-1])
+            if 'sts' in self.server_caps and self.sts_offered():
+                return
             # a * means the list carries on in another line
             if len(args) > 1 and args[0] == '*':
                 return
@@ -433,13 +460,12 @@ class IrcTransport:
             acked = args[-1].split()
             self.caps.update(cap for cap in acked if not cap.startswith('-'))
             self.caps.difference_update(cap[1:] for cap in acked if cap.startswith('-'))
-            if 'sasl' in acked and self.sasl_password and not self.sasl_logged_in:
-                # carries on in on_authenticate, then on_sasl_success or a failure
-                self.authenticating = True
-                self.write('AUTHENTICATE', ['PLAIN'])
-                return
+            if 'sasl' in acked and self.wants_sasl() and not self.sasl_logged_in:
+                if self.start_sasl():
+                    # carries on in on_authenticate, then on_sasl_success or a failure
+                    return
         elif subcommand == 'NAK':
-            if self.sasl_password and 'sasl' in args[-1].split():
+            if self.wants_sasl() and 'sasl' in args[-1].split():
                 self.logger.error("the server refused SASL, so the bot isn't logged in")
         else:
             return
@@ -459,15 +485,13 @@ class IrcTransport:
         # the caps worth asking for, out of names, or out of everything offered
         names = self.server_caps if names is None else names
         wanted = [cap for cap in WANTED_CAPS if cap in names and cap not in self.caps]
-        if self.sasl_password and not self.sasl_logged_in and 'sasl' in names:
-            if self.sasl_offered():
+        if self.wants_sasl() and not self.sasl_logged_in and 'sasl' in names:
+            if self.mechanism():
                 wanted.append('sasl')
             else:
-                self.logger.error("sasl_password is set, but this server doesn't offer "
-                                  "SASL PLAIN logins, so the bot isn't logged in")
-        elif self.sasl_password and during_registration and 'sasl' not in names:
-            self.logger.error("sasl_password is set, but this server doesn't offer "
-                              "SASL PLAIN logins, so the bot isn't logged in")
+                self.no_usable_sasl()
+        elif self.wants_sasl() and during_registration and 'sasl' not in names:
+            self.no_usable_sasl()
         return wanted
 
     def request(self, caps):
@@ -475,12 +499,48 @@ class IrcTransport:
             self.write('CAP', ['REQ', ' '.join(caps)])
         return bool(caps)
 
-    def sasl_offered(self):
-        # sasl=PLAIN,EXTERNAL lists the methods, plain sasl means the server didn't say
-        if 'sasl' not in self.server_caps:
+    def wants_sasl(self):
+        return bool(self.sasl_password) or self.client_cert
+
+    def mechanism(self):
+        # sasl=PLAIN,EXTERNAL lists the mechanisms, plain sasl means the server didn't say
+        offered = self.server_caps.get('sasl')
+        listed = set(offered.upper().split(',')) if offered else None
+        return sasl.choose(listed, bool(self.sasl_password), self.client_cert,
+                           self.sasl_mechanism)
+
+    def no_usable_sasl(self):
+        offered = self.server_caps.get('sasl')
+        what = ('it offers {}'.format(offered.replace(',', ', ')) if offered
+                else "it doesn't offer SASL")
+        self.logger.error("the bot can't log in with SASL here, so it isn't logged in: {}, "
+                          "and the bot has {}".format(what, self.login_details()))
+
+    def login_details(self):
+        has = []
+        if self.sasl_password:
+            has.append('a password')
+        if self.client_cert:
+            has.append('a client certificate')
+        if self.sasl_mechanism != 'auto':
+            has.append('sasl_mechanism {}'.format(self.sasl_mechanism))
+        return ' and '.join(has) or 'nothing to log in with'
+
+    def start_sasl(self):
+        name = self.mechanism()
+        if name is None:
+            self.no_usable_sasl()
             return False
-        methods = self.server_caps['sasl']
-        return not methods or 'PLAIN' in methods.upper().split(',')
+        if name == 'EXTERNAL':
+            self.sasl = sasl.External()
+        elif name == 'SCRAM-SHA-256':
+            self.sasl = sasl.ScramSha256(self.sasl_account, self.sasl_password)
+        else:
+            self.sasl = sasl.Plain(self.sasl_account, self.sasl_password)
+        self.authenticating = True
+        self.challenge = ''
+        self.write('AUTHENTICATE', [name])
+        return True
 
     def end_caps(self):
         # registration waits until we say we're done
@@ -488,30 +548,102 @@ class IrcTransport:
         self.write('CAP', ['END'])
 
     def on_authenticate(self, line):
-        if line.params[0] != '+' or not self.authenticating:
+        if not self.authenticating or self.sasl is None or not line.params:
             return
-        login = '\0{}\0{}'.format(self.sasl_account, self.sasl_password)
-        encoded = base64.b64encode(login.encode('utf-8')).decode('ascii')
-        # the spec sends it in 400 byte pieces, and + after a last piece that's exactly 400
-        for i in range(0, len(encoded), 400):
-            self.write('AUTHENTICATE', [encoded[i:i + 400]])
-        if len(encoded) % 400 == 0:
-            self.write('AUTHENTICATE', ['+'])
+        # a challenge comes in 400 byte pieces, the last one shorter, or + for empty
+        piece = line.params[0]
+        if piece != '+':
+            self.challenge += piece
+            if len(piece) == 400:
+                return
+        try:
+            challenge = base64.b64decode(self.challenge)
+            self.challenge = ''
+            response = self.sasl.respond(challenge)
+        except (ValueError, sasl.SaslError) as e:
+            self.logger.error('SASL login as {} stopped: {}'.format(self.sasl_account, e))
+            self.write('AUTHENTICATE', ['*'])
+            return
+        for chunk in sasl.encode(response):
+            self.write('AUTHENTICATE', [chunk])
 
     def on_sasl_success(self, line):
         self.sasl_logged_in = True
         self.authenticating = False
-        self.logger.info('logged in as {} with SASL'.format(self.sasl_account))
+        self.logger.info('logged in as {} with SASL {}'.format(self.sasl_account,
+                                                               self.sasl.name))
         if self.negotiating:
             self.end_caps()
 
     def on_sasl_fail(self, line):
         reason = line.params[-1] if len(line.params) > 1 else 'no reason given'
-        self.logger.error("SASL login as {} failed ({}), check sasl_account and sasl_password"
-                          .format(self.sasl_account, reason))
+        if isinstance(self.sasl, sasl.External):
+            advice = 'check the client certificate is added to the account'
+        else:
+            advice = 'check sasl_account and sasl_password'
+        self.logger.error('SASL login as {} failed ({}), {}'.format(
+            self.sasl_account, reason, advice))
         self.authenticating = False
         if self.negotiating:
             self.end_caps()
+
+    # STS, a server's request to only be reached over TLS
+
+    def load_sts(self):
+        if not self.sts_path or not os.path.exists(self.sts_path):
+            return {}
+        try:
+            with open(self.sts_path) as f:
+                policies = json.load(f)
+        except ValueError:
+            self.logger.warning("couldn't read {}, so STS policies start afresh".format(
+                self.sts_path))
+            return {}
+        return policies if isinstance(policies, dict) else {}
+
+    def save_sts(self):
+        if self.sts_path:
+            write_json(self.sts_path, self.sts_policies)
+
+    def follow_sts(self):
+        # a remembered policy turns a plain connection into a TLS one, on the policy's port
+        policy = self.sts_policies.get(self.server.lower())
+        if self.ssl_context is not None or not policy:
+            return
+        if policy.get('expires', 0) < time.time():
+            del self.sts_policies[self.server.lower()]
+            self.save_sts()
+            return
+        self.logger.info('{} asked to only be reached over TLS, so connecting to port {} '
+                         'with TLS'.format(self.server, policy['port']))
+        self.port = policy['port']
+        self.ssl_context = ssl.create_default_context()
+
+    def sts_offered(self):
+        """Act on sts in CAP LS. True if the bot is reconnecting with TLS."""
+        values = dict(part.partition('=')[::2] for part in self.server_caps['sts'].split(','))
+        if self.ssl_context is None:
+            port = values.get('port', '')
+            if not port.isdigit():
+                return False
+            # a plain connection gets the port to use TLS on, and nothing else is trusted
+            self.logger.info('{} asks for TLS on port {}, reconnecting'.format(self.server, port))
+            self.port = int(port)
+            self.ssl_context = ssl.create_default_context()
+            self.sts_upgrade = True
+            if self.writer:
+                self.writer.close()
+            return True
+        # over TLS, the policy is remembered for its duration, and 0 drops it
+        duration = values.get('duration', '')
+        if duration.isdigit():
+            if int(duration) == 0:
+                self.sts_policies.pop(self.server.lower(), None)
+            else:
+                self.sts_policies[self.server.lower()] = {
+                    'port': self.port, 'expires': time.time() + int(duration)}
+            self.save_sts()
+        return False
 
     # registering
 
@@ -522,6 +654,21 @@ class IrcTransport:
         self.nick = line.params[0]
         self.welcomed()
         self.emit(Event('connected'))
+
+    def on_registered(self, line):
+        # the end of the MOTD, with ISUPPORT known: watch for the bot's own nick freeing up
+        if self.casefold(self.nick) != self.casefold(self.nickname) and \
+                'MONITOR' in self.isupport:
+            self.write('MONITOR', ['+', self.nickname])
+
+    def on_monitor_offline(self, line):
+        # 731 <bot> :nick1,nick2 for monitored nicks that went offline
+        if len(line.params) < 2 or self.casefold(self.nick) == self.casefold(self.nickname):
+            return
+        nicks = [target.partition('!')[0] for target in line.params[1].split(',')]
+        if any(self.casefold(n) == self.casefold(self.nickname) for n in nicks):
+            self.logger.info('{} is free again, taking it back'.format(self.nickname))
+            self.write('NICK', [self.nickname])
 
     def welcomed(self):
         if self.ns_pass and not self.sasl_logged_in:
@@ -667,6 +814,10 @@ class IrcTransport:
         self.tracker.rename(old, new)
         if self.is_me(old):
             self.nick = new
+            if self.casefold(new) == self.casefold(self.nickname):
+                self.logger.info('got the nick {} back'.format(new))
+                if 'MONITOR' in self.isupport:
+                    self.write('MONITOR', ['-', self.nickname])
         self.emit(Event('nick', self.source(line), '', tags=self.tags(line),
                         data={'new_nick': new}))
 

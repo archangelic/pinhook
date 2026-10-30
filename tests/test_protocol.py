@@ -132,12 +132,16 @@ def test_failed_sasl_login_carries_on_and_says_why(tmp_path, caplog):
             'check sasl_account and sasl_password') in caplog.text
 
 
-@pytest.mark.parametrize('ls', ['account-tag', 'sasl=EXTERNAL'])
-def test_server_without_sasl_plain_is_reported(tmp_path, caplog, ls):
+@pytest.mark.parametrize('ls, offers', [
+    ('account-tag', "it doesn't offer SASL"),
+    ('sasl=EXTERNAL', 'it offers EXTERNAL'),
+])
+def test_server_without_a_usable_sasl_is_reported(tmp_path, caplog, ls, offers):
     w = sasl_bot(tmp_path, sasl_password='hunter2')
     w.receive(':irc.example.net CAP * LS :' + ls)
-    assert 'AUTHENTICATE PLAIN' not in lines(w.sent())
-    assert "this server doesn't offer SASL PLAIN logins" in caplog.text
+    assert not any(line.startswith('AUTHENTICATE') for line in lines(w.sent()))
+    assert ("the bot can't log in with SASL here, so it isn't logged in: {}, and the bot "
+            "has a password".format(offers)) in caplog.text
 
 
 def test_no_sasl_password_means_no_sasl(tmp_path):

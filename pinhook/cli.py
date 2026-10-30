@@ -43,6 +43,10 @@ class Config(Schema):
     bot_dir = fields.Str()
     sasl_account = fields.Str()
     sasl_password = fields.Str()
+    sasl_mechanism = fields.Str(validate=validate.OneOf(
+        ['auto', 'PLAIN', 'SCRAM-SHA-256', 'EXTERNAL', 'plain', 'scram-sha-256', 'external']))
+    ssl_certfile = fields.Str()
+    ssl_keyfile = fields.Str()
     data_dir = fields.Str()
     address_by_nick = fields.Bool()
     plugin_channels = fields.Dict(keys=fields.Str(), values=fields.List(fields.Str()))
