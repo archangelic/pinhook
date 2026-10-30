@@ -17,7 +17,7 @@ DESCRIPTION = 'a pluggable irc bot framework in python'
 URL = 'https://github.com/archangelic/pinhook'
 EMAIL = 'mhancock@archangelic.space'
 AUTHOR = 'M. Hancock'
-REQUIRES_PYTHON = '>=3.8'
+REQUIRES_PYTHON = '>=3.11'
 VERSION = None
 
 # What packages are required for this module to be executed?
@@ -114,9 +114,6 @@ setup(
         'Development Status :: 5 - Production/Stable',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',

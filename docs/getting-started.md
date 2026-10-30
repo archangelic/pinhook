@@ -1,6 +1,6 @@
 # Getting started
 
-pinhook needs Python 3.8 or newer.
+pinhook needs Python 3.11 or newer.
 
 ```bash
 pip install pinhook
