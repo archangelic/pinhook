@@ -19,14 +19,20 @@ class OutputQueue:
         limits: the transport's Limits.
         logger: the bot's logger.
         clock, sleep: what time it is and how to wait, so tests can fake them.
+        exempt: called with a target, True if per_target spacing doesn't apply to it,
+            like a Twitch channel where the bot is a moderator.
     """
 
-    def __init__(self, send, limits, logger, clock=time.monotonic, sleep=asyncio.sleep):
+    def __init__(self, send, limits, logger, clock=time.monotonic, sleep=asyncio.sleep,
+                 exempt=None):
         self.send = send
         self.limits = limits
         self.logger = logger
         self.clock = clock
         self.sleep = sleep
+        self.exempt = exempt or (lambda target: False)
+        # when each target was last sent to, for per_target spacing
+        self.last_sent = {}
         # each target's waiting messages, in the order they take turns
         self.targets = {}
         # targets past their backlog, so the drop is logged once until they catch up
@@ -85,10 +91,10 @@ class OutputQueue:
         self.sending = True
         try:
             await self.wait_for_turn()
-            if not self.targets:
+            target = await self.next_target()
+            if target is None:
                 # cleared while waiting
                 return False
-            target = next(iter(self.targets))
             waiting = self.targets.pop(target)
             message = waiting.popleft()
             if waiting:
@@ -96,6 +102,7 @@ class OutputQueue:
                 self.targets[target] = waiting
             else:
                 self.dropping.discard(target)
+            self.last_sent[target] = self.clock()
             try:
                 await self.send(message)
             except MessageTooLong:
@@ -105,6 +112,23 @@ class OutputQueue:
             return True
         finally:
             self.sending = False
+
+    async def next_target(self):
+        # targets take turns, skipping one sent to less than per_target seconds ago
+        spacing = self.limits.per_target
+        while self.targets:
+            now = self.clock()
+            waits = []
+            for target in self.targets:
+                last = self.last_sent.get(target)
+                if spacing and last is not None and not self.exempt(target):
+                    wait = last + spacing - now
+                    if wait > 0:
+                        waits.append(wait)
+                        continue
+                return target
+            await self.sleep(min(waits))
+        return None
 
     async def wait_for_turn(self):
         # a token bucket: burst tokens, one more every interval, one per line

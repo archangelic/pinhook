@@ -185,7 +185,7 @@ class FakeTransport:
 
     def supports(self, feature):
         # no client tags, so threaded replies show the way most networks see them
-        return feature == 'account-tag'
+        return feature in ('account-tag', 'notice', 'private')
 
     def typing(self, target, state):
         pass

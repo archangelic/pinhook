@@ -113,10 +113,13 @@ class Outgoing:
 @dataclass(frozen=True)
 class Limits:
     """How fast the output queue sends: burst lines at once, then one every interval
-    seconds. Each target holds at most backlog lines waiting to be sent."""
+    seconds. Each target holds at most backlog lines waiting to be sent, and lines to
+    one target are at least per_target seconds apart, unless the transport says that
+    target is exempt."""
     burst: int = 4
     interval: float = 2.0
     backlog: int = 50
+    per_target: float = 0.0
 
 
 class MessageTooLong(ValueError):

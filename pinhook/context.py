@@ -135,6 +135,11 @@ class Context:
         """
         target = self.where(self.channel)
         tags = {}
+        if not self.supports('private'):
+            # a network with no private messages from bots, like Twitch, gets it in the
+            # channel, addressed to them
+            thread = thread or private
+            private = False
         if private and self.nick and not self.is_private:
             target = self.nick
             tags['+channel-context'] = self.channel
@@ -183,9 +188,22 @@ class Context:
         self._bot.send_text('action', self.where(target), text)
 
     async def notice(self, *args):
-        """notice(text) sends the sender a notice, notice(target, text) sends one to anyone."""
+        """notice(text) sends the sender a notice, notice(target, text) sends one to anyone.
+
+        Where the network has no notices from bots, like Twitch, a notice to a channel
+        is sent as a message, and one to a person isn't sent: the bot logs a warning,
+        once per plugin. ctx.supports('notice') says which."""
         target, text = target_and_text(args, self.nick)
-        self._bot.send_text('notice', self.where(target), text)
+        target = self.where(target)
+        if self.supports('notice'):
+            self._bot.send_text('notice', target, text)
+        elif is_channel(target):
+            self._bot.send_text('privmsg', target, text)
+        elif self.plugin not in self._bot.notice_warned:
+            self._bot.notice_warned.add(self.plugin)
+            self.logger.warning('plugin {} sent a notice to {}, but this network has no '
+                                'notices from bots, so it was dropped. Check '
+                                "ctx.supports('notice') first".format(self.plugin, target))
 
     def where(self, target):
         if not target:

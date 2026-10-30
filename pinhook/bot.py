@@ -345,12 +345,15 @@ class Bot:
         self.quit_reason = ''
         # set while connected, timers only run then
         self.online = False
+        # plugins already warned that their notices can't be sent here
+        self.notice_warned = set()
         # each @every timer: when it's next due, and the ones still running
         self.timer_due = {}
         self.timer_busy = set()
         self.quitting = asyncio.Event()
         self.output = OutputQueue(self.transport.send, self.transport.limits, self.logger,
-                                  clock=lambda: self.clock(), sleep=lambda s: self.pause(s))
+                                  clock=lambda: self.clock(), sleep=lambda s: self.pause(s),
+                                  exempt=getattr(self.transport, 'exempt', None))
 
     def start(self):
         """Connect, and run until the bot quits."""
@@ -531,12 +534,19 @@ class Bot:
         if self.registry.listeners:
             groups.append(('listeners', sorted(self.registry.listeners)))
         groups.append((None, ['{}help <command> for more'.format(prefix)]))
-        self.send_help(nick, commands.pack(groups, self.transport.text_room('privmsg', nick)))
+        target = self.help_target(nick, where)
+        self.send_help(target, commands.pack(groups, self.transport.text_room('privmsg', target)))
         return None
 
-    def send_help(self, nick, lines):
+    def help_target(self, nick, channel):
+        # help goes privately, except where the network has no private messages from bots
+        if channel and not self.transport.supports('private'):
+            return channel
+        return nick
+
+    def send_help(self, target, lines):
         for line in lines:
-            self.send_message('privmsg', nick, line)
+            self.send_message('privmsg', target, line)
 
     def access_note(self, handler, who, channel):
         # restricted commands show for everyone, so people know to ask for access
@@ -550,21 +560,23 @@ class Bot:
         # !help !roll or !help roll: one command's help, its usage line and what its
         # arguments mean
         prefix = self.cmd_prefix
+        target = self.help_target(nick, channel)
         name = self.registry.strip_prefix(word) or word
         if op and name in self.internal_commands:
-            self.send_help(nick, ['{}{} -- {}'.format(prefix, name, self.internal_commands[name])])
+            line = '{}{} -- {}'.format(prefix, name, self.internal_commands[name])
+            self.send_help(target, [line])
             return None
         handler = self.registry.find(word) or self.registry.find(word, addressed=True)
         if handler is None or (self.access.level(handler) == 'ops' and not op):
-            self.send_help(nick, ["there's no command called {}".format(word)])
+            self.send_help(target, ["there's no command called {}".format(word)])
             return None
         lines = ['{}{} -- {}'.format(handler.label(prefix), self.access_note(handler, who, channel),
                                      handler.help_text)]
         if handler.native:
             lines.append('usage: ' + commands.usage(handler.name, handler.params))
             described = [(None, [line]) for line in commands.describe(handler.params)]
-            lines += commands.pack(described, self.transport.text_room('privmsg', nick))
-        self.send_help(nick, lines)
+            lines += commands.pack(described, self.transport.text_room('privmsg', target))
+        self.send_help(target, lines)
         return None
 
     def call_internal_commands(self, channel, nick, cmd, arg, op=None, source=None):

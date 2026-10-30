@@ -179,6 +179,9 @@ class IrcTransport:
     def supports(self, feature):
         if feature in CLIENT_TAG_FEATURES:
             return self.client_tag_allowed('+' + feature)
+        if feature in ('notice', 'private'):
+            # every IRC network has notices and private messages
+            return True
         return feature in self.caps
 
     def client_tag_allowed(self, tag):
@@ -967,14 +970,106 @@ class IrcTransport:
 
 
 class TwitchTransport(IrcTransport):
-    """Twitch chat, which is IRC with its own capabilities, asked for once connected."""
+    """Twitch chat, which is IRC with its own capabilities and rules.
+
+    Twitch takes 20 lines in any 30 seconds, and one a second in each channel where
+    the bot isn't a moderator or VIP. It splits nothing itself and allows 500
+    characters a message, drops a message identical to the last one, and has no
+    notices or private messages from bots.
+    """
     name = 'twitch'
     asks_for_caps = False
+    limits = Limits(burst=20, interval=1.5, per_target=1.0)
+    handlers = {**IrcTransport.handlers, 'USERSTATE': 'on_userstate'}
+    max_length = 500
+    # twitch drops a message identical to the one before it within 30 seconds, so a
+    # repeat gets an invisible character, and the one after that doesn't
+    repeat_window = 30
+    repeat_mark = ' \U000E0000'
+
+    def reset(self):
+        super().reset()
+        # channels where the bot is a moderator, VIP or the broadcaster
+        self.privileged = set()
+        # the last line sent to each target, and when
+        self.recent = {}
 
     def welcomed(self):
         self.logger.info('requesting permissions')
         for cap in ('twitch.tv/membership', 'twitch.tv/tags', 'twitch.tv/commands'):
             self.write('CAP', ['REQ', cap])
+
+    def supports(self, feature):
+        if feature in ('notice', 'private'):
+            return False
+        return super().supports(feature)
+
+    def who(self, channel):
+        # twitch has no WHO, members come from its JOINs and NAMES
+        pass
+
+    def exempt(self, target):
+        return self.casefold(target) in self.privileged
+
+    @staticmethod
+    def badges(tags):
+        # badges=broadcaster/1,subscriber/12 and mod=1, as names
+        names = {badge.partition('/')[0] for badge in (tags.get('badges') or '').split(',')
+                 if badge}
+        if tags.get('mod') == '1':
+            names.add('moderator')
+        return names
+
+    def on_userstate(self, line):
+        # the bot's own badges in a channel, sent on joining and after each message
+        if not line.params:
+            return
+        key = self.casefold(line.params[0])
+        if self.badges(line.tags or {}) & {'broadcaster', 'moderator', 'vip'}:
+            self.privileged.add(key)
+        else:
+            self.privileged.discard(key)
+
+    def on_privmsg(self, line):
+        # badges become member modes: broadcaster and moderator +o, VIP +v, so
+        # ctx.is_chanop and the chanops and voiced access groups work here too
+        if line.source and len(line.params) >= 2 and is_channel(line.params[0]):
+            badges = self.badges(line.tags or {})
+            nick, channel = line.hostmask.nickname, line.params[0]
+            self.tracker.set_mode(channel, nick, 'o', bool(badges & {'broadcaster', 'moderator'}))
+            self.tracker.set_mode(channel, nick, 'v', 'vip' in badges)
+        super().on_privmsg(line)
+
+    def text_room(self, kind, target, prefix=''):
+        start = '/me ' if kind == 'action' else ''
+        return max(self.max_length - len(start + prefix), 64)
+
+    async def send(self, message):
+        if not self.writer:
+            self.logger.debug('not connected, dropping a message to {}'.format(message.target))
+            return
+        if message.kind == 'notice' and not is_channel(message.target):
+            self.logger.debug("twitch doesn't deliver notices to people, dropping one to "
+                              "{}".format(message.target))
+            return
+        start = '/me ' if message.kind == 'action' else ''
+        text = message.text.encode('utf-8', 'replace').decode('utf-8')
+        room = self.text_room(message.kind, message.target, message.prefix)
+        for piece in split_text(text, room, chars=True):
+            line = self.unrepeat(message.target, start + message.prefix + piece)
+            self.write('PRIVMSG', [message.target, line])
+        await self.writer.drain()
+
+    def unrepeat(self, target, line):
+        key = self.casefold(target)
+        now = time.monotonic()
+        last = self.recent.get(key)
+        if last and now - last[1] < self.repeat_window and \
+                last[0].removesuffix(self.repeat_mark) == line and \
+                not last[0].endswith(self.repeat_mark):
+            line += self.repeat_mark
+        self.recent[key] = (line, now)
+        return line
 
 
 def parse_whois(lines, symbols):
@@ -1019,13 +1114,17 @@ def text_room(nick, kind, target, prefix='', hostmask_length=HOSTMASK_GUESS):
     return max(512 - len(relayed.encode()) - hostmask_length, 64)
 
 
-def split_text(text, room):
-    """Split text into lines of at most room bytes of utf-8, at spaces where it can."""
+def split_text(text, room, chars=False):
+    """Split text into lines of at most room bytes of utf-8, or room characters if chars,
+    at spaces where it can."""
+    def size(s):
+        return len(s) if chars else len(s.encode('utf-8'))
+
     pieces = []
     for line in text.splitlines():
-        while len(line.encode('utf-8')) > room:
+        while size(line) > room:
             # how many characters fit, without cutting one in half
-            fits = len(line.encode('utf-8')[:room].decode('utf-8', 'ignore'))
+            fits = room if chars else len(line.encode('utf-8')[:room].decode('utf-8', 'ignore'))
             space = line.rfind(' ', 0, fits + 1)
             if space > 0:
                 pieces.append(line[:space])
