@@ -264,3 +264,46 @@ def test_close_sends_quit(tmp_path):
     w = Wire(tmp_path).ready()
     w.driver.loop.run_until_complete(w.bot.transport.close('bye'))
     assert lines(w.sent()) == ['QUIT bye']
+
+
+# events from server lines
+
+EVENTS = ("from pinhook import on\n"
+          "@on('join')\n"
+          "async def joined(ctx): await ctx.send('#log', 'join ' + ctx.nick + ' ' + ctx.channel)\n"
+          "@on('kick')\n"
+          "async def kicked(ctx): await ctx.send('#log', 'kick ' + ctx.kicked + ' ' + ctx.text)\n"
+          "@on('mode')\n"
+          "async def mode(ctx): await ctx.send('#log', 'mode ' + ' '.join(ctx.modes))\n"
+          "@on('notice')\n"
+          "async def notice(ctx): await ctx.send('#log', 'notice ' + ctx.text)\n")
+
+
+def logged(sent):
+    return [s.text for s in sent if s.target == '#log']
+
+
+def test_server_lines_become_events(tmp_path):
+    w = Wire(tmp_path, plugins={'events': EVENTS})
+    w.connect()
+    # the bot's own join isn't passed to plugins
+    assert logged(w.welcome()) == []
+    w.receive(':ana!a@example.com JOIN #test')
+    w.receive(':op!o@example.com KICK #test troll :spamming')
+    w.receive(':op!o@example.com MODE #test +o ana')
+    w.receive(':ana!a@example.com NOTICE pinbot :psst')
+    assert logged(w.sent()) == ['join ana #test', 'kick troll spamming', 'mode +o ana',
+                                'notice psst']
+
+
+def test_server_notices_and_modes_are_left_out(tmp_path):
+    w = Wire(tmp_path, plugins={'events': EVENTS}).ready()
+    w.receive(':irc.example.net NOTICE * :*** Looking up your hostname',
+              ':irc.example.net MODE pinbot +i')
+    assert logged(w.sent()) == []
+
+
+def test_an_empty_name_is_not_a_channel():
+    from pinhook.transport.base import is_channel
+    assert not is_channel('')
+    assert is_channel('#test')

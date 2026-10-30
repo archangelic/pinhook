@@ -11,6 +11,7 @@ import time
 import warnings
 
 from . import bans
+from . import commands
 from . import compat
 from . import log
 from . import plugin
@@ -332,6 +333,7 @@ class Bot:
                 self.logger.warning('quitting with {} messages still waiting to be sent'
                                     .format(self.output.waiting()))
             sender.cancel()
+            self.registry.teardown()
             await self.transport.close(self.quit_reason)
 
     def quit(self, reason=''):
@@ -375,16 +377,26 @@ class Bot:
     def dispatch(self, event):
         if event.type == 'connected':
             self.connected()
+            self.spawn(self.run_event_handlers(event))
         elif event.type == 'disconnected':
             # answers to what was asked before the drop would be out of date
             dropped = self.output.clear()
             if dropped:
                 self.logger.warning('disconnected, dropping {} messages that were waiting to be '
                                     'sent'.format(dropped))
-        elif event.type == 'message' and not self.stopping:
-            task = asyncio.get_running_loop().create_task(self.process_event(event))
-            self.handlers.add(task)
-            task.add_done_callback(self.handled)
+            self.spawn(self.run_event_handlers(event))
+        elif self.stopping:
+            return
+        elif event.type == 'message':
+            self.spawn(self.process_event(event))
+        else:
+            self.spawn(self.process_other(event))
+
+    def spawn(self, coroutine):
+        # each message or event is handled in its own task
+        task = asyncio.get_running_loop().create_task(coroutine)
+        self.handlers.add(task)
+        task.add_done_callback(self.handled)
 
     def handled(self, task):
         self.handlers.discard(task)
@@ -412,8 +424,10 @@ class Bot:
         for line in lines:
             self.send_message(kind, target, line)
 
-    def call_help(self, nick, op):
+    def call_help(self, nick, op, arg=''):
         prefix = self.cmd_prefix
+        if arg:
+            return self.command_help(nick, op, arg)
         commands = [h for h in self.registry.handlers() if h.kind == 'command']
         cmds = {h.label(prefix): h.help_text for h in commands if not (h.ops or h.hide)}
         cmds.update({prefix + 'help': 'returns this output to private message'})
@@ -425,6 +439,21 @@ class Bot:
             self.send_message('privmsg', nick, '{} -- {}'.format(h, helpout[h]))
         listeners = ', '.join(self.registry.listeners)
         self.send_message('privmsg', nick, 'List of listeners: {}'.format(listeners))
+        return None
+
+    def command_help(self, nick, op, word):
+        # !help roll: one command's help, its usage line and what its arguments mean
+        handler = self.registry.find(word) or self.registry.find(word, addressed=True)
+        if handler is None or (handler.ops and not op):
+            self.send_message('privmsg', nick, "there's no command called {}".format(word))
+            return None
+        self.send_message('privmsg', nick, '{} -- {}'.format(handler.label(self.cmd_prefix),
+                                                             handler.help_text))
+        if handler.native:
+            self.send_message('privmsg', nick, 'usage: ' + commands.usage(handler.name,
+                                                                          handler.params))
+            for line in commands.describe(handler.params):
+                self.send_message('privmsg', nick, line)
         return None
 
     def call_internal_commands(self, channel, nick, cmd, arg, op=None):
@@ -446,7 +475,10 @@ class Bot:
                 arg = "See y'all later!"
             self.quit(arg)
         elif cmd == 'help' and not self.disable_help:
-            self.call_help(nick, op)
+            if arg:
+                self.call_help(nick, op, arg)
+            else:
+                self.call_help(nick, op)
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             config_note = self.reload_plugin_config()
@@ -496,21 +528,39 @@ class Bot:
             output = plugin.message('currently banned: {}'.format(banned))
         return output
 
-    async def process_event(self, event):
-        nick = event.source.nick
-        user = event.source.user
-        host = event.source.host
-        account = event.source.account
+    def accepts(self, source):
+        """True if the bot should act on something this person did."""
+        nick, user, host, account = source.nick, source.user, source.host, source.account
         self.remember(nick, user, host, account)
         fold = self.transport.casefold
         if bans.matches_any(self.banned_users, nick, user, host, account, fold=fold):
             self.logger.debug('ignoring banned user {}'.format(nick))
-            return
-        botnick = self.transport.nick
-        if self.transport.casefold(nick) == self.transport.casefold(botnick):
-            return
+            return False
+        if fold(nick) == fold(self.transport.nick):
+            return False
         if self.require_account and not account:
             self.logger.debug('ignoring {}, not logged in to an account'.format(nick))
+            return False
+        return True
+
+    async def process_other(self, event):
+        # joins, parts, nick changes and the rest, for @on handlers
+        if event.source and not self.accepts(event.source):
+            return
+        await self.run_event_handlers(event)
+
+    async def run_event_handlers(self, event):
+        await asyncio.gather(*(self.run_handler(h, event, None, '', None)
+                               for h in self.registry.events.get(event.type, [])))
+
+    async def process_event(self, event):
+        if not self.accepts(event.source):
+            return
+        nick = event.source.nick
+        if event.kind == 'notice':
+            # notices never run commands or 1.x listeners, a bot shouldn't answer one by itself
+            await asyncio.gather(*(self.run_handler(h, event, None, '', None)
+                                   for h in self.registry.events.get('notice', [])))
             return
         op = self.is_op(event.source)
         text = event.text
@@ -539,8 +589,9 @@ class Bot:
             await self.run_handler(handler, event, word, arg, nick_list, addressed)
             return
         # each listener answers on its own, so a slow or broken one doesn't hold up the rest
+        listeners = list(self.registry.listeners.values()) + self.registry.events.get('message', [])
         await asyncio.gather(*(self.run_handler(h, event, None, '', nick_list, addressed)
-                               for h in self.registry.listeners.values()))
+                               for h in listeners))
 
     def strip_address(self, text):
         """(True, the rest) when text starts with the bot's nick, like "pinhook: hi",
@@ -604,7 +655,7 @@ class Bot:
         return self.switches.is_on((handler.name, handler.plugin), channel)
 
     async def run_handler(self, handler, event, trigger, arg, nick_list, addressed=False):
-        """Run one command or listener for a message, and send what it returns."""
+        """Run one command or handler for a message or event, and send what it answers."""
         command = handler.kind == 'command'
         if not self.enabled_for(handler, event.target):
             return
@@ -615,6 +666,14 @@ class Bot:
             if handler.ops_msg:
                 self.send_text('privmsg', ctx.channel, handler.ops_msg)
             return
+        kwargs = {}
+        if command and handler.native:
+            try:
+                kwargs = commands.parse(handler.params, arg)
+            except commands.UsageError as e:
+                self.send_text('privmsg', ctx.channel, 'usage: {} ({})'.format(
+                    commands.usage(handler.name, handler.params), e))
+                return
         key = None
         if command:
             # one run at a time per person, so spamming a slow command can't pile them up
@@ -624,23 +683,39 @@ class Bot:
                 return
             self.running.add(key)
         self.logger.debug('running {} {}'.format(handler.kind, label))
+        timeout = handler.timeout or self.handler_timeout
         try:
-            # 1.x plugins are plain functions, so they run in a worker thread
-            async with asyncio.timeout(self.handler_timeout):
-                output = await asyncio.to_thread(compat.run, handler, ctx, trigger, nick_list,
-                                                 self.ops)
+            async with asyncio.timeout(timeout):
+                if handler.native:
+                    output = await handler.func(ctx, **kwargs)
+                    ctx.store.save_if_changed()
+                else:
+                    # 1.x plugins are plain functions, so they run in a worker thread
+                    output = await asyncio.to_thread(compat.run, handler, ctx, trigger, nick_list,
+                                                     self.ops)
         except TimeoutError:
             self.logger.error('{} took longer than {} seconds, giving up waiting for it'.format(
-                label if command else 'listener ' + label, self.handler_timeout))
+                label if command else handler.kind + ' ' + label, timeout))
+            self.say_error(handler, ctx)
             return
         except Exception:
             self.logger.exception('issue with {} {}'.format(handler.kind, label))
+            self.say_error(handler, ctx)
             return
         finally:
             self.running.discard(key)
-        if output:
+        if handler.native:
+            if output is not None:
+                self.logger.warning('{} returned something, 2.0 handlers answer with ctx.reply() '
+                                    'and the rest, so it was ignored'.format(label))
+        elif output:
             self.logger.debug(f'sending output: {output.msg}')
             self.process_output(ctx.channel, output)
+
+    def say_error(self, handler, ctx):
+        # failures stay out of chat unless the plugin's author chose words for it
+        if handler.error_msg and ctx.channel:
+            self.send_text('privmsg', ctx.channel, handler.error_msg)
 
     def process_output(self, chan, output):
         if not output.msg:

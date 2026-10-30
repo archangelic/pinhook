@@ -72,15 +72,18 @@ class Param:
             raise UsageError('{} must be {}'.format(self.name, KINDS[self.type]))
 
 
-def params_of(func):
-    """The typed arguments func takes after ctx. Raises TypeError for ones it can't take."""
+def params_of(func, skip=1):
+    """The typed arguments func takes after ctx. Raises TypeError for ones it can't take.
+
+    skip is how many arguments come first: 1 for ctx, 2 for a method's self and ctx.
+    """
     signature = inspect.signature(func)
     hints = typing.get_type_hints(func, include_extras=True)
     params = list(signature.parameters.values())
-    if not params:
+    if len(params) < skip:
         raise TypeError('{} needs a ctx argument'.format(func.__qualname__))
     found = []
-    for param in params[1:]:
+    for param in params[skip:]:
         if param.kind not in (param.POSITIONAL_OR_KEYWORD, param.KEYWORD_ONLY):
             raise TypeError('{} can only take named arguments, not {}'.format(
                 func.__qualname__, param))

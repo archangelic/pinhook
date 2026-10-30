@@ -24,8 +24,13 @@ class Event:
     """Something that happened on the network.
 
     type is 'connected' once the bot is registered, 'disconnected' when the
-    connection drops, or 'message'. A message's kind is 'privmsg' or 'action',
-    and its target is a channel or the bot's own nick.
+    connection drops, 'message', or one of join, part, kick, quit, nick, topic,
+    invite and mode. A message's kind is 'privmsg', 'action' or 'notice', and
+    its target is a channel or the bot's own nick.
+
+    text is a message's text, a part, kick or quit's reason, or a new topic.
+    data holds the rest: kicked for a kick, new_nick for a nick change, and
+    modes for a mode change, like ['+o', 'mal'].
     """
     type: str
     source: Source | None = None
@@ -33,6 +38,7 @@ class Event:
     text: str = ''
     kind: str = ''
     tags: dict[str, str | None] = field(default_factory=dict)
+    data: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -112,4 +118,4 @@ def casefold(name: str, casemapping: str = 'rfc1459') -> str:
 
 def is_channel(name: str) -> bool:
     # the channel types every irc server has, until CHANTYPES is read from the server
-    return name[:1] in '#&+!'
+    return bool(name) and name[0] in '#&+!'

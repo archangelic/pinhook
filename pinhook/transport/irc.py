@@ -256,7 +256,8 @@ class IrcTransport:
         '902': 'on_sasl_fail', '904': 'on_sasl_fail', '905': 'on_sasl_fail', '906': 'on_sasl_fail',
         '001': 'on_welcome', '005': 'on_isupport', '433': 'on_nick_in_use', '353': 'on_names',
         'JOIN': 'on_join', 'PART': 'on_part', 'KICK': 'on_kick', 'QUIT': 'on_quit',
-        'NICK': 'on_nick', 'PRIVMSG': 'on_privmsg',
+        'NICK': 'on_nick', 'PRIVMSG': 'on_privmsg', 'NOTICE': 'on_notice', 'TOPIC': 'on_topic',
+        'INVITE': 'on_invite', 'MODE': 'on_mode',
     }
 
     def handle(self, line):
@@ -407,6 +408,7 @@ class IrcTransport:
                 self.hostmask_length = len(hostmask.encode('utf-8'))
         if key in self.channels:
             self.channels[key][self.casefold(nick)] = nick
+        self.emit(Event('join', self.source(line), line.params[0], tags=dict(line.tags or {})))
 
     def leave(self, channel, nick):
         key = self.casefold(channel)
@@ -418,14 +420,18 @@ class IrcTransport:
 
     def on_part(self, line):
         self.leave(line.params[0], line.hostmask.nickname)
+        self.emit(Event('part', self.source(line), line.params[0], self.last(line, 1)))
 
     def on_kick(self, line):
         self.leave(line.params[0], line.params[1])
+        self.emit(Event('kick', self.source(line), line.params[0], self.last(line, 2),
+                        data={'kicked': line.params[1]}))
 
     def on_quit(self, line):
         folded = self.casefold(line.hostmask.nickname)
         for members in self.channels.values():
             members.pop(folded, None)
+        self.emit(Event('quit', self.source(line), '', self.last(line, 0)))
 
     def on_nick(self, line):
         old, new = line.hostmask.nickname, line.params[0]
@@ -434,6 +440,33 @@ class IrcTransport:
                 members[self.casefold(new)] = new
         if self.is_me(old):
             self.nick = new
+        self.emit(Event('nick', self.source(line), '', data={'new_nick': new}))
+
+    def on_topic(self, line):
+        self.emit(Event('topic', self.source(line), line.params[0], self.last(line, 1)))
+
+    def on_invite(self, line):
+        # INVITE <the bot> <channel>
+        if len(line.params) > 1:
+            self.emit(Event('invite', self.source(line), line.params[1]))
+
+    def on_mode(self, line):
+        # only modes someone set, not the server setting the bot's own when it connects
+        if line.source and '!' in line.source:
+            self.emit(Event('mode', self.source(line), line.params[0],
+                            data={'modes': line.params[1:]}))
+
+    def source(self, line):
+        tags = line.tags or {}
+        account = tags.get('account')
+        hostmask = line.hostmask
+        return Source(hostmask.nickname, hostmask.username, hostmask.hostname,
+                      None if account in (None, '', '*') else account)
+
+    @staticmethod
+    def last(line, index):
+        # a reason or topic at params[index], if the line has one
+        return line.params[index] if len(line.params) > index else ''
 
     # messages
 
@@ -448,12 +481,17 @@ class IrcTransport:
                 self.answer_ctcp(line.hostmask.nickname, ctcp.upper(), rest)
                 return
             kind, text = 'action', rest
-        tags = dict(line.tags or {})
-        account = tags.get('account')
-        hostmask = line.hostmask
-        source = Source(hostmask.nickname, hostmask.username, hostmask.hostname,
-                        None if account in (None, '', '*') else account)
-        self.emit(Event('message', source, target, text, kind, tags))
+        self.emit(Event('message', self.source(line), target, text, kind, dict(line.tags or {})))
+
+    def on_notice(self, line):
+        # notices from people, not the server's own before and while the bot registers.
+        # CTCP replies are notices too, and plugins don't need them
+        if not line.source or '!' not in line.source or len(line.params) < 2:
+            return
+        if line.params[1].startswith('\x01'):
+            return
+        self.emit(Event('message', self.source(line), line.params[0], line.params[1], 'notice',
+                        dict(line.tags or {})))
 
     def answer_ctcp(self, nick, ctcp, rest):
         if ctcp == 'VERSION':

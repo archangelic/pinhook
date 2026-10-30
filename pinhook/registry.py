@@ -1,15 +1,20 @@
-"""Each bot's plugins: loading them from plugin_dir, and finding their commands and listeners.
+"""Each bot's plugins: loading them from plugin_dir, and finding their commands and handlers.
 
 Every bot has its own registry, so two bots in one process never share plugins.
+A plugin file can hold 1.x commands and listeners, 2.0 handlers made with
+pinhook.command and pinhook.on, and Plugin classes whose methods are handlers.
 """
 import importlib.util
+import inspect
 import json
 import os
 import re
 import sys
 import types
 
+from . import commands
 from . import plugin
+from .api import Plugin
 from .store import write_json
 
 
@@ -18,19 +23,27 @@ class LoadError(Exception):
 
 
 class Handler:
-    """A command or a listener, registered by a plugin file.
+    """A command, listener or event handler, registered by a plugin file.
 
     Attributes:
-        kind: 'command' or 'listener'.
-        name: a command's name without a prefix, or a listener's name.
+        kind: 'command', 'listener' (1.x) or 'event' (2.0 @on).
+        name: a command's name without a prefix, a listener's name, or an event
+            handler's function name.
         trigger: for a 1.x command whose word doesn't start with one of the bot's
             prefixes, like '.weather', the word it answers to. None otherwise.
         plugin: the plugin file's name, which names its store and config section.
         func: the function to call.
+        native: True for 2.0 handlers, which are async and take a ctx.
+        params: a 2.0 command's typed arguments.
+        event: the event an @on handler handles.
+        ops_msg: what someone who isn't an op is told when they try an ops command.
+        error_msg: said in chat when a 2.0 command fails.
+        timeout: seconds to wait for it, or None for the bot's default.
     """
 
     def __init__(self, kind, name, plugin_name, func, trigger=None, help_text='N/A', ops=False,
-                 ops_msg='', hide=False):
+                 ops_msg='', hide=False, native=False, params=(), event=None, error_msg='',
+                 timeout=None):
         self.kind = kind
         self.name = name
         self.trigger = trigger
@@ -40,10 +53,15 @@ class Handler:
         self.ops = ops
         self.ops_msg = ops_msg
         self.hide = hide
+        self.native = native
+        self.params = list(params)
+        self.event = event
+        self.error_msg = error_msg
+        self.timeout = timeout
 
     def label(self, prefix):
         """How the bot writes it in logs and !help: the word that runs a command."""
-        if self.kind == 'listener':
+        if self.kind != 'command':
             return self.name
         return self.trigger or prefix + self.name
 
@@ -54,7 +72,7 @@ def module_name(name):
 
 
 class Registry:
-    """The commands and listeners one bot's plugins registered.
+    """The commands and handlers one bot's plugins registered.
 
     Args:
         bot_name: the bot's nick, which names its plugins' modules.
@@ -68,18 +86,24 @@ class Registry:
         self.prefixes = list(prefixes)
         self.reserved = set(reserved)
         self.logger = logger
+        # (plugin file, class name): the Plugin instance, kept for setup(previous) on !reload
+        self.instances = {}
         self.clear()
 
     def clear(self):
         self.commands = {}
         self.literals = {}
         self.listeners = {}
+        # event: its @on handlers
+        self.events = {}
         # plugin file name: its handlers
         self.plugins = {}
 
     def load(self, plugin_dir):
         """Load every .py file in plugin_dir, replacing whatever was loaded before."""
         self.logger.info('clearing plugin cache')
+        old = self.instances
+        self.instances = {}
         self.clear()
         self.logger.info('checking plugin directory')
         if not os.path.exists(plugin_dir):
@@ -92,11 +116,22 @@ class Registry:
             name = file_name[:-3]
             self.logger.info('loading plugin {}'.format(name))
             try:
-                self.add(name, self.import_file(name, os.path.join(plugin_dir, file_name)))
+                legacy, module = self.import_file(name, os.path.join(plugin_dir, file_name))
+                self.add(name, legacy, module, old)
             except Exception:
                 self.logger.exception('could not load plugin {}'.format(name))
+        # the old instances have handed over what they keep, or their plugin is gone
+        self.teardown(old.values())
         for handler in self.handlers():
             self.logger.debug('adding {} {}'.format(handler.kind, handler.name))
+
+    def teardown(self, instances=None):
+        """Call teardown on Plugin instances, all of this registry's by default."""
+        for instance in list(self.instances.values() if instances is None else instances):
+            try:
+                instance.teardown()
+            except Exception:
+                self.logger.exception('{}.teardown failed'.format(type(instance).__name__))
 
     def make_packages(self):
         # so a plugin can import another as pinhook_plugins.<bot>.<name>
@@ -119,38 +154,98 @@ class Registry:
             try:
                 sys.modules[spec.name] = module
                 exec(code, module.__dict__)
-                return plugin._collector
+                return plugin._collector, module
             finally:
                 plugin._collector = None
 
-    def add(self, plugin_name, registered):
+    def add(self, plugin_name, legacy, module, old_instances):
         # check the whole file first, so a clash leaves none of it half loaded
-        handlers = [self.handler(plugin_name, *entry) for entry in registered]
+        found = [(None, self.handler(plugin_name, *entry)) for entry in legacy]
+        classes = self.plugin_classes(module)
+        for owner, func, spec in self.native(module):
+            found.append((owner, self.native_handler(plugin_name, func, spec)))
         taken = {}
-        for handler in handlers:
+        for owner, handler in found:
+            if handler.kind == 'event':
+                continue
             key = (handler.kind, handler.trigger or handler.name)
             if key in taken:
                 raise LoadError('plugin {} registers {} {} twice'.format(
                     plugin_name, handler.kind, handler.label(self.prefixes[0])))
             taken[key] = handler
-            owner = self.owner(handler)
-            if owner:
+            other = self.owner(handler)
+            if other:
                 raise LoadError('plugin {} registers {} {}, which {} already has'.format(
-                    plugin_name, handler.kind, handler.label(self.prefixes[0]), owner))
+                    plugin_name, handler.kind, handler.label(self.prefixes[0]), other))
+        for owner, handler in found:
+            if handler.kind == 'command' and handler.native:
+                try:
+                    handler.params = commands.params_of(handler.func, 2 if owner else 1)
+                except TypeError as e:
+                    raise LoadError('plugin {}: {}'.format(plugin_name, e))
+        # only now, with nothing left to fail, do the plugin's classes get set up
+        instances = self.make_instances(plugin_name, classes, old_instances)
+        handlers = []
+        for owner, handler in found:
+            if owner is not None:
+                # a method: bind it to the plugin's instance
+                handler.func = getattr(instances[owner], handler.func.__name__)
+            handlers.append(handler)
         for handler in handlers:
             if handler.kind == 'listener':
                 self.listeners[handler.name] = handler
+            elif handler.kind == 'event':
+                self.events.setdefault(handler.event, []).append(handler)
             elif handler.trigger:
                 self.literals[handler.trigger] = handler
             else:
                 self.commands[handler.name] = handler
         self.plugins[plugin_name] = handlers
+        for cls, instance in instances.items():
+            self.instances[(plugin_name, cls.__qualname__)] = instance
+
+    @staticmethod
+    def plugin_classes(module):
+        # every Plugin class the file defines gets an instance, handlers or not
+        return [value for value in vars(module).values()
+                if inspect.isclass(value) and issubclass(value, Plugin) and value is not Plugin
+                and value.__module__ == module.__name__]
+
+    def native(self, module):
+        # 2.0 handlers: functions marked by pinhook.command and pinhook.on, at the top of the
+        # file or as methods of a Plugin class defined in it
+        for value in vars(module).values():
+            if inspect.isfunction(value) and value.__module__ == module.__name__:
+                for spec in value.__dict__.get('_pinhook', []):
+                    yield None, value, spec
+        for cls in self.plugin_classes(module):
+            for _, func in inspect.getmembers(cls, inspect.isfunction):
+                for spec in func.__dict__.get('_pinhook', []):
+                    yield cls, func, spec
+
+    def make_instances(self, plugin_name, classes, old_instances):
+        instances = {}
+        try:
+            for cls in classes:
+                instance = cls()
+                instance.setup(old_instances.get((plugin_name, cls.__qualname__)))
+                instances[cls] = instance
+        except Exception:
+            # the ones already set up won't be used, so let them clean up
+            self.teardown(instances.values())
+            raise
+        return instances
 
     def handler(self, plugin_name, kind, name, func, options):
         if kind == 'listener':
             return Handler(kind, name, plugin_name, func)
         command, trigger = self.split_trigger(name)
         return Handler(kind, command, plugin_name, func, trigger=trigger, **options)
+
+    def native_handler(self, plugin_name, func, spec):
+        spec = dict(spec)
+        kind, name = spec.pop('kind'), spec.pop('name')
+        return Handler(kind, name, plugin_name, func, native=True, **spec)
 
     def split_trigger(self, word):
         # 1.x commands are written with their prefix, like '!roll'. One of the bot's

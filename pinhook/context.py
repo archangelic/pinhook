@@ -23,17 +23,23 @@ class BotInfo:
 
 
 class Context:
-    """One message, as a plugin sees it, and how to answer it.
+    """One message or event, as a plugin sees it, and how to answer it.
 
     Attributes:
-        nick, user, host, account: who sent it. account is their services
-            account, or None when the server doesn't say.
+        event: what happened: 'message', 'notice', 'join', 'part', 'kick', 'quit',
+            'nick', 'topic', 'invite', 'mode', 'connected' or 'disconnected'.
+        nick, user, host, account: who sent it, or who did it. account is their
+            services account, or None when the server doesn't say.
         channel: where to answer: the channel, or the sender for a private message.
+            None when there's nowhere, like a nick change or a quit.
         is_private: True for a private message to the bot.
         is_op: True if the sender is one of the bot's ops.
         addressed: True when the message started with the bot's nick, like "pinhook: hi".
-        text: the whole message.
-        kind: 'privmsg', or 'action' for a /me.
+        text: the whole message, a part, kick or quit's reason, or a new topic.
+        kind: a message's 'privmsg', 'action' or 'notice'.
+        kicked: who was kicked, for a kick.
+        new_nick: the new nick, for a nick change. nick is the old one.
+        modes: for a mode change, like ['+o', 'mal'].
         command: the command's name, without a prefix, for a command. None otherwise.
         arg: everything after the command word, for a command.
         time: when the message was sent, timezone-aware. The server's time when it says.
@@ -48,16 +54,23 @@ class Context:
     def __init__(self, bot, event, plugin=None, addressed=False, command=None, arg=''):
         self._bot = bot
         source = event.source
-        self.nick = source.nick
-        self.user = source.user
-        self.host = source.host
-        self.account = source.account
-        self.is_private = not is_channel(event.target)
-        self.channel = source.nick if self.is_private else event.target
-        self.is_op = bot.is_op(source)
+        self.event = 'notice' if event.kind == 'notice' else event.type
+        self.nick = source.nick if source else None
+        self.user = source.user if source else None
+        self.host = source.host if source else None
+        self.account = source.account if source else None
+        self.is_private = bool(event.target) and not is_channel(event.target) and source is not None
+        if is_channel(event.target):
+            self.channel = event.target
+        else:
+            self.channel = self.nick if self.is_private else None
+        self.is_op = bot.is_op(source) if source else False
         self.addressed = addressed
         self.text = event.text
         self.kind = event.kind
+        self.kicked = event.data.get('kicked')
+        self.new_nick = event.data.get('new_nick')
+        self.modes = list(event.data.get('modes', []))
         self.command = command
         self.arg = arg
         self.tags = dict(event.tags)
@@ -75,7 +88,7 @@ class Context:
 
     async def reply(self, text):
         """Answer where the message came from: the channel, or the sender if private."""
-        self._bot.send_text('privmsg', self.channel, text)
+        self._bot.send_text('privmsg', self.where(self.channel), text)
 
     async def send(self, target, text):
         """Send text to another channel or nick."""
@@ -84,12 +97,18 @@ class Context:
     async def action(self, *args):
         """action(text) answers with a /me, action(target, text) sends one somewhere else."""
         target, text = target_and_text(args, self.channel)
-        self._bot.send_text('action', target, text)
+        self._bot.send_text('action', self.where(target), text)
 
     async def notice(self, *args):
         """notice(text) sends the sender a notice, notice(target, text) sends one to anyone."""
         target, text = target_and_text(args, self.nick)
-        self._bot.send_text('notice', target, text)
+        self._bot.send_text('notice', self.where(target), text)
+
+    def where(self, target):
+        if not target:
+            raise RuntimeError('there is no channel or sender to answer here, '
+                               'use ctx.send(target, text)')
+        return target
 
 
 def target_and_text(args, default_target):

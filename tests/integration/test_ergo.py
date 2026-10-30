@@ -223,3 +223,29 @@ def test_long_replies_are_split_and_arrive_whole(names, users, start_bot):
     got = messages(mal.say('!long', channel, bot))
     assert len(got) > 1
     assert ' '.join(got) == ' '.join('word{}'.format(i) for i in range(250))
+
+
+NATIVE = ("from pinhook import Plugin, command, on\n\n\n"
+          "class Dice(Plugin):\n"
+          "    def setup(self, previous):\n"
+          "        self.rolls = previous.rolls if previous else 0\n\n"
+          "    @command('roll')\n"
+          "    async def roll(self, ctx, sides: int = 6):\n"
+          "        self.rolls += 1\n"
+          "        await ctx.reply(f'{ctx.nick} rolled a d{sides}, roll {self.rolls}')\n\n"
+          "    @on('join')\n"
+          "    async def hello(self, ctx):\n"
+          "        await ctx.notice(ctx.nick, f'welcome to {ctx.channel}')\n")
+
+
+def test_a_2_0_plugin_with_typed_commands_and_events(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'dice': NATIVE}, ops=['mallory'])
+    assert messages(mal.say('!roll 20', channel, bot)) == ['mallory rolled a d20, roll 1']
+    assert messages(mal.say('!roll twenty', channel, bot)) == [
+        'usage: roll [sides=6] (sides must be a whole number)']
+    assert messages(mal.say('!reload', channel, bot))[0].startswith('Plugins reloaded')
+    assert messages(mal.say('!roll', channel, bot)) == ['mallory rolled a d6, roll 2']
+    ana = users('anabot', channel=channel)
+    assert 'welcome to ' + channel in ana.wait_for('NOTICE anabot')

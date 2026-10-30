@@ -33,6 +33,9 @@ class FakeChannel:
     def add_user(self, nick):
         self.nicks[nick] = True
 
+    def remove_user(self, nick):
+        self.nicks.pop(nick, None)
+
     def users(self):
         return list(self.nicks)
 
@@ -220,6 +223,35 @@ class TestBot(Bot):
     def private(self, text, nick='tester', **who):
         """Send a private message to the bot as nick, and return the bot's replies to them."""
         return self._receive('privmsg', nick, self.transport.nick, text, nick, **who)
+
+    def event(self, kind, nick='tester', channel=None, text='', user=None, host='example.com',
+              account=None, **data):
+        """Something other than a message happens, and returns what the bot sent, as Sent.
+
+        kind is join, part, kick, quit, nick, topic, invite, mode or notice. channel
+        is the bot's first channel unless given, or none for nick and quit. data is
+        the rest: kicked='troll' for a kick, new_nick='mal_' for a nick change,
+        modes=['+o', 'mal'] for a mode change. A notice's channel can be the bot's nick.
+        """
+        if kind in ('nick', 'quit'):
+            target = ''
+        else:
+            target = channel or self.chanlist[0]
+        if kind == 'join':
+            self.add_channel(target)
+            self.channels[target].add_user(nick)
+        elif kind == 'part' and target in self.channels:
+            self.channels[target].remove_user(nick)
+        tags = {'account': account} if account else {}
+        source = Source(nick, user or nick, host, account)
+        if kind == 'notice':
+            event = Event('message', source, target, text, 'notice', tags)
+        else:
+            event = Event(kind, source, target, text, tags=tags, data=data)
+        start = len(self.sent)
+        self.driver.run(event)
+        self._raise_plugin_errors()
+        return self.sent[start:]
 
     def sent_to(self, target):
         """Every message and action the bot has sent to target, like a nick for !help."""
