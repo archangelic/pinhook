@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  <link rel="icon" href="{{ 'assets/brand/pinhook-icon-small.svg' | url }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ 'assets/brand/apple-touch-icon-pinhook.png' | url }}">
+  <link rel="manifest" href="{{ 'assets/brand/site.webmanifest' | url }}">
+  <meta name="theme-color" content="#0B1620">
+  {#- link previews use the latest docs, which mike always keeps -#}
+  {%- set preview = config.site_url ~ 'latest/assets/brand/pinhook-github-social-preview.png' %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  {#- the 404 page has no page -#}
+  <meta property="og:title" content="{{ page and (page.meta.title or page.title) or config.site_name }}">
+  <meta property="og:description" content="{{ page and page.meta.description or config.site_description }}">
+  <meta property="og:image" content="{{ preview }}">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="{{ preview }}">
+{% endblock %}

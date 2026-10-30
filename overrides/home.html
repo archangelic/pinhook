@@ -1,0 +1,83 @@
+{% extends "main.html" %}
+
+{#- the homepage: a hero and feature sections above the page's own markdown -#}
+{% block hero %}
+<div class="ph-home">
+  <section class="ph-hero">
+    <div class="ph-wrap ph-split">
+      <div class="ph-hero__text">
+        <span class="ph-badge">pinhook 1.12</span>
+        <h1>IRC bots in plain Python.</h1>
+        <p class="ph-lead">Write a plugin as a Python function, and pinhook handles connecting, joining channels, ops, bans and getting your replies back to the right place. Works on any IRC network, and on Twitch.</p>
+        <div class="ph-actions">
+          <a class="ph-button" href="{{ 'getting-started/' | url }}">Get started</a>
+          <code class="ph-install">$ pip install pinhook</code>
+        </div>
+      </div>
+      <div class="ph-chat" aria-label="A chat with a pinhook bot">
+        <div class="ph-chat__title">#games</div>
+        <div class="ph-chat__lines">
+          <span><span class="ph-time">22:40</span> &lt;ana&gt; !hello</span>
+          <span><span class="ph-time">22:40</span> <span class="ph-bot">&lt;pinhook&gt;</span> hi ana!</span>
+          <span><span class="ph-time">22:41</span> &lt;mal&gt; !roll 2d20</span>
+          <span><span class="ph-time">22:41</span> <span class="ph-bot">&lt;pinhook&gt;</span> 14, 17 = 31</span>
+          <span><span class="ph-time">22:41</span> &lt;mal&gt; !roll lots</span>
+          <span><span class="ph-time">22:41</span> <span class="ph-bot">&lt;pinhook&gt;</span> mal: improper format, should be NdN+N</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ph-band">
+    <div class="ph-wrap">
+      <p class="ph-label">What it does</p>
+      <h2>Everything a bot needs, nothing it doesn't.</h2>
+      <div class="ph-cards">
+        <div class="ph-card"><span class="ph-num">01</span><h3>Plugins are functions</h3><p>Mark a function with <code>@command</code> or <code>@listener</code> and return a reply. Drop the file in your plugins folder, and <code>!reload</code> picks up changes.</p></div>
+        <div class="ph-card"><span class="ph-num">02</span><h3>Ops and bans</h3><p>Bot operators and bans by nick, hostmask or services account. Account bans follow people across nick changes and restarts.</p></div>
+        <div class="ph-card"><span class="ph-num">03</span><h3>Saved data and settings</h3><p><code>msg.store</code> is a dict kept between restarts, and <code>msg.config</code> holds the plugin's own settings from the config file.</p></div>
+        <div class="ph-card"><span class="ph-num">04</span><h3>Config files</h3><p>Run a bot from a JSON, YAML or TOML file with the <code>pinhook</code> command, reading secrets from environment variables.</p></div>
+        <div class="ph-card"><span class="ph-num">05</span><h3>Logins and TLS</h3><p>SASL or NickServ logins, checked TLS certificates, bot mode, and a new nick when yours is taken.</p></div>
+        <div class="ph-card"><span class="ph-num">06</span><h3>TestBot</h3><p>Test plugins with pytest, no server needed. Stores live in memory and a plugin error fails the test.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ph-band ph-band--panel">
+    <div class="ph-wrap ph-split">
+      <div class="ph-split__text">
+        <p class="ph-label">A plugin</p>
+        <h2>A function, a decorator, a reply.</h2>
+        <p>A plugin gets the message: who sent it, where, a way to reply, a store that survives restarts and its own settings.</p>
+        <a class="ph-more" href="{{ 'plugins/' | url }}">Writing plugins →</a>
+      </div>
+<pre class="ph-code"><code><span class="ph-k">import</span> pinhook.plugin
+
+<span class="ph-d">@pinhook.plugin.command</span>(<span class="ph-s">'!hello'</span>)
+<span class="ph-k">def</span> <span class="ph-n">hello</span>(msg):
+    <span class="ph-k">return</span> pinhook.plugin.message(<span class="ph-s">'hi {}!'</span>.format(msg.nick))</code></pre>
+    </div>
+  </section>
+
+  <section class="ph-band">
+    <div class="ph-wrap ph-split">
+<pre class="ph-code"><code><span class="ph-k">from</span> pinhook.testing <span class="ph-k">import</span> TestBot
+
+<span class="ph-k">def</span> <span class="ph-n">test_hello</span>():
+    bot = TestBot(plugin_dir=<span class="ph-s">'plugins'</span>)
+    <span class="ph-k">assert</span> bot.say(<span class="ph-s">'!hello'</span>, nick=<span class="ph-s">'ana'</span>) == [<span class="ph-s">'hi ana!'</span>]</code></pre>
+      <div class="ph-split__text">
+        <p class="ph-label">Testing</p>
+        <h2>Test it without a server.</h2>
+        <p><code>TestBot</code> runs your plugins the way a real bot does and hands back what it would have said, so a plugin's tests run in pytest like any other code.</p>
+        <a class="ph-more" href="{{ 'testing/' | url }}">Testing plugins →</a>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{#- the hero carries the page's heading, so the markdown goes in without Material adding a title -#}
+{% block content %}
+  {{ page.content }}
+{% endblock %}

@@ -1,0 +1,522 @@
+/* pinhook's brand on Material for MkDocs: colors and type from the brand kit (v1.0) */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("fonts/Archivo-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  --md-text-font: "Archivo";
+  --md-code-font: "IBM Plex Mono";
+}
+
+/* light mode */
+:root,
+[data-md-color-scheme="default"] {
+  --ph-ground: #FFFFFF;
+  --ph-panel: #EEF1F3;
+  --ph-rule: #E1E6EA;
+  --ph-text: #0B1620;
+  --ph-heading: #0B1620;
+  --ph-secondary: #4B5763;
+  --ph-card-text: #36424D;
+  --ph-link: #00806F;
+  --ph-nav-current: #E3F7F4;
+  --ph-code-block: #0B1620;
+  --ph-code-border: transparent;
+  --ph-band: #FFFFFF;
+  --ph-band-panel: #EEF1F3;
+  --ph-card: transparent;
+  --ph-num: #00806F;
+}
+
+/* dark mode */
+[data-md-color-scheme="slate"] {
+  --ph-ground: #0B1620;
+  --ph-panel: #111F2B;
+  --ph-rule: #22323F;
+  --ph-text: #D7DEE3;
+  --ph-heading: #FFFFFF;
+  --ph-secondary: #A9B6C0;
+  --ph-card-text: #A9B6C0;
+  --ph-link: #00C2A8;
+  --ph-nav-current: #17323A;
+  --ph-code-block: #111F2B;
+  --ph-code-border: #22323F;
+  /* the homepage's sections after the hero alternate, so they stay apart */
+  --ph-band: #111F2B;
+  --ph-band-panel: #0B1620;
+  --ph-card: #0B1620;
+  --ph-num: #3FE0C8;
+}
+
+/* both modes: the header and footer are Terminal Ink */
+:root,
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0B1620;
+  --md-primary-fg-color--light: #111F2B;
+  --md-primary-fg-color--dark: #0B1620;
+  --md-primary-bg-color: #FFFFFF;
+  --md-primary-bg-color--light: #D7DEE3;
+  --md-accent-fg-color: var(--ph-link);
+  --md-accent-fg-color--transparent: rgba(0, 194, 168, 0.1);
+  --md-accent-bg-color: #0B1620;
+  --md-default-bg-color: var(--ph-ground);
+  --md-default-fg-color: var(--ph-text);
+  --md-default-fg-color--light: var(--ph-secondary);
+  --md-default-fg-color--lighter: var(--ph-rule);
+  --md-default-fg-color--lightest: var(--ph-rule);
+  --md-typeset-color: var(--ph-text);
+  --md-typeset-a-color: var(--ph-link);
+  --md-typeset-table-color: var(--ph-rule);
+  --md-code-fg-color: var(--ph-text);
+  --md-code-bg-color: var(--ph-panel);
+  --md-footer-bg-color: #0B1620;
+  --md-footer-bg-color--dark: #0B1620;
+  --md-footer-fg-color: #FFFFFF;
+  --md-footer-fg-color--light: #D7DEE3;
+  --md-footer-fg-color--lighter: #A9B6C0;
+}
+
+/* header: the horizontal lockup stands in for the site name, which is never retyped */
+.md-header {
+  background-color: #0B1620;
+  box-shadow: none;
+}
+[data-md-color-scheme="slate"] .md-header {
+  border-bottom: 1px solid #22323F;
+}
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 1.6rem;
+  width: auto;
+}
+.md-header__topic:first-child > .md-ellipsis {
+  display: none;
+}
+/* Material moves the logo into the menu on narrow screens, keep it in the header too */
+@media screen and (max-width: 76.234375em) {
+  .md-header__button.md-logo {
+    display: inline-block;
+  }
+  /* the menu button stays at the left edge, before the logo */
+  .md-header__inner > label.md-header__button[for="__drawer"] {
+    order: -1;
+  }
+}
+.md-nav--primary > .md-nav__title {
+  font-size: 0;
+}
+.md-nav--primary > .md-nav__title .md-logo img {
+  height: 2rem;
+  width: auto;
+}
+.md-version__current,
+.md-version__link {
+  font-family: var(--md-code-font-family);
+}
+
+/* type */
+.md-typeset {
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  color: var(--ph-heading);
+}
+.md-typeset h1 {
+  font-size: 2.4em;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+.md-typeset h2 {
+  font-size: 1.6em;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+.md-typeset h3 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.md-typeset code,
+.md-typeset kbd,
+.md-typeset pre {
+  font-weight: 500;
+}
+
+/* nav: Plex Mono section labels, the current page on a light teal */
+.md-nav__item--section > .md-nav__link,
+.md-nav__item--section > label.md-nav__link {
+  font-family: var(--md-code-font-family);
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ph-secondary);
+}
+.md-nav__link--active,
+.md-nav__item .md-nav__link--active,
+.md-nav--primary .md-nav__item--active > .md-nav__link {
+  color: var(--ph-heading);
+  font-weight: 700;
+  background-color: var(--ph-nav-current);
+  box-shadow: 0 0 0 0.3rem var(--ph-nav-current);
+  border-radius: 2px;
+}
+.md-nav--secondary .md-nav__link--active {
+  color: var(--ph-link);
+  background: none;
+  box-shadow: none;
+}
+
+/* code: blocks are dark in both modes, inline code sits on Mist */
+.md-typeset pre > code {
+  background-color: var(--ph-code-block);
+  color: #D7DEE3;
+  border-radius: 6px;
+}
+[data-md-color-scheme="slate"] .md-typeset pre > code {
+  box-shadow: inset 0 0 0 1px var(--ph-code-border);
+}
+.md-typeset .highlight,
+.md-typeset pre {
+  --md-code-fg-color: #D7DEE3;
+  --md-code-bg-color: var(--ph-code-block);
+  --md-code-hl-color: rgba(0, 194, 168, 0.18);
+  --md-code-hl-keyword-color: #3FE0C8;
+  --md-code-hl-constant-color: #3FE0C8;
+  --md-code-hl-special-color: #9FE5D9;
+  --md-code-hl-string-color: #9FE5D9;
+  --md-code-hl-number-color: #F2C14E;
+  --md-code-hl-function-color: #FFFFFF;
+  --md-code-hl-name-color: #D7DEE3;
+  --md-code-hl-variable-color: #D7DEE3;
+  --md-code-hl-operator-color: #D7DEE3;
+  --md-code-hl-punctuation-color: #D7DEE3;
+  --md-code-hl-generic-color: #A9B6C0;
+  --md-code-hl-comment-color: #8796A3;
+}
+.md-typeset .highlight .nd {
+  color: #F2C14E;
+}
+.md-typeset .md-clipboard {
+  color: #8796A3;
+}
+.md-typeset .md-clipboard:focus,
+.md-typeset .md-clipboard:hover {
+  color: #3FE0C8;
+}
+
+/* tables */
+.md-typeset table:not([class]) {
+  border: 1px solid var(--ph-rule);
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+.md-typeset table:not([class]) th {
+  background-color: var(--ph-panel);
+  color: var(--ph-heading);
+}
+
+/* notes are teal */
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-color: var(--ph-link);
+}
+.md-typeset .note > .admonition-title,
+.md-typeset .note > summary {
+  background-color: var(--ph-nav-current);
+  color: var(--ph-heading);
+}
+.md-typeset .note > .admonition-title::before,
+.md-typeset .note > summary::before {
+  background-color: var(--ph-link);
+}
+
+/* footer */
+[data-md-color-scheme="slate"] .md-footer {
+  border-top: 1px solid #22323F;
+}
+.md-copyright {
+  font-family: var(--md-code-font-family);
+}
+
+/* the homepage */
+.ph-home {
+  color: var(--ph-text);
+  font-size: 17px;
+  line-height: 1.55;
+}
+/* the same column as Material's content, so the sections line up with the page below them */
+.ph-wrap {
+  max-width: 61rem;
+  margin: 0 auto;
+  padding: 0 0.8rem;
+}
+.ph-split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 48px;
+  align-items: center;
+}
+.ph-split > * {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+.ph-split > .ph-split__text {
+  flex: 1 1 340px;
+}
+.ph-split > .ph-code {
+  flex: 1 1 520px;
+}
+.ph-home h1,
+.ph-home h2,
+.ph-home h3 {
+  margin: 0;
+  font-weight: 800;
+  color: var(--ph-heading);
+}
+.ph-home h2 {
+  font-size: clamp(32px, 4vw, 48px);
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.ph-home h3 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.ph-home p {
+  margin: 0;
+}
+.ph-home code {
+  font-family: var(--md-code-font-family);
+  font-size: 0.88em;
+}
+
+.ph-hero {
+  background: #0B1620;
+  color: #FFFFFF;
+  padding: 72px 0 104px;
+}
+.ph-hero__text {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.ph-hero h1 {
+  color: #FFFFFF;
+  font-size: clamp(44px, 6vw, 76px);
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+}
+.ph-badge {
+  align-self: flex-start;
+  font-family: var(--md-code-font-family);
+  font-size: 14px;
+  color: #3FE0C8;
+  border: 1.5px solid #00806F;
+  border-radius: 999px;
+  padding: 6px 14px;
+}
+.ph-lead {
+  font-size: 21px;
+  line-height: 1.5;
+  color: #D7DEE3;
+  max-width: 560px;
+}
+.ph-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+.ph-button {
+  background: #00C2A8;
+  color: #0B1620 !important;
+  font-weight: 700;
+  padding: 14px 22px;
+  border-radius: 4px;
+  text-decoration: none;
+}
+.ph-button:hover,
+.ph-button:focus {
+  background: #3FE0C8;
+}
+.ph-home .ph-install {
+  font-size: 16px;
+  color: #FFFFFF;
+  border: 1.5px solid #3A4A57;
+  padding: 12px 18px;
+  border-radius: 4px;
+}
+.ph-chat {
+  background: #111F2B;
+  border: 1px solid #22323F;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: var(--md-code-font-family);
+}
+.ph-chat__title {
+  padding: 12px 18px;
+  border-bottom: 1px solid #22323F;
+  font-size: 14px;
+  color: #A9B6C0;
+}
+.ph-chat__lines {
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 15px;
+  color: #D7DEE3;
+}
+.ph-time {
+  color: #8796A3;
+}
+.ph-bot {
+  color: #3FE0C8;
+}
+
+.ph-band {
+  background: var(--ph-band);
+  padding: 96px 0;
+}
+.ph-band--panel {
+  background: var(--ph-band-panel);
+}
+.ph-band .ph-wrap:not(.ph-split) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ph-label {
+  font-family: var(--md-code-font-family);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ph-secondary);
+}
+.ph-cards {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.ph-card {
+  background: var(--ph-card);
+  border: 1px solid var(--ph-rule);
+  border-radius: 6px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ph-card p {
+  color: var(--ph-card-text);
+}
+.ph-num {
+  font-family: var(--md-code-font-family);
+  font-size: 14px;
+  color: var(--ph-num);
+}
+.ph-split__text {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ph-split__text p:not(.ph-label) {
+  color: var(--ph-card-text);
+}
+/* teal text would fail contrast on Mist, so the link is Ink with a teal underline */
+.ph-more {
+  align-self: flex-start;
+  font-weight: 700;
+  color: var(--ph-heading) !important;
+  text-decoration: underline;
+  text-decoration-color: #00806F;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+[data-md-color-scheme="slate"] .ph-more {
+  text-decoration-color: #00C2A8;
+}
+.ph-code {
+  margin: 0;
+  background: #0B1620;
+  color: #D7DEE3;
+  border-radius: 6px;
+  padding: 28px;
+  font-family: var(--md-code-font-family);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-x: auto;
+}
+[data-md-color-scheme="slate"] .ph-code {
+  border: 1px solid #22323F;
+}
+[data-md-color-scheme="slate"] .ph-band:not(.ph-band--panel) .ph-code {
+  background: #0B1620;
+}
+[data-md-color-scheme="slate"] .ph-band--panel .ph-code {
+  background: #111F2B;
+}
+.ph-code code {
+  font-size: inherit;
+  background: none;
+  padding: 0;
+}
+.ph-k {
+  color: #3FE0C8;
+}
+.ph-s {
+  color: #9FE5D9;
+}
+.ph-d {
+  color: #F2C14E;
+}
+.ph-n {
+  color: #FFFFFF;
+}
+
+@media screen and (max-width: 600px) {
+  .ph-hero {
+    padding: 48px 0 64px;
+  }
+  .ph-band {
+    padding: 64px 0;
+  }
+  .ph-split {
+    gap: 32px;
+  }
+  .ph-split > * {
+    flex-basis: 100%;
+  }
+  .ph-lead {
+    font-size: 18px;
+  }
+  .ph-code {
+    padding: 20px;
+    font-size: 13px;
+  }
+}

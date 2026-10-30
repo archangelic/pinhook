@@ -1,8 +1,18 @@
-# pinhook
+---
+template: home.html
+title: drop a line in any channel
+hide:
+  - navigation
+  - toc
+---
 
-The pluggable python framework for IRC bots and Twitch bots.
+## Quick start
 
-You write small plugins, each one a python function, and pinhook handles connecting, joining channels, ops, bans and getting your replies back to the right place.
+```bash
+pip install pinhook
+```
+
+Make a `plugins` folder and save this in it as `hello.py`:
 
 ```python
 import pinhook.plugin
@@ -12,13 +22,7 @@ def hello(msg):
     return pinhook.plugin.message('hi {}!'.format(msg.nick))
 ```
 
-## Quick start
-
-```bash
-pip install pinhook
-```
-
-Make a `plugins` folder, save the plugin above in it as `hello.py`, then start a bot:
+Then start a bot:
 
 ```python
 from pinhook.bot import Bot
