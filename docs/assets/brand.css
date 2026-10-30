@@ -42,7 +42,6 @@
   --ph-band: #FFFFFF;
   --ph-band-panel: #EEF1F3;
   --ph-card: transparent;
-  --ph-num: #00806F;
 }
 
 /* dark mode */
@@ -62,7 +61,6 @@
   --ph-band: #111F2B;
   --ph-band-panel: #0B1620;
   --ph-card: #0B1620;
-  --ph-num: #3FE0C8;
 }
 
 /* both modes: the header and footer are Terminal Ink */
@@ -417,10 +415,14 @@
   text-transform: uppercase;
   color: var(--ph-secondary);
 }
+.ph-intro {
+  max-width: 640px;
+  color: var(--ph-card-text);
+}
 .ph-cards {
   margin-top: 28px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 16px;
 }
 .ph-card {
@@ -432,13 +434,23 @@
   flex-direction: column;
   gap: 10px;
 }
+.ph-card h3 {
+  font-size: 20px;
+}
 .ph-card p {
   color: var(--ph-card-text);
+  font-size: 16px;
 }
-.ph-num {
-  font-family: var(--md-code-font-family);
-  font-size: 14px;
-  color: var(--ph-num);
+.ph-card code {
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+/* each part ends with the page that covers it */
+.ph-card__link {
+  margin-top: auto;
+  padding-top: 6px;
+  font-weight: 700;
+  color: var(--ph-link) !important;
 }
 .ph-split__text {
   display: flex;

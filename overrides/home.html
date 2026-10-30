@@ -31,14 +31,17 @@
   <section class="ph-band">
     <div class="ph-wrap">
       <p class="ph-label">What it does</p>
-      <h2>Everything a bot needs, nothing it doesn't.</h2>
+      <h2>What pinhook handles for your bot</h2>
+      <p class="ph-intro">You write the plugins. These are the parts pinhook takes care of, each with the page that covers it.</p>
       <div class="ph-cards">
-        <div class="ph-card"><span class="ph-num">01</span><h3>Plugins are functions</h3><p>Mark a function with <code>@command</code> or <code>@listener</code> and return a reply. Drop the file in your plugins folder, and <code>!reload</code> picks up changes.</p></div>
-        <div class="ph-card"><span class="ph-num">02</span><h3>Ops and bans</h3><p>Bot operators and bans by nick, hostmask or services account. Account bans follow people across nick changes and restarts.</p></div>
-        <div class="ph-card"><span class="ph-num">03</span><h3>Saved data and settings</h3><p><code>msg.store</code> is a dict kept between restarts, and <code>msg.config</code> holds the plugin's own settings from the config file.</p></div>
-        <div class="ph-card"><span class="ph-num">04</span><h3>Config files</h3><p>Run a bot from a JSON, YAML or TOML file with the <code>pinhook</code> command, reading secrets from environment variables.</p></div>
-        <div class="ph-card"><span class="ph-num">05</span><h3>Logins and TLS</h3><p>SASL or NickServ logins, checked TLS certificates, bot mode, and a new nick when yours is taken.</p></div>
-        <div class="ph-card"><span class="ph-num">06</span><h3>TestBot</h3><p>Test plugins with pytest, no server needed. Stores live in memory and a plugin error fails the test.</p></div>
+        <div class="ph-card"><h3>Commands and listeners</h3><p><code>@command('!roll')</code> runs when a message starts with <code>!roll</code>. A <code>@listener</code> sees every other message, <code>/me</code> actions too. Reply by returning <code>message()</code> or <code>action()</code>, or call <code>msg.reply()</code> as you go.</p><a class="ph-card__link" href="{{ 'plugins/' | url }}">Writing plugins →</a></div>
+        <div class="ph-card"><h3>Who can run what</h3><p>List <code>ops</code> by nick, hostmask like <code>*!*@203.0.113.7</code>, or services account like <code>$a:mal</code>. <code>ops=True</code> keeps a command to them. Bans made with <code>!ban</code> are saved to <code>ban_file</code> and last through restarts.</p><a class="ph-card__link" href="{{ 'bans-and-ops/' | url }}">Bans and ops →</a></div>
+        <div class="ph-card"><h3>Data that survives restarts</h3><p><code>msg.store</code> is a dict pinhook saves as JSON after each plugin call. <code>msg.config</code> is the plugin's section of <code>plugin_config</code>, with a <code>shared</code> section for settings several plugins use.</p><a class="ph-card__link" href="{{ 'plugins/' | url }}">Writing plugins →</a></div>
+        <div class="ph-card"><h3>Config files and secrets</h3><p><code>pinhook config.yaml</code> starts a bot from a JSON, YAML or TOML file. <code>${NAME}</code> fills in an environment variable, so passwords stay out of the file. <code>bot_dir</code> keeps plugins, data and logs in one folder.</p><a class="ph-card__link" href="{{ 'getting-started/' | url }}">Getting started →</a></div>
+        <div class="ph-card"><h3>Logging in and TLS</h3><p><code>sasl_password</code> logs in with SASL, with <code>ns_pass</code> for NickServ as the fallback. <code>ssl_required</code> connects over TLS and <code>ssl_verify</code> checks the certificate. Connection errors are logged with what to fix.</p><a class="ph-card__link" href="{{ 'options/' | url }}">Options →</a></div>
+        <div class="ph-card"><h3>Built-in commands</h3><p><code>!help</code>, <code>!reload</code> for new plugin code without a restart, <code>!enable</code> and <code>!disable</code>, <code>!join</code> and <code>!quit</code>, plus <code>!op</code>, <code>!ban</code> and <code>!banlist</code> for ops. <code>cmd_prefix</code> changes their <code>!</code>.</p><a class="ph-card__link" href="{{ 'commands/' | url }}">Built-in commands →</a></div>
+        <div class="ph-card"><h3>Testing</h3><p><code>TestBot(plugin_dir='plugins')</code> runs your plugins without a server. <code>bot.say('!roll 1d1')</code> returns the replies, and a plugin that raises fails the test with a <code>PluginError</code>.</p><a class="ph-card__link" href="{{ 'testing/' | url }}">Testing plugins →</a></div>
+        <div class="ph-card"><h3>Twitch</h3><p><code>TwitchBot</code> connects to Twitch chat with a bot account's oauth token, always over TLS. Plugins, ops and bans work the same as on IRC.</p><a class="ph-card__link" href="{{ 'twitch/' | url }}">Twitch bots →</a></div>
       </div>
     </div>
   </section>
