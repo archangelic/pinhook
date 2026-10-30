@@ -182,3 +182,25 @@ def describe(params):
         if parts:
             lines.append('{}: {}'.format(param.name, '; '.join(parts)))
     return lines
+
+
+def pack(groups, room):
+    """Lines of at most room bytes holding groups of names, for !help.
+
+    groups is [(title, names)], written like 'commands: !roll, !weather | listeners: echo'.
+    A title of None leaves the group untitled. A name only starts a new line when it
+    won't fit on this one.
+    """
+    lines, line = [], ''
+    for title, names in groups:
+        for i, name in enumerate(names):
+            piece = '{}: {}'.format(title, name) if i == 0 and title else name
+            separator = (', ' if i else ' | ') if line else ''
+            if line and len((line + separator + piece).encode()) > room:
+                lines.append(line)
+                line = piece
+            else:
+                line += separator + piece
+    if line:
+        lines.append(line)
+    return lines

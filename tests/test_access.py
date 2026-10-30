@@ -309,14 +309,19 @@ def test_help_marks_what_someone_cant_use_and_hides_ops_only(tmp_path):
     bot = bot_with(tmp_path, {'plugins': {'quotes': {'deny': ['troll']}}}, weather=WEATHER,
                    quotes=QUOTES, admin=ADMIN)
     bot.say('!help', nick='troll')
-    lines = bot.sent_to('troll')
-    assert "!weather (restricted, you don't have access) -- the weather" in lines
-    assert "!quote (you don't have access) -- a quote" in lines
-    assert '!forecast -- the forecast' in lines
-    assert not any('shutdown' in line for line in lines)
+    assert bot.sent_to('troll') == [
+        'commands: !forecast, !help, !quote (no access), !weather (no access) | '
+        'listeners: echo | !help <command> for more']
+    bot.say('!help !quote', nick='troll')
+    assert bot.sent_to('troll')[-2:] == ["!quote (you don't have access) -- a quote",
+                                         'usage: quote']
     op(bot, '!help')
-    assert '!weather -- the weather' in bot.sent_to('mal')
-    assert '!shutdown -- stop everything' in bot.sent_to('mal')
+    assert bot.sent_to('mal')[0].startswith(
+        'commands: !access, !allow, !ban, !banlist, !deny, !deop, !disable, !enable, '
+        '!forecast, !help, !join, !op, !ops, !quit, !quote, !reload, !revoke, !shutdown, '
+        '!unban, !weather | listeners: echo')
+    op(bot, '!help reload')
+    assert bot.sent_to('mal')[-1] == '!reload -- force bot to reload all plugins'
 
 
 def test_help_for_one_restricted_command_is_marked(tmp_path):

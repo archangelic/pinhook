@@ -15,6 +15,7 @@ import weakref
 from .bot import Bot
 from .store import Store
 from .transport.base import Event, Limits, Source, casefold
+from .transport.irc import text_room
 
 # one thing the bot sent, kind is 'message', 'action' or 'notice'
 Sent = namedtuple('Sent', ['kind', 'target', 'text'])
@@ -144,6 +145,10 @@ class FakeTransport:
 
     def join(self, channel, key=''):
         self.bot.add_channel(channel)
+
+    def text_room(self, kind, target, prefix=''):
+        # as much as a real server would take
+        return text_room(self.nick, kind, target, prefix)
 
     def members(self, channel):
         return self.channels[channel].users() if channel in self.channels else []

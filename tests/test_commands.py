@@ -3,7 +3,7 @@ from typing import Annotated, Literal, Optional
 
 import pytest
 
-from pinhook.commands import UsageError, describe, params_of, parse, usage
+from pinhook.commands import UsageError, describe, pack, params_of, parse, usage
 
 
 def roll(ctx, dice: Annotated[str, 'dice like 2d6'] = '1d6', times: int = 1):
@@ -104,3 +104,32 @@ def test_unsupported_types_are_refused():
 def test_a_handler_needs_ctx():
     with pytest.raises(TypeError, match='needs a ctx argument'):
         params_of(lambda: None)
+
+
+# packing !help into as few lines as fit
+
+def test_pack_starts_a_new_line_only_between_names():
+    groups = [('commands', ['!roll', '!weather', '!quote']), ('listeners', ['echo']),
+              (None, ['!help <command> for more'])]
+    assert pack(groups, 400) == [
+        'commands: !roll, !weather, !quote | listeners: echo | !help <command> for more']
+    assert pack(groups, 30) == ['commands: !roll, !weather', '!quote | listeners: echo',
+                                '!help <command> for more']
+
+
+def test_pack_counts_bytes_not_characters():
+    assert pack([(None, ['é' * 10, 'é' * 10])], 25) == ['é' * 10, 'é' * 10]
+
+
+def test_a_big_bots_help_fits_in_a_few_lines_without_waiting(tmp_path):
+    from pinhook.testing import TestBot
+    (tmp_path / 'many.py').write_text('from pinhook import command\n' + ''.join(
+        "@command('command{0}')\nasync def c{0}(ctx): pass\n".format(n) for n in range(60)))
+    bot = TestBot(plugin_dir=str(tmp_path))
+    bot.say('!help', nick='ana')
+    lines = bot.sent_to('ana')
+    room = bot.transport.text_room('privmsg', 'ana')
+    assert len(lines) == 2 and all(len(line.encode()) <= room for line in lines)
+    names = ', '.join(lines).replace('commands: ', '').split(' | ')[0].split(', ')
+    assert sorted(names) == sorted(['!help'] + ['!command{}'.format(n) for n in range(60)])
+    assert bot.pauses == []

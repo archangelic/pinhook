@@ -88,6 +88,10 @@ class Transport(Protocol):
 
     def join(self, channel: str, key: str = '') -> None: ...
 
+    def text_room(self, kind: str, target: str, prefix: str = '') -> int:
+        """How many bytes of text fit in one message of this kind to target."""
+        ...
+
     def members(self, channel: str) -> list[str]: ...
 
     def joined(self) -> list[str]:

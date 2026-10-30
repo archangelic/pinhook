@@ -64,7 +64,7 @@ def test_actions_reach_listeners(tmp_path):
 def test_help_goes_to_the_sender_privately(tmp_path):
     bot = TestBot(plugin_dir=plugins(tmp_path, echo=ECHO))
     assert bot.say('!help', nick='mal') == []
-    assert '!echo -- N/A' in bot.sent_to('mal')
+    assert bot.sent_to('mal') == ['commands: !echo, !help, !wave | !help <command> for more']
 
 
 def test_flood_pauses_are_recorded_not_waited(tmp_path):

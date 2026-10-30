@@ -51,8 +51,8 @@ def test_help_falls_back_to_the_docstring(tmp_path):
         "async def hi(ctx):\n"
         "    '''say hello\n\n    longer words that help leaves out'''\n"
         "    await ctx.reply('hello')\n"))
-    bot.say('!help', nick='ana')
-    assert '!hi -- say hello' in bot.sent_to('ana')
+    bot.say('!help !hi', nick='ana')
+    assert bot.sent_to('ana') == ['!hi -- say hello', 'usage: hi']
 
 
 def test_errors_are_logged_and_only_said_when_the_author_chose_words(tmp_path, caplog):

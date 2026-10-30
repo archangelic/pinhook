@@ -495,28 +495,34 @@ class Bot:
             self.send_message(kind, target, line)
 
     def call_help(self, nick, op, arg='', source=None, channel=None):
+        # names only, packed into as few messages as fit, and !help <command> for the rest.
         # source is who asked, and channel where, so the list can say what they can't use
         prefix = self.cmd_prefix
         who = source or Source(nick)
         where = channel if is_channel(channel or '') else None
         if arg:
             return self.command_help(nick, op, arg, who, where)
-        cmds = {}
+        names = {prefix + 'help': prefix + 'help'}
         for handler in self.registry.handlers():
-            level = self.access.level(handler) if handler.kind == 'command' else None
-            if handler.kind != 'command' or handler.hide or (level == 'ops' and not op):
+            if handler.kind != 'command' or handler.hide:
                 continue
-            cmds[handler.label(prefix) + self.access_note(handler, who, where)] = \
-                handler.help_text
-        cmds.update({prefix + 'help': 'returns this output to private message'})
+            if self.access.level(handler) == 'ops' and not op:
+                continue
+            label = handler.label(prefix)
+            allowed = self.access.allows(who, handler, where)
+            names[label] = label + ('' if allowed else ' (no access)')
         if op:
-            cmds.update({prefix + k: v for k, v in self.internal_commands.items()})
-        helpout = OrderedDict(sorted(cmds.items()))
-        for h in helpout:
-            self.send_message('privmsg', nick, '{} -- {}'.format(h, helpout[h]))
-        listeners = ', '.join(self.registry.listeners)
-        self.send_message('privmsg', nick, 'List of listeners: {}'.format(listeners))
+            names.update({prefix + name: prefix + name for name in self.internal_commands})
+        groups = [('commands', [names[label] for label in sorted(names)])]
+        if self.registry.listeners:
+            groups.append(('listeners', sorted(self.registry.listeners)))
+        groups.append((None, ['{}help <command> for more'.format(prefix)]))
+        self.send_help(nick, commands.pack(groups, self.transport.text_room('privmsg', nick)))
         return None
+
+    def send_help(self, nick, lines):
+        for line in lines:
+            self.send_message('privmsg', nick, line)
 
     def access_note(self, handler, who, channel):
         # restricted commands show for everyone, so people know to ask for access
@@ -527,19 +533,24 @@ class Bot:
         return " (you don't have access)"
 
     def command_help(self, nick, op, word, who, channel):
-        # !help roll: one command's help, its usage line and what its arguments mean
+        # !help !roll or !help roll: one command's help, its usage line and what its
+        # arguments mean
+        prefix = self.cmd_prefix
+        name = self.registry.strip_prefix(word) or word
+        if op and name in self.internal_commands:
+            self.send_help(nick, ['{}{} -- {}'.format(prefix, name, self.internal_commands[name])])
+            return None
         handler = self.registry.find(word) or self.registry.find(word, addressed=True)
         if handler is None or (self.access.level(handler) == 'ops' and not op):
-            self.send_message('privmsg', nick, "there's no command called {}".format(word))
+            self.send_help(nick, ["there's no command called {}".format(word)])
             return None
-        self.send_message('privmsg', nick, '{}{} -- {}'.format(
-            handler.label(self.cmd_prefix), self.access_note(handler, who, channel),
-            handler.help_text))
+        lines = ['{}{} -- {}'.format(handler.label(prefix), self.access_note(handler, who, channel),
+                                     handler.help_text)]
         if handler.native:
-            self.send_message('privmsg', nick, 'usage: ' + commands.usage(handler.name,
-                                                                          handler.params))
-            for line in commands.describe(handler.params):
-                self.send_message('privmsg', nick, line)
+            lines.append('usage: ' + commands.usage(handler.name, handler.params))
+            described = [(None, [line]) for line in commands.describe(handler.params)]
+            lines += commands.pack(described, self.transport.text_room('privmsg', nick))
+        self.send_help(nick, lines)
         return None
 
     def call_internal_commands(self, channel, nick, cmd, arg, op=None, source=None):

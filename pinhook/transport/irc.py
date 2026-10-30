@@ -109,17 +109,16 @@ class IrcTransport:
             return
         command = 'NOTICE' if message.kind == 'notice' else 'PRIVMSG'
         start, end = ('\x01ACTION ', '\x01') if message.kind == 'action' else ('', '')
-        # what the server puts in front when it passes the line on, and the line ending
-        relayed = ':{} {} {} :{}{}{}\r\n'.format(self.nick, command, message.target, start,
-                                                 message.prefix, end)
-        # a very long target could leave no room at all, so always allow some
-        room = max(512 - len(relayed.encode()) - self.hostmask_length, 64)
+        room = self.text_room(message.kind, message.target, message.prefix)
         for piece in split_text(message.text, room):
             self.write(command, [message.target, start + message.prefix + piece + end])
         await self.writer.drain()
 
     def join(self, channel, key=''):
         self.write('JOIN', [channel, key] if key else [channel])
+
+    def text_room(self, kind, target, prefix=''):
+        return text_room(self.nick, kind, target, prefix, self.hostmask_length)
 
     def members(self, channel):
         return list(self.channels.get(self.casefold(channel), {}).values())
@@ -553,6 +552,16 @@ class TwitchTransport(IrcTransport):
         self.logger.info('requesting permissions')
         for cap in ('twitch.tv/membership', 'twitch.tv/tags', 'twitch.tv/commands'):
             self.write('CAP', ['REQ', cap])
+
+
+def text_room(nick, kind, target, prefix='', hostmask_length=HOSTMASK_GUESS):
+    """How many bytes of text fit in one message to target, after the server adds who sent it."""
+    command = 'NOTICE' if kind == 'notice' else 'PRIVMSG'
+    start, end = ('\x01ACTION ', '\x01') if kind == 'action' else ('', '')
+    # what the server puts in front when it passes the line on, and the line ending
+    relayed = ':{} {} {} :{}{}{}\r\n'.format(nick, command, target, start, prefix, end)
+    # a very long target could leave no room at all, so always allow some
+    return max(512 - len(relayed.encode()) - hostmask_length, 64)
 
 
 def split_text(text, room):
