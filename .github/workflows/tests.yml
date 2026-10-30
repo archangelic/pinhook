@@ -9,7 +9,7 @@ on:
 jobs:
   test:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     strategy:
       fail-fast: false
@@ -17,9 +17,9 @@ jobs:
         python-version: ['3.11', '3.12', '3.13', '3.14']
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v10
     - name: Set up Python ${{ matrix.python-version }}
       run: uv venv --python ${{ matrix.python-version }}
     - name: Install dependencies
@@ -29,23 +29,23 @@ jobs:
 
   style:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v10
     - name: Check PEP 8, with lines up to 100 characters (set in setup.cfg)
       run: uv run --no-project --python 3.12 --with pycodestyle==2.15.0 pycodestyle pinhook tests examples setup.py
 
   mypy:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v10
     - name: Set up Python
       run: uv venv --python 3.11
     - name: Install dependencies
@@ -55,12 +55,12 @@ jobs:
 
   integration:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v10
     - name: Set up Python
       run: uv venv --python 3.12
     - name: Install dependencies
