@@ -14,7 +14,7 @@ import weakref
 
 from .bot import Bot
 from .store import Store
-from .transport.base import Event, Limits, Source, casefold
+from .transport.base import Event, Limits, Member, Source, casefold
 from .transport.irc import text_room
 
 # one thing the bot sent, kind is 'message', 'action' or 'notice'
@@ -26,14 +26,15 @@ class PluginError(Exception):
 
 
 class FakeChannel:
-    # the nicks in a channel, in the order they joined, and their modes there
+    # the nicks in a channel, in the order they joined, their accounts, and their modes there
 
     def __init__(self):
         self.nicks = {}
         self.modes = {}
 
-    def add_user(self, nick):
-        self.nicks[nick] = True
+    def add_user(self, nick, account=None):
+        if account or nick not in self.nicks:
+            self.nicks[nick] = account
 
     def remove_user(self, nick):
         self.nicks.pop(nick, None)
@@ -54,6 +55,10 @@ class FakeChannel:
 
     def users(self):
         return list(self.nicks)
+
+    def members(self):
+        return [Member(nick, account=account, modes=frozenset(self.modes.get(nick, ())))
+                for nick, account in self.nicks.items()]
 
 
 class Driver:
@@ -151,7 +156,7 @@ class FakeTransport:
         return text_room(self.nick, kind, target, prefix)
 
     def members(self, channel):
-        return self.channels[channel].users() if channel in self.channels else []
+        return self.channels[channel].members() if channel in self.channels else []
 
     def joined(self):
         return list(self.channels)
@@ -252,14 +257,14 @@ class TestBot(Bot):
         """
         channel = channel or self.chanlist[0]
         self.add_channel(channel)
-        self.channels[channel].add_user(nick)
+        self.channels[channel].add_user(nick, who.get('account'))
         return self._receive('privmsg', nick, channel, text, channel, **who)
 
     def action(self, text, nick='tester', channel=None, **who):
         """Send a /me action to a channel as nick, and return the bot's replies there."""
         channel = channel or self.chanlist[0]
         self.add_channel(channel)
-        self.channels[channel].add_user(nick)
+        self.channels[channel].add_user(nick, who.get('account'))
         return self._receive('action', nick, channel, text, channel, **who)
 
     def private(self, text, nick='tester', **who):
@@ -282,7 +287,7 @@ class TestBot(Bot):
             target = channel or self.chanlist[0]
         if kind == 'join':
             self.add_channel(target)
-            self.channels[target].add_user(nick)
+            self.channels[target].add_user(nick, account)
         elif kind == 'part' and target in self.channels:
             self.channels[target].remove_user(nick)
         elif kind == 'mode' and target in self.channels:

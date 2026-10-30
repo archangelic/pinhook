@@ -12,13 +12,11 @@ import json
 import os
 
 from .store import write_json
-from .transport.base import casefold
+from .transport.base import CHANOP_MODES, VOICED_MODES, casefold
 
 # least strict first
 LEVELS = ('open', 'restricted', 'ops')
 BUILTIN_GROUPS = {'ops', 'chanops', 'voiced', 'logged-in'}
-CHANOP_MODES = set('qao')
-VOICED_MODES = set('qaohv')
 
 
 def is_account(entry):

@@ -20,6 +20,39 @@ class Source:
 
 
 @dataclass(frozen=True)
+class Member:
+    """Someone in a channel, as member tracking knows them.
+
+    modes are the channel modes they have there, like {'o'} for a channel operator.
+    account is None when they're not logged in or the server doesn't say. is_bot is
+    True when the server marks them as a bot.
+    """
+    nick: str
+    user: str | None = None
+    host: str | None = None
+    account: str | None = None
+    modes: frozenset[str] = frozenset()
+    away: bool = False
+    realname: str | None = None
+    is_bot: bool = False
+
+    @property
+    def is_chanop(self) -> bool:
+        """True for a channel operator: +o, or the +a and +q some servers have above it."""
+        return bool(self.modes & CHANOP_MODES)
+
+    @property
+    def is_voiced(self) -> bool:
+        """True for +v, or any mode above it, like halfop or op."""
+        return bool(self.modes & VOICED_MODES)
+
+
+# the member modes that make someone a channel operator, or voiced or better
+CHANOP_MODES = frozenset('qao')
+VOICED_MODES = frozenset('qaohv')
+
+
+@dataclass(frozen=True)
 class Event:
     """Something that happened on the network.
 
@@ -92,7 +125,9 @@ class Transport(Protocol):
         """How many bytes of text fit in one message of this kind to target."""
         ...
 
-    def members(self, channel: str) -> list[str]: ...
+    def members(self, channel: str) -> list[Member]:
+        """Who is in channel, from member tracking, with no call to the server."""
+        ...
 
     def joined(self) -> list[str]:
         """The channels the bot is in."""

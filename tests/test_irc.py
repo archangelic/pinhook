@@ -158,7 +158,7 @@ def test_member_modes_come_from_names_and_mode_changes(tmp_path):
 def test_leaving_a_channel_forgets_its_members(tmp_path):
     w = Wire(tmp_path).ready()
     w.join('mal')
-    assert w.bot.transport.members('#test') == ['pinbot', 'mal']
+    assert [m.nick for m in w.bot.transport.members('#test')] == ['pinbot', 'mal']
     w.receive(':op!o@example.com KICK #test pinbot :out')
     assert w.bot.transport.members('#test') == []
 

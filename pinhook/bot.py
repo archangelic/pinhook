@@ -800,7 +800,8 @@ class Bot:
                 return
         if self.stopping:
             return
-        nick_list = self.transport.members(chan) if is_channel(event.target) else [nick]
+        nick_list = ([m.nick for m in self.transport.members(chan)] if is_channel(event.target)
+                     else [nick])
         handler = self.registry.find(word, addressed) if word else None
         if handler:
             await self.run_handler(handler, event, word, arg, nick_list, addressed)

@@ -30,23 +30,23 @@ def test_capabilities_are_asked_for_before_nick_and_user(tmp_path):
     assert lines(w.connect()) == ['CAP LS 302', 'NICK pinbot', 'USER pinbot 0 * pinbot']
 
 
-def test_account_tags_are_requested_and_negotiation_ends(tmp_path):
+def test_wanted_caps_are_requested_and_negotiation_ends(tmp_path):
     w = Wire(tmp_path)
     w.connect()
     # a * means the list carries on in another line
     w.receive(':irc.example.net CAP * LS * :multi-prefix away-notify')
     assert lines(w.sent()) == []
-    w.receive(':irc.example.net CAP * LS :account-tag chghost')
-    assert lines(w.sent()) == ['CAP REQ account-tag']
-    w.receive(':irc.example.net CAP * ACK :account-tag')
+    w.receive(':irc.example.net CAP * LS :account-tag chghost example.org/other')
+    assert lines(w.sent()) == ['CAP REQ account-tag multi-prefix away-notify chghost']
+    w.receive(':irc.example.net CAP * ACK :account-tag multi-prefix away-notify chghost')
     assert lines(w.sent()) == ['CAP END']
     assert w.bot.account_tag
 
 
-def test_negotiation_ends_when_server_lacks_account_tags(tmp_path):
+def test_negotiation_ends_when_server_offers_nothing_wanted(tmp_path):
     w = Wire(tmp_path)
     w.connect()
-    w.receive(':irc.example.net CAP * LS :multi-prefix')
+    w.receive(':irc.example.net CAP * LS :example.org/other')
     assert lines(w.sent()) == ['CAP END']
     assert not w.bot.account_tag
 

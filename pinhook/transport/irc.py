@@ -14,9 +14,15 @@ import irctokens
 
 from ..__version__ import __version__
 from .base import Event, Limits, Source, casefold, is_channel
+from .members import Tracker
 
 # the longest !user@host a server shows for the bot, until it has seen its own
 HOSTMASK_GUESS = len('!') + 10 + len('@') + 63
+# what the bot asks for when the server offers it
+WANTED_CAPS = ('account-tag', 'multi-prefix', 'userhost-in-names', 'extended-join',
+               'account-notify', 'away-notify', 'chghost', 'setname')
+# marks the bot's own WHOX queries, so their replies can be told apart
+WHOX_TOKEN = '152'
 
 
 class IrcTransport:
@@ -66,11 +72,9 @@ class IrcTransport:
         self.nick = self.nickname
         self.registered = False
         self.isupport = {}
-        # casefolded channel name: {casefolded nick: nick}, and the name as the server wrote it
-        self.channels = {}
+        # who is in each channel, and each channel's name as the server wrote it
+        self.tracker = Tracker(self.casefold)
         self.channel_names = {}
-        # casefolded channel name: {casefolded nick: their mode letters there, like {'o'}}
-        self.member_modes_by_channel = {}
         self.server_caps = {}
         self.caps = set()
         self.negotiating = False
@@ -121,14 +125,13 @@ class IrcTransport:
         return text_room(self.nick, kind, target, prefix, self.hostmask_length)
 
     def members(self, channel):
-        return list(self.channels.get(self.casefold(channel), {}).values())
+        return self.tracker.members(channel)
 
     def joined(self):
         return list(self.channel_names.values())
 
     def member_modes(self, channel, nick):
-        modes = self.member_modes_by_channel.get(self.casefold(channel), {})
-        return frozenset(modes.get(self.casefold(nick), ()))
+        return self.tracker.modes(channel, nick)
 
     def supports(self, feature):
         return feature in self.caps
@@ -260,9 +263,11 @@ class IrcTransport:
         'AUTHENTICATE': 'on_authenticate', '903': 'on_sasl_success',
         '902': 'on_sasl_fail', '904': 'on_sasl_fail', '905': 'on_sasl_fail', '906': 'on_sasl_fail',
         '001': 'on_welcome', '005': 'on_isupport', '433': 'on_nick_in_use', '353': 'on_names',
+        '352': 'on_who', '354': 'on_whox',
         'JOIN': 'on_join', 'PART': 'on_part', 'KICK': 'on_kick', 'QUIT': 'on_quit',
         'NICK': 'on_nick', 'PRIVMSG': 'on_privmsg', 'NOTICE': 'on_notice', 'TOPIC': 'on_topic',
-        'INVITE': 'on_invite', 'MODE': 'on_mode',
+        'INVITE': 'on_invite', 'MODE': 'on_mode', 'ACCOUNT': 'on_account', 'AWAY': 'on_away',
+        'CHGHOST': 'on_chghost', 'SETNAME': 'on_setname',
     }
 
     def handle(self, line):
@@ -291,7 +296,7 @@ class IrcTransport:
             # a * means the list carries on in another line
             if len(args) > 1 and args[0] == '*':
                 return
-            wanted = [cap for cap in ('account-tag',) if cap in self.server_caps]
+            wanted = [cap for cap in WANTED_CAPS if cap in self.server_caps]
             if self.sasl_password:
                 if self.sasl_offered():
                     wanted.append('sasl')
@@ -396,46 +401,97 @@ class IrcTransport:
         return dict(zip(symbols, letters))
 
     def on_names(self, line):
-        key = self.casefold(line.params[2])
-        channel = self.channels.get(key)
-        if channel is None:
+        # 353 <bot> = #channel :@mal +ana troll, or mal!m@host with userhost-in-names
+        channel = line.params[2]
+        if not self.tracker.has_channel(channel):
             return
         symbols = self.prefixes()
-        modes = self.member_modes_by_channel.setdefault(key, {})
         for name in line.params[3].split():
-            nick = name.lstrip(''.join(symbols))
-            given = name[:len(name) - len(nick)]
-            nick = nick.partition('!')[0]
-            channel[self.casefold(nick)] = nick
+            letters, hostmask = self.split_prefix(name, symbols)
+            nick, _, rest = hostmask.partition('!')
+            user, _, host = rest.partition('@')
+            self.tracker.join(channel, nick, user=user or None, host=host or None)
             # without multi-prefix only the highest shows, which is enough to tell ops and voice
-            modes[self.casefold(nick)] = {symbols[s] for s in given}
+            self.tracker.set_modes(channel, nick, letters)
+
+    @staticmethod
+    def split_prefix(name, symbols):
+        # '@+mal' -> ({'o', 'v'}, 'mal')
+        bare = name.lstrip(''.join(symbols))
+        return {symbols[s] for s in name[:len(name) - len(bare)]}, bare
+
+    def who(self, channel):
+        # everyone's account, host and away status, which NAMES doesn't give. WHOX can ask
+        # for the account too
+        if 'WHOX' in self.isupport:
+            self.write('WHO', [channel, '%tcuhnfar,' + WHOX_TOKEN])
+        else:
+            self.write('WHO', [channel])
+
+    def on_who(self, line):
+        # 352 <bot> #channel user host server nick flags :hops realname
+        if len(line.params) < 8:
+            return
+        _, channel, user, host, _, nick, flags, last = line.params[:8]
+        self.who_reply(channel, nick, user, host, flags, None, last.partition(' ')[2])
+
+    def on_whox(self, line):
+        # 354 <bot> token #channel user host nick flags account :realname
+        if len(line.params) < 9 or line.params[1] != WHOX_TOKEN:
+            return
+        _, _, channel, user, host, nick, flags, account, realname = line.params[:9]
+        self.who_reply(channel, nick, user, host, flags, account, realname)
+
+    def who_reply(self, channel, nick, user, host, flags, account, realname):
+        if not self.tracker.has_channel(channel):
+            return
+        bot_letter = self.isupport.get('BOT')
+        # flags are H or G for here or gone, * for an IRC operator, then the member's prefixes
+        self.tracker.join(channel, nick, user=user, host=host, away=flags.startswith('G'),
+                          realname=realname, is_bot=bool(bot_letter) and bot_letter in flags)
+        symbols = self.prefixes()
+        letters = {symbols[c] for c in flags if c in symbols}
+        if letters:
+            self.tracker.set_modes(channel, nick, letters)
+        if account == '0':
+            self.tracker.log_out(nick)
+        elif account:
+            self.tracker.update(nick, account=account)
 
     def on_join(self, line):
         nick = line.hostmask.nickname
-        key = self.casefold(line.params[0])
+        channel = line.params[0]
         if self.is_me(nick):
-            self.channels[key] = {}
-            self.channel_names[key] = line.params[0]
+            self.tracker.add_channel(channel)
+            self.channel_names[self.casefold(channel)] = channel
             if line.hostmask.username and line.hostmask.hostname:
                 hostmask = '!{}@{}'.format(line.hostmask.username, line.hostmask.hostname)
                 self.hostmask_length = len(hostmask.encode('utf-8'))
-        if key in self.channels:
-            self.channels[key][self.casefold(nick)] = nick
-        self.emit(Event('join', self.source(line), line.params[0], tags=dict(line.tags or {})))
+            self.who(channel)
+        self.tracker.join(channel, nick, user=line.hostmask.username, host=line.hostmask.hostname)
+        # extended-join: JOIN #channel account :real name, with * for no account
+        if len(line.params) >= 3:
+            self.tracker.update(nick, realname=line.params[2])
+            self.logged_in(nick, line.params[1])
+        self.emit(Event('join', self.source(line), channel, tags=dict(line.tags or {})))
+
+    def logged_in(self, nick, account):
+        if account in ('*', '0', ''):
+            self.tracker.log_out(nick)
+        else:
+            self.tracker.update(nick, account=account)
 
     def leave(self, channel, nick):
-        key = self.casefold(channel)
         if self.is_me(nick):
-            self.channels.pop(key, None)
-            self.channel_names.pop(key, None)
-            self.member_modes_by_channel.pop(key, None)
-        elif key in self.channels:
-            self.channels[key].pop(self.casefold(nick), None)
-            self.member_modes_by_channel.get(key, {}).pop(self.casefold(nick), None)
+            self.tracker.remove_channel(channel)
+            self.channel_names.pop(self.casefold(channel), None)
+        else:
+            self.tracker.leave(channel, nick)
 
     def on_part(self, line):
+        source = self.source(line)
         self.leave(line.params[0], line.hostmask.nickname)
-        self.emit(Event('part', self.source(line), line.params[0], self.last(line, 1)))
+        self.emit(Event('part', source, line.params[0], self.last(line, 1)))
 
     def on_kick(self, line):
         self.leave(line.params[0], line.params[1])
@@ -443,22 +499,35 @@ class IrcTransport:
                         data={'kicked': line.params[1]}))
 
     def on_quit(self, line):
-        folded = self.casefold(line.hostmask.nickname)
-        for members in [*self.channels.values(), *self.member_modes_by_channel.values()]:
-            members.pop(folded, None)
-        self.emit(Event('quit', self.source(line), '', self.last(line, 0)))
+        source = self.source(line)
+        self.tracker.quit(line.hostmask.nickname)
+        self.emit(Event('quit', source, '', self.last(line, 0)))
 
     def on_nick(self, line):
         old, new = line.hostmask.nickname, line.params[0]
-        for members in self.channels.values():
-            if members.pop(self.casefold(old), None) is not None:
-                members[self.casefold(new)] = new
-        for modes in self.member_modes_by_channel.values():
-            if self.casefold(old) in modes:
-                modes[self.casefold(new)] = modes.pop(self.casefold(old))
+        self.tracker.rename(old, new)
         if self.is_me(old):
             self.nick = new
         self.emit(Event('nick', self.source(line), '', data={'new_nick': new}))
+
+    def on_account(self, line):
+        # account-notify: ACCOUNT <account>, or ACCOUNT * on logging out
+        if line.params:
+            self.logged_in(line.hostmask.nickname, line.params[0])
+
+    def on_away(self, line):
+        # away-notify: AWAY :reason when going away, a bare AWAY when back
+        self.tracker.update(line.hostmask.nickname, away=bool(line.params))
+
+    def on_chghost(self, line):
+        # chghost: CHGHOST <new user> <new host>
+        if len(line.params) >= 2:
+            self.tracker.update(line.hostmask.nickname, user=line.params[0],
+                                host=line.params[1])
+
+    def on_setname(self, line):
+        if line.params:
+            self.tracker.update(line.hostmask.nickname, realname=line.params[0])
 
     def on_topic(self, line):
         self.emit(Event('topic', self.source(line), line.params[0], self.last(line, 1)))
@@ -479,8 +548,7 @@ class IrcTransport:
     def track_modes(self, channel, changes, args):
         # MODE #games +ov-v mal ana troll. Which other modes take an argument comes from
         # CHANMODES: lists and keys always, limits only when set, flags never
-        key = self.casefold(channel)
-        if key not in self.channels:
+        if not self.tracker.has_channel(channel):
             return
         member = set(self.prefixes().values())
         lists, keys, limits = (self.isupport.get('CHANMODES', 'beI,k,l,') + ',,').split(',')[:3]
@@ -490,20 +558,23 @@ class IrcTransport:
             if letter in '+-':
                 adding = letter == '+'
             elif letter in member and args:
-                nick = self.casefold(args.pop(0))
-                modes = self.member_modes_by_channel.setdefault(key, {}).setdefault(nick, set())
-                if adding:
-                    modes.add(letter)
-                else:
-                    modes.discard(letter)
+                self.tracker.set_mode(channel, args.pop(0), letter, adding)
             elif (letter in lists + keys or (letter in limits and adding)) and args:
                 args.pop(0)
 
     def source(self, line):
+        # who sent a line. Without an account tag, the account comes from member tracking,
+        # so account bans work on joins and nick changes too
         tags = line.tags or {}
-        account = tags.get('account')
         hostmask = line.hostmask
-        return Source(hostmask.nickname, hostmask.username, hostmask.hostname,
+        known = self.tracker.lookup(hostmask.nickname) or {}
+        account = tags.get('account')
+        if account is None:
+            account = known.get('account')
+        elif account not in ('', '*'):
+            self.tracker.update(hostmask.nickname, account=account)
+        return Source(hostmask.nickname, hostmask.username or known.get('user'),
+                      hostmask.hostname or known.get('host'),
                       None if account in (None, '', '*') else account)
 
     @staticmethod

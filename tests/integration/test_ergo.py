@@ -249,3 +249,35 @@ def test_a_2_0_plugin_with_typed_commands_and_events(names, users, start_bot):
     assert messages(mal.say('!roll', channel, bot)) == ['mallory rolled a d6, roll 2']
     ana = users('anabot', channel=channel)
     assert 'welcome to ' + channel in ana.wait_for('NOTICE anabot')
+
+
+MEMBERS = '''
+from pinhook import command
+
+
+@command('members')
+async def members(ctx):
+    people = sorted((m for m in ctx.members() if m.nick != ctx.bot.nick), key=lambda m: m.nick)
+    await ctx.reply(' '.join('{}={}/{}'.format(m.nick, m.account or '-',
+                                               ''.join(sorted(m.modes)) or '-')
+                             for m in people))
+
+
+@command('me')
+async def me(ctx):
+    await ctx.reply('chanop={} account={}'.format(ctx.is_chanop, ctx.account))
+'''
+
+
+def test_members_are_tracked_with_accounts_and_modes(names, accounts, users, start_bot):
+    bot, channel = names
+    # the first to join is made an op
+    mal = users('mallory', 'malacct', channel)
+    start_bot(mal, plugins={'members': MEMBERS})
+    assert messages(mal.say('!members', channel, bot)) == ['mallory=malacct/o']
+    assert messages(mal.say('!me', channel, bot)) == ['chanop=True account=malacct']
+    troll = users('trolly', 'trollacct', channel)
+    assert messages(mal.say('!members', channel, bot)) == [
+        'mallory=malacct/o trolly=trollacct/-']
+    troll.send('PART ' + channel)
+    assert messages(mal.say('!members', channel, bot)) == ['mallory=malacct/o']

@@ -34,6 +34,8 @@ class Context:
             None when there's nowhere, like a nick change or a quit.
         is_private: True for a private message to the bot.
         is_op: True if the sender is one of the bot's ops.
+        is_chanop: True if the sender is a channel operator (+o, or more) in this channel.
+        is_bot: True if the server marks the sender as a bot.
         addressed: True when the message started with the bot's nick, like "pinhook: hi".
         text: the whole message, a part, kick or quit's reason, or a new topic.
         kind: a message's 'privmsg', 'action' or 'notice'.
@@ -65,6 +67,11 @@ class Context:
         else:
             self.channel = self.nick if self.is_private else None
         self.is_op = bot.is_op(source) if source else False
+        me = self.member(self.nick) if self.nick else None
+        self.is_chanop = bool(me and me.is_chanop)
+        self.tags = dict(event.tags)
+        # bot mode: the server tags a bot's messages, and marks bots in WHO
+        self.is_bot = 'bot' in self.tags or bool(me and me.is_bot)
         self.addressed = addressed
         self.text = event.text
         self.kind = event.kind
@@ -73,7 +80,6 @@ class Context:
         self.modes = list(event.data.get('modes', []))
         self.command = command
         self.arg = arg
-        self.tags = dict(event.tags)
         self.msgid = self.tags.get('msgid')
         self.time = server_time(self.tags.get('time')) or datetime.now(timezone.utc)
         self.plugin = plugin
@@ -81,6 +87,23 @@ class Context:
         self.config = bot.config_for(plugin) if plugin else PluginConfig('plugin')
         self.bot = BotInfo(bot)
         self.logger = bot.logger
+
+    def members(self, channel=None):
+        """Who is in channel, this one by default, as Members: each one's nick, account,
+        modes and whether they're a bot. From member tracking, so it never waits on the
+        server. Empty for a private message."""
+        channel = channel or self.channel
+        if not is_channel(channel or ''):
+            return ()
+        return tuple(self._bot.transport.members(channel))
+
+    def member(self, nick, channel=None):
+        """nick's Member in channel, this one by default, or None if they aren't in it."""
+        fold = self._bot.transport.casefold
+        for member in self.members(channel):
+            if fold(member.nick) == fold(nick):
+                return member
+        return None
 
     def supports(self, feature):
         """True if the network supports feature, like 'account-tag'."""
