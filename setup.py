@@ -97,7 +97,7 @@ setup(
     author_email=EMAIL,
     url=URL,
     python_requires=REQUIRES_PYTHON,
-    packages=['pinhook'],
+    packages=['pinhook', 'pinhook.transport'],
     entry_points={
         'console_scripts':
             ['pinhook=pinhook.cli:cli']

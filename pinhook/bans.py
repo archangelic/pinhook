@@ -12,6 +12,11 @@ from .store import write_json
 #   a services account      $a:troll
 
 
+def lower(name):
+    # irc's rfc 1459 lowercasing, where [ ] \ ^ are the uppercase { } | ~
+    return irc.strings.lower(name)
+
+
 def is_account(entry):
     return entry.startswith('$a:')
 

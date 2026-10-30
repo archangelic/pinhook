@@ -87,8 +87,9 @@ class Wire:
 
     def connect(self):
         """Connect to the fake server. The bot sends its first lines, like CAP LS."""
-        self.bot.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
-                         connect_factory=self.bot.cap_factory(lambda address: self.socket))
+        transport = self.bot.transport
+        transport.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
+                          connect_factory=transport.cap_factory(lambda address: self.socket))
         return self.sent()
 
     def connect_fails(self, error):
@@ -96,8 +97,9 @@ class Wire:
         def factory(address):
             raise error
         try:
-            self.bot.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
-                             connect_factory=self.bot.cap_factory(factory))
+            transport = self.bot.transport
+            transport.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
+                              connect_factory=transport.cap_factory(factory))
         except Exception as e:
             return e
 
@@ -123,7 +125,7 @@ class Wire:
         for line in lines:
             self.socket.inbox += (line + '\r\n').encode()
         while self.socket.inbox:
-            self.bot.connection.process_data()
+            self.bot.transport.connection.process_data()
 
     def join(self, nick, channel='#test', user=None, host='example.com'):
         self.receive(':{}!{}@{} JOIN {}'.format(nick, user or nick, host, channel))

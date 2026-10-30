@@ -1,12 +1,10 @@
 """The bots: Bot for IRC servers and TwitchBot for Twitch chat."""
 from collections import OrderedDict
 from datetime import datetime, timezone
-import base64
 import difflib
 import functools
 import logging
 import os
-import socket
 import ssl
 import sys
 import time
@@ -16,14 +14,11 @@ from . import bans
 from . import log
 from . import plugin
 from .store import PluginConfig, Store
-
-import irc.bot
-
-
-irc.client.ServerConnection.buffer_class.errors = 'replace'
+from .transport.base import MessageTooLong, Outgoing, Transport, is_channel
+from .transport.irclib import IrcLibTransport, TwitchIrcLibTransport
 
 
-class Bot(irc.bot.SingleServerIRCBot):
+class Bot:
     """An IRC bot that loads plugins from a folder and runs them.
 
     Args:
@@ -64,12 +59,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         'info': logging.INFO,
         'debug': logging.DEBUG,
     }
-    # set once the server agrees to tag messages with the sender's account
-    account_tag = False
-    _negotiating_caps = False
-    # set once the bot has logged in to its account with sasl
-    sasl_logged_in = False
-    sasl_password = None
+    transport: Transport
     # set by the pinhook command, so !reload can read plugin_config from the config file again
     config_file = None
     config_loader = None
@@ -91,13 +81,11 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.require_account = kwargs.get('require_account', False)
         self.sasl_password = kwargs.get('sasl_password') or None
         self.sasl_account = kwargs.get('sasl_account') or nickname
-        factory = self.ssl_factory(server) if self.ssl_required else irc.connection.Factory()
-        irc.bot.SingleServerIRCBot.__init__(
-            self, [(server, self.port, self.server_pass)], nickname, nickname,
-            connect_factory=self.cap_factory(factory))
+        self.server = server
         self.chanlist = channels
         self.bot_nick = nickname
         self.start_logging()
+        self.transport = self.make_transport(server, nickname)
         self.warn_unknown_options(kwargs)
         self.setup_bans(nickname, kwargs)
         if self.sasl_password and not self.ssl_required:
@@ -148,7 +136,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.account = account
             self.store = store
             self.config = config if config is not None else PluginConfig('plugin')
-            self.is_private = not irc.client.is_channel(channel)
+            self.is_private = not is_channel(channel)
             self.logger = logger
             self._action = action
             self.privmsg = privmsg
@@ -196,39 +184,6 @@ class Bot(irc.bot.SingleServerIRCBot):
             if len(args) == 2:
                 return args
             raise TypeError('expected (text) or (target, text), got {} arguments'.format(len(args)))
-
-    def connect(self, *args, **kwargs):
-        # the irc library quietly retries failed connections, so say why it failed
-        try:
-            super().connect(*args, **kwargs)
-        except irc.client.ServerConnectionError as e:
-            self.logger.error(self.connection_error_message(args[0], args[1], e))
-            raise
-
-    def connection_error_message(self, host, port, error):
-        cause = error.__cause__
-        start = "couldn't connect to {}:{}: ".format(host, port)
-        end = ' (will keep retrying every 1-5 minutes)'
-        if isinstance(cause, ssl.SSLCertVerificationError):
-            reason = cause.verify_message.rstrip('.')
-            start += "the server's ssl certificate failed verification ({}). ".format(reason)
-            # openssl codes for hostname and ip address mismatch, and expired
-            if cause.verify_code in (62, 64):
-                return (start + 'Set server to the name the certificate was issued for, '
-                        'not an IP address or alias' + end)
-            if cause.verify_code == 10:
-                return start + 'This needs fixing on the server' + end
-            return (start + 'If this server uses a self-signed certificate, '
-                    'set ssl_verify to false' + end)
-        if isinstance(cause, ssl.SSLError):
-            reason = getattr(cause, 'reason', None) or cause
-            return (start + 'ssl handshake failed ({}). '
-                    "Check {} is the server's ssl port, usually 6697".format(reason, port) + end)
-        if isinstance(cause, socket.gaierror):
-            return start + 'server name not found, check the server setting' + end
-        if isinstance(cause, ConnectionRefusedError):
-            return start + 'connection refused, check the server and port settings' + end
-        return start + str(cause or error) + end
 
     def warn_deprecated(self, key, message):
         # log each one once per bot, and warn every time so tests show where it came from
@@ -325,7 +280,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         bans.save(self.ban_file, saved)
 
     def remember(self, nick, user, host, account):
-        key = irc.strings.lower(nick)
+        key = bans.lower(nick)
         self.seen[key] = (nick, user, host, account)
         self.seen.move_to_end(key)
         while len(self.seen) > 1000:
@@ -336,7 +291,7 @@ class Bot(irc.bot.SingleServerIRCBot):
         # logged in, or their user and host if not
         if bans.is_account(target) or bans.is_mask(target):
             return target, target
-        seen = self.seen.get(irc.strings.lower(target))
+        seen = self.seen.get(bans.lower(target))
         if not seen:
             description = "{} (nick only, they haven't spoken since the bot started)"
             return target, description.format(target)
@@ -348,106 +303,11 @@ class Bot(irc.bot.SingleServerIRCBot):
 
     def remove_bans(self, target):
         # the entry itself, plus anything banning the person last seen as target
-        seen = self.seen.get(irc.strings.lower(target))
+        seen = self.seen.get(bans.lower(target))
         removed = [b for b in self.banned_users
                    if self.nick_in(b, [target]) or (seen and bans.matches(b, *seen))]
         self.banned_users = [b for b in self.banned_users if b not in removed]
         return removed
-
-    @staticmethod
-    def account_from_tags(tags):
-        for tag in tags or []:
-            if tag['key'] == 'account' and tag['value'] not in (None, '*'):
-                return tag['value']
-        return None
-
-    def cap_factory(self, factory):
-        # ask what the server supports before the irc library sends NICK and USER,
-        # some servers (like libera) only allow it before registration
-        def connect(address):
-            sock = factory(address)
-            sock.send(b'CAP LS 302\r\n')
-            self._negotiating_caps = True
-            self._server_caps = {}
-            self.account_tag = False
-            self.sasl_logged_in = False
-            return sock
-        return connect
-
-    def on_cap(self, c, e):
-        if not self._negotiating_caps:
-            return
-        subcommand = e.arguments[0]
-        if subcommand == 'LS':
-            for cap in e.arguments[-1].split():
-                name, _, value = cap.partition('=')
-                self._server_caps[name] = value
-            # a * means the list carries on in another line
-            if len(e.arguments) > 2 and e.arguments[1] == '*':
-                return
-            wanted = [cap for cap in ('account-tag',) if cap in self._server_caps]
-            if self.sasl_password:
-                if self.sasl_offered():
-                    wanted.append('sasl')
-                else:
-                    self.logger.error("sasl_password is set, but this server doesn't offer "
-                                      "SASL PLAIN logins, so the bot isn't logged in")
-            if wanted:
-                c.cap('REQ', *wanted)
-                return
-        elif subcommand == 'ACK':
-            acked = e.arguments[-1].split()
-            self.account_tag = 'account-tag' in acked
-            if 'sasl' in acked:
-                # carries on in on_authenticate, then on_saslsuccess or a failure
-                c.send_raw('AUTHENTICATE PLAIN')
-                return
-        elif subcommand == 'NAK':
-            if self.sasl_password:
-                self.logger.error("the server refused SASL, so the bot isn't logged in")
-        else:
-            return
-        self.end_caps(c)
-
-    def sasl_offered(self):
-        # sasl=PLAIN,EXTERNAL lists the methods, plain sasl means the server didn't say
-        if 'sasl' not in self._server_caps:
-            return False
-        methods = self._server_caps['sasl']
-        return not methods or 'PLAIN' in methods.upper().split(',')
-
-    def end_caps(self, c):
-        # registration waits until we say we're done
-        self._negotiating_caps = False
-        c.cap('END')
-
-    def on_authenticate(self, c, e):
-        if e.target != '+' or not self._negotiating_caps:
-            return
-        login = '\0{}\0{}'.format(self.sasl_account, self.sasl_password)
-        encoded = base64.b64encode(login.encode('utf-8')).decode('ascii')
-        # the spec sends it in 400 byte pieces, and + after a last piece that's exactly 400
-        for i in range(0, len(encoded), 400):
-            c.send_raw('AUTHENTICATE ' + encoded[i:i + 400])
-        if len(encoded) % 400 == 0:
-            c.send_raw('AUTHENTICATE +')
-
-    def on_saslsuccess(self, c, e):
-        self.sasl_logged_in = True
-        self.logger.info('logged in as {} with SASL'.format(self.sasl_account))
-        self.end_caps(c)
-
-    def on_saslfail(self, c, e):
-        reason = e.arguments[-1] if e.arguments else 'no reason given'
-        self.logger.error("SASL login as {} failed ({}), check sasl_account and sasl_password"
-                          .format(self.sasl_account, reason))
-        if self._negotiating_caps:
-            self.end_caps(c)
-
-    # the other ways a sasl login can end without logging in
-    on_sasltoolong = on_saslfail
-    on_saslaborted = on_saslfail
-    on_nicklocked = on_saslfail
 
     def ssl_context(self):
         """The ssl settings the bot connects with: checks certificates unless ssl_verify is off."""
@@ -457,15 +317,11 @@ class Bot(irc.bot.SingleServerIRCBot):
             context.verify_mode = ssl.CERT_NONE
         return context
 
-    def ssl_factory(self, server):
-        wrapper = functools.partial(self.ssl_context().wrap_socket, server_hostname=server)
-        return irc.connection.Factory(wrapper=wrapper)
-
     @staticmethod
     def nick_in(nick, nicks):
         # irc nicks are case insensitive, so Troll and troll are the same person
-        nick = irc.strings.lower(nick)
-        return any(irc.strings.lower(n) == nick for n in nicks)
+        nick = bans.lower(nick)
+        return any(bans.lower(n) == nick for n in nicks)
 
     def start_logging(self):
         self.logger = log.get_bot_logger(self.bot_nick)
@@ -480,47 +336,56 @@ class Bot(irc.bot.SingleServerIRCBot):
         self.logger.setLevel(self.log_levels[log_level])
         self.logger.info('Logging started!')
 
-    def on_welcome(self, c, e):
-        # registering is done, so any capability negotiation is too
-        self._negotiating_caps = False
+    # the network, through the transport
+
+    def make_transport(self, server, nickname):
+        return IrcLibTransport(
+            self.handle_event, self.logger, server, self.port, nickname,
+            password=self.server_pass,
+            ssl_context=self.ssl_context() if self.ssl_required else None,
+            sasl_account=self.sasl_account, sasl_password=self.sasl_password,
+            nickserv=self.nickserv, ns_pass=self.ns_pass, bot_mode=self.bot_mode, owner=self)
+
+    def start(self):
+        """Connect, and run until the bot quits."""
+        self.transport.start()
+
+    @property
+    def account_tag(self):
+        """True once the server tags messages with the sender's account."""
+        return self.transport.supports('account-tag')
+
+    @property
+    def sasl_logged_in(self):
+        """True once the bot has logged in to its account with SASL."""
+        return getattr(self.transport, 'sasl_logged_in', False)
+
+    # 1.x plugins reach these through msg.bot, until msg.bot goes in 2.0
+
+    @property
+    def connection(self):
+        return getattr(self.transport, 'connection')
+
+    @property
+    def channels(self):
+        return getattr(self.transport, 'channels')
+
+    def handle_event(self, event):
+        if event.type == 'connected':
+            self.connected()
+        elif event.type == 'message':
+            self.process_event(event)
+
+    def connected(self):
         if self.require_account and not self.account_tag:
             self.logger.error("require_account is on but this server doesn't tell the bot who is "
                               "logged in (account-tag), so the bot will ignore everyone")
-        if self.ns_pass and not self.sasl_logged_in:
-            self.logger.info('identifying with nickserv')
-            c.privmsg(self.nickserv, 'identify {}'.format(self.ns_pass))
         for channel in self.chanlist:
             self.logger.info('joining channel {}'.format(channel.split()[0]))
-            c.join(*channel.split())
+            self.transport.join(*channel.split())
 
-    def on_nicknameinuse(self, c, e):
-        # servers call us * until we're registered, after that a failed
-        # nick change should just keep the nick we already have
-        if e.target != '*':
-            return
-        new_nick = e.arguments[0] + '_'
-        self.logger.warning('nickname {} in use, trying {}'.format(e.arguments[0], new_nick))
-        c.nick(new_nick)
-
-    def on_featurelist(self, c, e):
-        # servers that support bot mode advertise its letter as BOT=<mode>
-        # https://ircv3.net/specs/extensions/bot-mode
-        if not self.bot_mode:
-            return
-        for feature in e.arguments:
-            if feature.startswith('BOT='):
-                mode = feature[len('BOT='):]
-                self.logger.info('setting bot mode +{}'.format(mode))
-                c.mode(c.get_nickname(), '+' + mode)
-
-    def on_pubmsg(self, c, e):
-        self.process_event(c, e)
-
-    def on_privmsg(self, c, e):
-        self.process_event(c, e)
-
-    def on_action(self, c, e):
-        self.process_event(c, e)
+    def send_message(self, kind, target, text):
+        self.transport.send(Outgoing(kind, target, text))
 
     def pause(self, seconds):
         # flood protection between lines of output
@@ -535,13 +400,14 @@ class Bot(irc.bot.SingleServerIRCBot):
             cmds.update({k: v for k, v in self.internal_commands.items()})
         helpout = OrderedDict(sorted(cmds.items()))
         for h in helpout:
-            self.connection.privmsg(nick, '{} -- {}'.format(h, helpout[h]))
+            self.send_message('privmsg', nick, '{} -- {}'.format(h, helpout[h]))
             self.pause(.1)
         listeners = ', '.join(plugin.lstnrs)
-        self.connection.privmsg(nick, 'List of listeners: {}'.format(listeners))
+        self.send_message('privmsg', nick, 'List of listeners: {}'.format(listeners))
         return None
 
     def call_internal_commands(self, channel, nick, cmd, text, arg, c, op=None):
+        # c, the connection, is still passed for 1.x Bot subclasses that override this
         if not cmd.startswith(self.cmd_prefix):
             return None
         else:
@@ -551,7 +417,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             op = self.nick_in(nick, self.ops)
         if cmd == 'join' and op:
             try:
-                c.join(*arg.split())
+                self.transport.join(*arg.split())
                 self.logger.info('joining {} per request of {}'.format(arg, nick))
                 output = plugin.message('{}: joined {}'.format(nick, arg.split()[0]))
             except Exception:
@@ -561,7 +427,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.logger.info('quitting per request of {}'.format(nick))
             if not arg:
                 arg = "See y'all later!"
-            c.quit(arg)
+            self.transport.close(arg)
             sys.exit()
         elif cmd == 'help' and not self.disable_help:
             self.call_help(nick, op)
@@ -707,37 +573,31 @@ class Bot(irc.bot.SingleServerIRCBot):
             self.logger.debug(f'returning output: {output.msg}')
         return output
 
-    def process_event(self, c, e):
-        nick = e.source.nick
-        user = e.source.user
-        host = e.source.host
-        account = self.account_from_tags(e.tags)
+    def process_event(self, event):
+        nick = event.source.nick
+        user = event.source.user
+        host = event.source.host
+        account = event.source.account
         self.remember(nick, user, host, account)
         if bans.matches_any(self.banned_users, nick, user, host, account):
             self.logger.debug('ignoring banned user {}'.format(nick))
             return
-        botnick = c.get_nickname()
-        if irc.strings.lower(nick) == irc.strings.lower(botnick):
+        botnick = self.transport.nick
+        if bans.lower(nick) == bans.lower(botnick):
             return
         if self.require_account and not account:
             self.logger.debug('ignoring {}, not logged in to an account'.format(nick))
             return
         op = bans.matches_any(self.ops, nick, user, host, account)
-        if e.arguments:
-            text = e.arguments[0]
-        else:
-            text = ''
-        if e.type == 'privmsg' or e.type == 'pubmsg':
-            msg_type = 'message'
-        else:
-            msg_type = e.type
-        if not irc.client.is_channel(e.target):
+        text = event.text
+        msg_type = 'action' if event.kind == 'action' else 'message'
+        if not is_channel(event.target):
             chan = nick
             nick_list = [nick]
         else:
-            chan = e.target
-            nick_list = list(self.channels[chan].users())
-        if e.type == 'action':
+            chan = event.target
+            nick_list = self.transport.members(chan)
+        if event.kind == 'action':
             cmd = ''
         else:
             cmd = text.split(' ')[0]
@@ -748,7 +608,7 @@ class Bot(irc.bot.SingleServerIRCBot):
             arg = ''.join([i + ' ' for i in text.split(' ')[1:]]).strip()
         else:
             arg = ''
-        output = self.call_internal_commands(chan, nick, cmd, text, arg, c, op=op)
+        output = self.call_internal_commands(chan, nick, cmd, text, arg, self.connection, op=op)
         if not output:
             plugin_info = {
                 'chan': chan,
@@ -758,9 +618,9 @@ class Bot(irc.bot.SingleServerIRCBot):
                 'nick': nick,
                 'user': user,
                 'arg': arg,
-                'privmsg': c.privmsg,
-                'action': c.action,
-                'notice': c.notice,
+                'privmsg': functools.partial(self.send_message, 'privmsg'),
+                'action': functools.partial(self.send_message, 'action'),
+                'notice': functools.partial(self.send_message, 'notice'),
                 'msg_type': msg_type,
                 'botnick': botnick,
                 'op': op,
@@ -769,24 +629,25 @@ class Bot(irc.bot.SingleServerIRCBot):
             output = self.call_plugins(**plugin_info)
         if output:
             self.logger.debug(f'sending output: {output.msg}')
-            self.process_output(c, chan, output)
+            self.process_output(self.connection, chan, output)
 
     def process_output(self, c, chan, output):
+        # c, the connection, is still passed for 1.x Bot subclasses that override this
         if not output.msg:
             return
         for msg in output.msg:
             if output.msg_type == plugin.OutputType.Message:
                 self.logger.debug('output message: {}'.format(msg))
                 try:
-                    c.privmsg(chan, msg)
-                except irc.client.MessageTooLong:
+                    self.send_message('privmsg', chan, msg)
+                except MessageTooLong:
                     self.logger.error('output message too long: {}'.format(msg))
                     break
             elif output.msg_type == plugin.OutputType.Action:
                 self.logger.debug('output action: {}'.format(msg))
                 try:
-                    c.action(chan, msg)
-                except irc.client.MessageTooLong:
+                    self.send_message('action', chan, msg)
+                except MessageTooLong:
                     self.logger.error('output message too long: {}'.format(msg))
                     break
             else:
@@ -828,20 +689,14 @@ class TwitchBot(Bot):
         self.warn_unknown_options(kwargs)
         self.setup_bans(nickname, kwargs)
         self.channel = channel
+        self.chanlist = [channel]
         self.logger.info('Joining Twitch Server')
         # always use tls, the oauth token is a password
-        irc.bot.SingleServerIRCBot.__init__(
-            self, [(self.server, self.port, 'oauth:' + token)], nickname, nickname,
-            connect_factory=self.ssl_factory(self.server))
+        self.transport = TwitchIrcLibTransport(
+            self.handle_event, self.logger, self.server, self.port, nickname,
+            password='oauth:' + token, ssl_context=self.ssl_context(), bot_mode=self.bot_mode,
+            owner=self)
         self.internal_commands = {self.cmd_prefix + k: v for k, v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
                             cmd_prefix=self.cmd_prefix, logger=self.logger)
         self.check_plugin_config()
-
-    def on_welcome(self, c, e):
-        self.logger.info('requesting permissions')
-        c.cap('REQ', ':twitch.tv/membership')
-        c.cap('REQ', ':twitch.tv/tags')
-        c.cap('REQ', ':twitch.tv/commands')
-        self.logger.info('Joining channel ' + self.channel)
-        c.join(self.channel)

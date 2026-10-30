@@ -10,11 +10,9 @@ from collections import namedtuple
 import logging
 import os
 
-import irc.bot
-import irc.client
-
 from .bot import Bot
 from .store import Store
+from .transport.base import Event, Source
 
 # one thing the bot sent, kind is 'message', 'action' or 'notice'
 Sent = namedtuple('Sent', ['kind', 'target', 'text'])
@@ -24,15 +22,53 @@ class PluginError(Exception):
     """A plugin raised an exception, or returned something it shouldn't."""
 
 
-class FakeConnection:
-    # stands in for the irc library's connection and records what the bot sends
+class FakeChannel:
+    # the nicks in a channel, in the order they joined
+
+    def __init__(self):
+        self.nicks = {}
+
+    def add_user(self, nick):
+        self.nicks[nick] = True
+
+    def users(self):
+        return list(self.nicks)
+
+
+class FakeTransport:
+    # stands in for the network and records what the bot sends
+    name = 'fake'
 
     def __init__(self, bot, nickname):
         self.bot = bot
-        self.nickname = nickname
+        self.nick = nickname
+        self.channels = {}
+        # 1.x plugins send through msg.bot.connection, so this is that too
+        self.connection = self
+
+    def start(self):
+        pass
+
+    def send(self, message):
+        kind = 'message' if message.kind == 'privmsg' else message.kind
+        self.bot.sent.append(Sent(kind, message.target, message.text))
+
+    def join(self, channel, key=''):
+        self.bot.add_channel(channel)
+
+    def members(self, channel):
+        return self.channels[channel].users()
+
+    def supports(self, feature):
+        return feature == 'account-tag'
+
+    def close(self, reason=''):
+        self.bot.quit_message = reason
+
+    # the irc library connection's methods, for msg.bot.connection
 
     def get_nickname(self):
-        return self.nickname
+        return self.nick
 
     def privmsg(self, target, text):
         self.bot.sent.append(Sent('message', target, text))
@@ -43,17 +79,11 @@ class FakeConnection:
     def notice(self, target, text):
         self.bot.sent.append(Sent('notice', target, text))
 
-    def join(self, channel, key=''):
-        self.bot.add_channel(channel)
-
     def part(self, channel, message=''):
-        self.bot.channels.pop(channel, None)
-
-    def nick(self, new_nick):
-        self.nickname = new_nick
+        self.channels.pop(channel, None)
 
     def quit(self, message=''):
-        self.bot.quit_message = message
+        self.close(message)
 
     def mode(self, target, command):
         pass
@@ -92,7 +122,6 @@ class TestBot(Bot):
         self.quit_message = None
         self._errors = _ErrorCatcher()
         super().__init__(list(channels), nickname, 'localhost', plugin_dir=plugin_dir, **options)
-        self.connection = FakeConnection(self, nickname)
         for channel in channels:
             self.add_channel(channel)
         # a plugin that couldn't load fails here, not later
@@ -101,6 +130,9 @@ class TestBot(Bot):
     def start_logging(self):
         super().start_logging()
         self.logger.addHandler(self._errors)
+
+    def make_transport(self, server, nickname):
+        return FakeTransport(self, nickname)
 
     def open_store(self, name):
         # stores stay in memory, look at one with bot.store('karma')
@@ -112,8 +144,8 @@ class TestBot(Bot):
 
     def add_channel(self, channel):
         if channel not in self.channels:
-            self.channels[channel] = irc.bot.Channel()
-            self.channels[channel].add_user(self.connection.get_nickname())
+            self.channels[channel] = FakeChannel()
+            self.channels[channel].add_user(self.transport.nick)
 
     def say(self, text, nick='tester', channel=None, **who):
         """Send a message to a channel as nick, and return the bot's replies there.
@@ -124,7 +156,7 @@ class TestBot(Bot):
         channel = channel or self.chanlist[0]
         self.add_channel(channel)
         self.channels[channel].add_user(nick)
-        return self._receive('pubmsg', nick, channel, text, channel, **who)
+        return self._receive('privmsg', nick, channel, text, channel, **who)
 
     def action(self, text, nick='tester', channel=None, **who):
         """Send a /me action to a channel as nick, and return the bot's replies there."""
@@ -135,7 +167,7 @@ class TestBot(Bot):
 
     def private(self, text, nick='tester', **who):
         """Send a private message to the bot as nick, and return the bot's replies to them."""
-        return self._receive('privmsg', nick, self.connection.get_nickname(), text, nick, **who)
+        return self._receive('privmsg', nick, self.transport.nick, text, nick, **who)
 
     def sent_to(self, target):
         """Every message and action the bot has sent to target, like a nick for !help."""
@@ -144,9 +176,9 @@ class TestBot(Bot):
     def _receive(self, kind, nick, target, text, reply_to,
                  user=None, host='example.com', account=None):
         start = len(self.sent)
-        source = irc.client.NickMask.from_params(nick, user or nick, host)
-        tags = [{'key': 'account', 'value': account}] if account else None
-        self.process_event(self.connection, irc.client.Event(kind, source, target, [text], tags))
+        tags = {'account': account} if account else {}
+        source = Source(nick, user or nick, host, account)
+        self.handle_event(Event('message', source, target, text, kind, tags))
         self._raise_plugin_errors()
         return [s.text for s in self.sent[start:]
                 if s.target == reply_to and s.kind in ('message', 'action')]

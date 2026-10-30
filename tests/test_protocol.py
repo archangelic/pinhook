@@ -10,7 +10,7 @@ import pytest
 
 from pinhook import bot as pinhook_bot
 
-from wire import Wire, b64_login, lines
+from wire import Wire, b64_login, lines, texts
 
 PING = ("import pinhook.plugin as p\n"
         "@p.command('!ping')\n"
@@ -308,3 +308,23 @@ def test_twitch_bot_always_uses_checked_tls(tmp_path):
 def test_sasl_without_ssl_warns(tmp_path, caplog):
     Wire(tmp_path, sasl_password='hunter2')
     assert 'sasl_password will be sent without ssl' in caplog.text
+
+
+# 1.x bot subclasses
+
+def test_bot_subclasses_still_get_irc_library_events(tmp_path):
+    # adminbot welcomes people with on_join
+    class Greeter(pinhook_bot.Bot):
+        def on_join(self, c, e):
+            if e.source.nick != c.get_nickname():
+                c.privmsg(e.source.nick, 'welcome!')
+    w = Wire(tmp_path, cls=Greeter).ready()
+    w.join('newbie')
+    assert texts(w.sent(), target='newbie') == ['welcome!']
+
+
+def test_bot_connection_still_sends(tmp_path):
+    # adminbot sends from outside the bot, through bot.connection
+    w = Wire(tmp_path).ready()
+    w.bot.connection.privmsg('#test', 'from outside')
+    assert texts(w.sent()) == ['from outside']
