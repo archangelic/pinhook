@@ -48,7 +48,7 @@ Config files can be YAML, TOML or JSON.
 
 `nickname`, `server` and `channels` are required, everything else is optional.
 
-YAML configs need `pip install pinhook[yaml]`. TOML configs work out of the box on Python 3.11 and newer, older versions need `pip install pinhook[toml]`.
+YAML configs need `pip install pinhook[yaml]`. TOML configs work out of the box.
 
 Start the bot with:
 

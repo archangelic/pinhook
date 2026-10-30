@@ -115,18 +115,8 @@ def read_conf(config, conf_format):
             to_yaml = yaml.load(config.read(), Loader=yaml.FullLoader)
             output = check_conf(schema, to_yaml, config.name)
     elif conf_format == 'toml':
-        try:
-            # built in from python 3.11
-            import tomllib
-        except ImportError:
-            try:
-                import toml
-            except ImportError:
-                raise click.ClickException(
-                    'toml not installed, please use `pip3 install pinhook[toml]` to install')
-            to_toml = toml.load(config.name)
-        else:
-            to_toml = tomllib.load(config)
+        import tomllib
+        to_toml = tomllib.load(config)
         output = check_conf(schema, to_toml, config.name)
     return output
 
