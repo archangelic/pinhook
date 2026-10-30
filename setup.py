@@ -25,10 +25,12 @@ REQUIRED = [
     'irc',
     'click',
     'marshmallow',
+    'pyyaml',
 ]
 
 EXTRAS = {
-    'yaml': ['pyyaml']
+    # yaml is always installed now, this keeps `pip install pinhook[yaml]` working
+    'yaml': [],
 }
 
 # The rest you shouldn't have to touch too much :)

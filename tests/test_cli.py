@@ -1,7 +1,6 @@
 import json
 from unittest import mock
 
-import pytest
 from click.testing import CliRunner
 
 from pinhook.bot import Bot
@@ -92,7 +91,6 @@ def test_double_dollar_is_a_literal(tmp_path, monkeypatch):
 
 
 def test_environment_variables_work_in_yaml(tmp_path, monkeypatch):
-    pytest.importorskip('yaml')
     monkeypatch.setenv('PH_SERVER', 'irc.libera.chat')
     config = 'nickname: pinbot\nserver: "${PH_SERVER}"\nchannels: ["#test"]\n'
     result, bot = run_cli(tmp_path, config, name='config.yaml')
