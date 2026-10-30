@@ -52,7 +52,7 @@ class Bot:
         'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
-        'sasl_account', 'sasl_password',
+        'sasl_account', 'sasl_password', 'address_by_nick',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -82,7 +82,8 @@ class Bot:
         self.log_level = kwargs.get('log_level', 'info')
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
-        self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
+        self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins')
+        self.address_by_nick = kwargs.get('address_by_nick', True)
         self.disable_help = kwargs.get('disable_help', False)
         self.bot_mode = kwargs.get('bot_mode', True)
         self.require_account = kwargs.get('require_account', False)
@@ -167,7 +168,16 @@ class Bot:
         return ' (and plugin_config from {})'.format(name)
 
     def setup_plugins(self):
-        self.prefixes = [self.cmd_prefix]
+        # cmd_prefix can be one prefix or a list of them, plugin commands use them all
+        prefixes = [self.cmd_prefix] if isinstance(self.cmd_prefix, str) else list(self.cmd_prefix)
+        if not prefixes or not all(isinstance(p, str) and p for p in prefixes):
+            raise ValueError('cmd_prefix must be a prefix like "!", or a list of them')
+        self.prefixes = prefixes
+        self.cmd_prefix = prefixes[0]
+        if self.use_prefix_for_plugins is not None:
+            self.logger.warning('use_prefix_for_plugins is retired in pinhook 2.0 and does '
+                                'nothing: plugin commands always use cmd_prefix, so write them '
+                                'without one')
         # names turned off with !disable: plugin files, commands and listeners
         self.disabled = set()
         # !help isn't listed with the rest, it's shown to everyone
@@ -512,13 +522,17 @@ class Bot:
         op = self.is_op(event.source)
         text = event.text
         chan = event.target if is_channel(event.target) else nick
+        addressed, body = self.strip_address(text)
         # actions only reach listeners, a /me is never a command
-        word, _, rest = text.partition(' ') if event.kind != 'action' else ('', '', '')
+        word, _, rest = body.partition(' ') if event.kind != 'action' else ('', '', '')
         arg = rest.strip()
         self.logger.debug(
             'Message info: channel: {}, nick: {}, cmd: {}, text: {}'.format(chan, nick, word, text)
         )
-        name = self.registry.strip_prefix(word) if word else None
+        name = None
+        if word:
+            # "pinhook: reload" runs a built-in command without its prefix too
+            name = self.registry.strip_prefix(word) or (word if addressed else None)
         if name in self.builtins:
             output = self.call_internal_commands(chan, nick, name, arg, op=op)
             if output and not self.stopping:
@@ -527,13 +541,30 @@ class Bot:
         if self.stopping:
             return
         nick_list = self.transport.members(chan) if is_channel(event.target) else [nick]
-        handler = self.registry.find(word) if word else None
+        handler = self.registry.find(word, addressed) if word else None
         if handler:
-            await self.run_handler(handler, event, word, arg, nick_list)
+            await self.run_handler(handler, event, word, arg, nick_list, addressed)
             return
         # each listener answers on its own, so a slow or broken one doesn't hold up the rest
-        await asyncio.gather(*(self.run_handler(h, event, None, '', nick_list)
+        await asyncio.gather(*(self.run_handler(h, event, None, '', nick_list, addressed)
                                for h in self.registry.listeners.values()))
+
+    def strip_address(self, text):
+        """(True, the rest) when text starts with the bot's nick, like "pinhook: hi",
+        "pinhook, hi" or "@pinhook hi". (False, text) otherwise."""
+        if not self.address_by_nick:
+            return False, text
+        nick, fold = self.transport.nick, self.transport.casefold
+        at = text.startswith('@')
+        body = text[1:] if at else text
+        if fold(body[:len(nick)]) != fold(nick):
+            return False, text
+        rest = body[len(nick):]
+        if rest[:1] in (':', ','):
+            return True, rest[1:].lstrip()
+        if at and rest[:1] in ('', ' '):
+            return True, rest.lstrip()
+        return False, text
 
     def known_name(self, name):
         # what !enable and !disable take: a plugin file, a command or a listener
@@ -546,13 +577,13 @@ class Bot:
         names = {handler.name, handler.label(self.cmd_prefix), handler.plugin}
         return not names & self.disabled
 
-    async def run_handler(self, handler, event, trigger, arg, nick_list):
+    async def run_handler(self, handler, event, trigger, arg, nick_list, addressed=False):
         """Run one command or listener for a message, and send what it returns."""
         command = handler.kind == 'command'
         if not self.enabled_for(handler, event.target):
             return
-        ctx = Context(self, event, plugin=handler.plugin, command=handler.name if command else None,
-                      arg=arg)
+        ctx = Context(self, event, plugin=handler.plugin, addressed=addressed,
+                      command=handler.name if command else None, arg=arg)
         label = handler.label(self.cmd_prefix)
         if command and handler.ops and not ctx.is_op:
             if handler.ops_msg:
@@ -611,7 +642,7 @@ class TwitchBot(Bot):
     options = {
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
-        'ban_file', 'bot_dir', 'data_dir', 'plugin_config',
+        'ban_file', 'bot_dir', 'data_dir', 'plugin_config', 'address_by_nick',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):
@@ -622,7 +653,8 @@ class TwitchBot(Bot):
         self.log_level = kwargs.get('log_level', 'info')
         self.server_pass = kwargs.get('server_pass', None)
         self.cmd_prefix = kwargs.get('cmd_prefix', '!')
-        self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins', False)
+        self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins')
+        self.address_by_nick = kwargs.get('address_by_nick', True)
         self.disable_help = kwargs.get('disable_help', False)
         self.bot_mode = kwargs.get('bot_mode', True)
         self.require_account = False

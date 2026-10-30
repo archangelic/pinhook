@@ -8,6 +8,16 @@ from .bot import Bot
 from marshmallow import Schema, fields, validate, INCLUDE, ValidationError
 
 
+class PrefixField(fields.Field):
+    # one prefix, like "!", or a list of them
+    def _deserialize(self, value, attr, data, **kwargs):
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list) and value and all(isinstance(v, str) and v for v in value):
+            return value
+        raise ValidationError('should be a prefix like "!", or a list of them')
+
+
 class Config(Schema):
     nickname = fields.Str(required=True)
     channels = fields.List(fields.Str(), required=True)
@@ -22,7 +32,7 @@ class Config(Schema):
     log_level = fields.Str(validate=validate.OneOf(['off'] + list(Bot.log_levels)))
     log_file = fields.Str()
     server_pass = fields.Str()
-    cmd_prefix = fields.Str()
+    cmd_prefix = PrefixField()
     use_prefix_for_plugins = fields.Bool()
     disable_help = fields.Bool()
     banned_users = fields.List(fields.Str())
@@ -34,6 +44,7 @@ class Config(Schema):
     sasl_account = fields.Str()
     sasl_password = fields.Str()
     data_dir = fields.Str()
+    address_by_nick = fields.Bool()
 
     class Meta:
         unknown = INCLUDE
