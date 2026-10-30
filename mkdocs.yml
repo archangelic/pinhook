@@ -63,8 +63,6 @@ theme:
 extra_css:
   - assets/brand.css
 
-copyright: named for Pinhook Bridge, Lafayette
-
 extra:
   version:
     provider: mike
