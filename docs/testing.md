@@ -114,7 +114,7 @@ Turning logging off with `log_level='off'` turns this off too, because the error
 
 ## Other things to know
 
-* `bot.pauses` lists the flood protection pauses the bot would have taken, in seconds
+* `bot.pauses` lists the flood protection pauses the bot would have taken, in seconds. The bot sends up to 4 lines at once, then waits 2 seconds before each line after that
 * `!quit` raises `SystemExit`, so wrap it in `pytest.raises(SystemExit)`. `bot.quit_message` holds the message it quit with
 * `!join` adds the channel to `bot.channels`
 * plugins are shared by every bot in the same python process, so make one `TestBot` at a time

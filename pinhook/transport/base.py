@@ -4,7 +4,7 @@ The core never touches the network. A transport connects, turns what the
 network sends into Events for the core, and sends the core's Outgoing
 messages. The interface is internal and can change before 2.0.
 """
-from collections.abc import Callable
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -22,9 +22,9 @@ class Source:
 class Event:
     """Something that happened on the network.
 
-    type is 'connected' once the bot is registered, or 'message'. A message's
-    kind is 'privmsg' or 'action', and its target is a channel or the bot's
-    own nick.
+    type is 'connected' once the bot is registered, 'disconnected' when the
+    connection drops, or 'message'. A message's kind is 'privmsg' or 'action',
+    and its target is a channel or the bot's own nick.
     """
     type: str
     source: Source | None = None
@@ -36,10 +36,14 @@ class Event:
 
 @dataclass(frozen=True)
 class Outgoing:
-    """A message for the transport to send. kind is 'privmsg', 'action' or 'notice'."""
+    """A message for the transport to send. kind is 'privmsg', 'action' or 'notice'.
+
+    The prefix goes in front of every line the text is sent as.
+    """
     kind: str
     target: str
     text: str
+    prefix: str = ''
 
 
 @dataclass(frozen=True)
@@ -55,23 +59,25 @@ class MessageTooLong(ValueError):
     """The text doesn't fit in one line, and this transport doesn't split it."""
 
 
-Handler = Callable[[Event], None]
-
-
 class Transport(Protocol):
-    """A connection to one network, handing each Event it reads to its handler."""
+    """A connection to one network."""
     name: str
+    limits: Limits
 
     @property
     def nick(self) -> str:
         """The bot's nick right now."""
         ...
 
-    def start(self) -> None:
-        """Connect, and handle events until the bot quits."""
+    async def connect(self) -> None:
+        """Start connecting. Keeps reconnecting until closed."""
         ...
 
-    def send(self, message: Outgoing) -> None: ...
+    def events(self) -> AsyncIterator[Event]:
+        """Every event from the network, until the transport is closed."""
+        ...
+
+    async def send(self, message: Outgoing) -> None: ...
 
     def join(self, channel: str, key: str = '') -> None: ...
 
@@ -79,7 +85,7 @@ class Transport(Protocol):
 
     def supports(self, feature: str) -> bool: ...
 
-    def close(self, reason: str = '') -> None: ...
+    async def close(self, reason: str = '') -> None: ...
 
 
 def is_channel(name: str) -> bool:

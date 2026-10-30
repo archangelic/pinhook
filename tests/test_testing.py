@@ -71,10 +71,10 @@ def test_flood_pauses_are_recorded_not_waited(tmp_path):
     bot = TestBot(plugin_dir=plugins(tmp_path, lines=(
         "import pinhook.plugin as p\n"
         "@p.command('!lines')\n"
-        "def lines(msg): return p.message(['one', 'two'])\n"
+        "def lines(msg): return p.message(['1', '2', '3', '4', '5', '6'])\n"
     )))
-    assert bot.say('!lines') == ['one', 'two']
-    assert bot.pauses == [.5, .5]
+    assert bot.say('!lines') == ['1', '2', '3', '4', '5', '6']
+    assert bot.pauses == [2, 2]
 
 
 # ops and bans work as on a real server

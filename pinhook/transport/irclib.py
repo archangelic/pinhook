@@ -1,21 +1,27 @@
-"""The irc library behind the transport interface, until irctokens replaces it."""
+"""The irc library behind the transport interface, until irctokens replaces it.
+
+The irc library blocks while it waits for the server, so it runs on a thread
+of its own, and hands events to the core's event loop.
+"""
+import asyncio
 import base64
 import functools
 import socket
 import ssl
+import threading
 
 import irc.bot
 import irc.client
 import irc.connection
 
-from .base import Event, MessageTooLong, Source
+from .base import Event, Limits, MessageTooLong, Source
 
 
 irc.client.ServerConnection.buffer_class.errors = 'replace'
 
 
-class IrcLibTransport(irc.bot.SingleServerIRCBot):
-    """An IRC connection, using the irc library's bot to connect and track channels.
+class Client(irc.bot.SingleServerIRCBot):
+    """The irc library's bot, which connects and tracks channels for the transport.
 
     Args:
         handler: called with each Event.
@@ -27,12 +33,13 @@ class IrcLibTransport(irc.bot.SingleServerIRCBot):
         bot_mode: set the server's bot mode on the bot, if it has one.
         owner: the Bot, whose irc library handlers (like on_join) still get events.
     """
-    name = 'irc'
     # set once the server agrees to tag messages with the sender's account
     account_tag = False
     _negotiating_caps = False
     # set once the bot has logged in to its account with sasl
     sasl_logged_in = False
+    # set when the bot quits, so it doesn't reconnect
+    stopping = False
 
     def __init__(self, handler, logger, server, port, nickname, password=None, ssl_context=None,
                  sasl_account=None, sasl_password=None, nickserv='NickServ', ns_pass=None,
@@ -52,32 +59,6 @@ class IrcLibTransport(irc.bot.SingleServerIRCBot):
             factory = irc.connection.Factory()
         super().__init__([(server, port, password)], nickname, nickname,
                          connect_factory=self.connect_factory(factory))
-
-    # the transport interface
-
-    @property
-    def nick(self):
-        return self.connection.get_nickname()
-
-    def send(self, message):
-        send = {'privmsg': self.connection.privmsg, 'action': self.connection.action,
-                'notice': self.connection.notice}[message.kind]
-        try:
-            send(message.target, message.text)
-        except irc.client.MessageTooLong as e:
-            raise MessageTooLong(str(e)) from e
-
-    def join(self, channel, key=''):
-        self.connection.join(channel, key)
-
-    def members(self, channel):
-        return list(self.channels[channel].users())
-
-    def supports(self, feature):
-        return feature == 'account-tag' and self.account_tag
-
-    def close(self, reason=''):
-        self.connection.quit(reason)
 
     # connecting
 
@@ -116,6 +97,12 @@ class IrcLibTransport(irc.bot.SingleServerIRCBot):
         if isinstance(cause, ConnectionRefusedError):
             return start + 'connection refused, check the server and port settings' + end
         return start + str(cause or error) + end
+
+    def _on_disconnect(self, c, e):
+        if self.stopping:
+            return
+        super()._on_disconnect(c, e)
+        self.handler(Event('disconnected'))
 
     # capabilities and sasl
 
@@ -265,9 +252,8 @@ class IrcLibTransport(irc.bot.SingleServerIRCBot):
             method(connection, event)
 
 
-class TwitchIrcLibTransport(IrcLibTransport):
+class TwitchClient(Client):
     """Twitch chat, which is IRC with its own capabilities."""
-    name = 'twitch'
 
     def connect_factory(self, factory):
         # twitch doesn't need capabilities asked for before registering
@@ -279,3 +265,112 @@ class TwitchIrcLibTransport(IrcLibTransport):
         c.cap('REQ', ':twitch.tv/tags')
         c.cap('REQ', ':twitch.tv/commands')
         self.handler(Event('connected'))
+
+
+class IrcLibTransport:
+    """An IRC connection, through the irc library.
+
+    Args:
+        logger: the bot's logger.
+        server, port, nickname, password: where to connect and who as.
+        ssl_context: connect with ssl, using this context. None means no ssl.
+        **options: the rest of Client's arguments.
+    """
+    name = 'irc'
+    limits = Limits()
+    client_class = Client
+
+    def __init__(self, logger, server, port, nickname, password=None, ssl_context=None,
+                 **options):
+        self.logger = logger
+        # set once connected, from then on events come from the irc library's thread
+        self.loop = None
+        self.thread = None
+        self.queue = asyncio.Queue()
+        self.client = self.client_class(self.receive, logger, server, port, nickname,
+                                        password=password, ssl_context=ssl_context, **options)
+
+    @property
+    def nick(self):
+        return self.client.connection.get_nickname()
+
+    # what tests and 1.x code still reach through the bot
+
+    @property
+    def connection(self):
+        return self.client.connection
+
+    @property
+    def channels(self):
+        return self.client.channels
+
+    @property
+    def account_tag(self):
+        return self.client.account_tag
+
+    @property
+    def sasl_logged_in(self):
+        return self.client.sasl_logged_in
+
+    # the transport interface
+
+    async def connect(self):
+        self.loop = asyncio.get_running_loop()
+        self.thread = threading.Thread(target=self.run_client, name='irc', daemon=True)
+        self.thread.start()
+
+    def run_client(self):
+        self.client._connect()
+        while not self.client.stopping:
+            self.client.reactor.process_once(0.2)
+
+    def receive(self, event):
+        if self.loop:
+            self.loop.call_soon_threadsafe(self.queue.put_nowait, event)
+        else:
+            # driven by hand, from the thread the core runs on
+            self.queue.put_nowait(event)
+
+    async def events(self):
+        while True:
+            event = await self.queue.get()
+            if event is None:
+                return
+            yield event
+
+    async def send(self, message):
+        connection = self.client.connection
+        send = {'privmsg': connection.privmsg, 'action': connection.action,
+                'notice': connection.notice}[message.kind]
+        with self.client.reactor.mutex:
+            try:
+                send(message.target, message.prefix + message.text)
+            except irc.client.MessageTooLong as e:
+                raise MessageTooLong(str(e)) from e
+
+    def join(self, channel, key=''):
+        with self.client.reactor.mutex:
+            self.client.connection.join(channel, key)
+
+    def members(self, channel):
+        with self.client.reactor.mutex:
+            return list(self.client.channels[channel].users())
+
+    def supports(self, feature):
+        return feature == 'account-tag' and self.client.account_tag
+
+    async def close(self, reason=''):
+        # the server closes the connection after QUIT
+        self.client.stopping = True
+        with self.client.reactor.mutex:
+            if self.client.connection.is_connected():
+                self.client.connection.quit(reason)
+        self.queue.put_nowait(None)
+        if self.thread:
+            await asyncio.to_thread(self.thread.join, 5)
+
+
+class TwitchIrcLibTransport(IrcLibTransport):
+    """Twitch chat, which is IRC with its own capabilities."""
+    name = 'twitch'
+    client_class = TwitchClient

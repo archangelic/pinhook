@@ -218,7 +218,6 @@ def test_newlines_inside_list_output_send_each_line(tmp_path):
         "@p.command('!multi')\n"
         "def multi(msg): return p.message(['one\\ntwo', 'three'])\n")})
     assert w.say('!multi') == ['one', 'two', 'three']
-    assert w.pauses == [.5, .5, .5]
 
 
 # logging

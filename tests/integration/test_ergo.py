@@ -47,7 +47,8 @@ def test_plugins_use_store_config_and_the_new_reply_methods(names, accounts, use
         ('NOTICE', 'mallory', 'psst'),
         ('ACTION', channel, 'waves')]
     assert ('PRIVMSG', 'mallory', 'account=malacct private=True') in mal.say('!ctx', bot, bot)
-    assert messages(mal.say('!mods', channel, bot)) == ['mallory']
+    # the replies so far used up the burst, so this one waits its turn
+    assert messages(mal.say('!mods', channel, bot, seconds=6)) == ['mallory']
 
 
 def test_msg_bot_still_works_and_warns_once(names, users, start_bot):
@@ -177,3 +178,35 @@ def test_missing_environment_variable_stops_the_bot(names, users, start_bot):
     assert running.process.returncode != 0
     assert "uses ${PH_NOT_SET}, but that environment variable isn't set" in \
         running.process.stderr.read().decode()
+
+
+def test_sigterm_quits_cleanly(names, users, start_bot):
+    bot, channel = names
+    watcher = users('watcher', channel=channel)
+    running = start_bot(watcher)
+    running.process.terminate()
+    assert running.process.wait(timeout=10) == 0
+    quit_line = watcher.wait_for(' QUIT ')
+    assert quit_line.startswith(':' + bot) and "See y'all later!" in quit_line
+
+
+def test_quit_command_ends_the_process(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    running = start_bot(mal, ops=['mallory'])
+    mal.send('PRIVMSG {} :!quit bye'.format(channel))
+    assert running.process.wait(timeout=10) == 0
+    assert mal.wait_for(' QUIT ').endswith('bye')
+
+
+def test_long_replies_are_paced_and_all_arrive(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'lines': (
+        "import pinhook.plugin\n\n\n"
+        "@pinhook.plugin.command('!lines')\n"
+        "def lines(msg):\n"
+        "    return pinhook.plugin.message([str(i) for i in range(6)])\n")})
+    started = time.time()
+    assert messages(mal.say('!lines', channel, bot, seconds=6)) == [str(i) for i in range(6)]
+    assert time.time() - started >= 4

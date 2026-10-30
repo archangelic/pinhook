@@ -9,6 +9,7 @@ import os
 import re
 
 from pinhook import bot as pinhook_bot
+from pinhook.testing import Driver
 
 SERVER = 'irc.example.net'
 
@@ -77,19 +78,23 @@ class Wire:
             bot = cls(list(channels), nickname, SERVER, **options)
         self.bot = bot
         self.nickname = nickname
-        self.pauses = []
-        bot.pause = self.pauses.append
+        self.driver = Driver(bot)
         self.socket = FakeSocket()
         self.joined = set()
         self._read = 0
+
+    @property
+    def pauses(self):
+        """The waits for the rate limit the bot would have taken, in seconds."""
+        return self.driver.pauses
 
     # connecting
 
     def connect(self):
         """Connect to the fake server. The bot sends its first lines, like CAP LS."""
-        transport = self.bot.transport
-        transport.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
-                          connect_factory=transport.cap_factory(lambda address: self.socket))
+        client = self.bot.transport.client
+        client.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
+                       connect_factory=client.cap_factory(lambda address: self.socket))
         return self.sent()
 
     def connect_fails(self, error):
@@ -97,9 +102,9 @@ class Wire:
         def factory(address):
             raise error
         try:
-            transport = self.bot.transport
-            transport.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
-                              connect_factory=transport.cap_factory(factory))
+            client = self.bot.transport.client
+            client.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
+                           connect_factory=client.cap_factory(factory))
         except Exception as e:
             return e
 
@@ -125,7 +130,8 @@ class Wire:
         for line in lines:
             self.socket.inbox += (line + '\r\n').encode()
         while self.socket.inbox:
-            self.bot.transport.connection.process_data()
+            self.bot.transport.client.connection.process_data()
+        self.driver.run()
 
     def join(self, nick, channel='#test', user=None, host='example.com'):
         self.receive(':{}!{}@{} JOIN {}'.format(nick, user or nick, host, channel))

@@ -1,20 +1,22 @@
 """The bots: Bot for IRC servers and TwitchBot for Twitch chat."""
+import asyncio
 from collections import OrderedDict
 from datetime import datetime, timezone
 import difflib
 import functools
 import logging
 import os
+import signal
 import ssl
-import sys
 import time
 import warnings
 
 from . import bans
 from . import log
 from . import plugin
+from .output import OutputQueue
 from .store import PluginConfig, Store
-from .transport.base import MessageTooLong, Outgoing, Transport, is_channel
+from .transport.base import Outgoing, Transport, is_channel
 from .transport.irclib import IrcLibTransport, TwitchIrcLibTransport
 
 
@@ -60,6 +62,10 @@ class Bot:
         'debug': logging.DEBUG,
     }
     transport: Transport
+    # how long a plugin can take to answer before the bot stops waiting for it
+    handler_timeout = 30
+    # how long the bot waits for queued messages to go out when it quits
+    shutdown_wait = 5
     # set by the pinhook command, so !reload can read plugin_config from the config file again
     config_file = None
     config_loader = None
@@ -86,6 +92,7 @@ class Bot:
         self.bot_nick = nickname
         self.start_logging()
         self.transport = self.make_transport(server, nickname)
+        self.setup_core()
         self.warn_unknown_options(kwargs)
         self.setup_bans(nickname, kwargs)
         if self.sasl_password and not self.ssl_required:
@@ -340,15 +347,75 @@ class Bot:
 
     def make_transport(self, server, nickname):
         return IrcLibTransport(
-            self.handle_event, self.logger, server, self.port, nickname,
-            password=self.server_pass,
+            self.logger, server, self.port, nickname, password=self.server_pass,
             ssl_context=self.ssl_context() if self.ssl_required else None,
             sasl_account=self.sasl_account, sasl_password=self.sasl_password,
             nickserv=self.nickserv, ns_pass=self.ns_pass, bot_mode=self.bot_mode, owner=self)
 
+    def setup_core(self):
+        # set once the bot is running, plugins in worker threads send through it
+        self.loop = None
+        # messages being handled, and the (nick, command) pairs still running
+        self.handlers = set()
+        self.running = set()
+        self.stopping = False
+        self.quit_reason = ''
+        self.quitting = asyncio.Event()
+        self.output = OutputQueue(self.transport.send, self.transport.limits, self.logger,
+                                  clock=lambda: self.clock(), sleep=lambda s: self.pause(s))
+
     def start(self):
         """Connect, and run until the bot quits."""
-        self.transport.start()
+        asyncio.run(self.run())
+
+    async def run(self):
+        """Connect, and run until the bot quits, or gets SIGTERM."""
+        self.loop = asyncio.get_running_loop()
+        try:
+            self.loop.add_signal_handler(signal.SIGTERM, self.quit)
+        except (NotImplementedError, RuntimeError, ValueError):
+            # only the main thread can catch signals, and not on windows
+            pass
+        await self.transport.connect()
+        async with asyncio.TaskGroup() as core:
+            core.create_task(self.read_events())
+            sender = core.create_task(self.output.run())
+            await self.quitting.wait()
+            try:
+                # answers already on their way, then everything waiting to be sent
+                async with asyncio.timeout(self.shutdown_wait):
+                    if self.handlers:
+                        await asyncio.wait(self.handlers)
+                    await self.output.drain()
+            except TimeoutError:
+                self.logger.warning('quitting with {} messages still waiting to be sent'
+                                    .format(self.output.waiting()))
+            sender.cancel()
+            await self.transport.close(self.quit_reason)
+
+    def quit(self, reason=''):
+        """Stop taking messages, send what's waiting, and quit with reason."""
+        self.stopping = True
+        self.quit_reason = reason or "See y'all later!"
+        self.in_loop(self.quitting.set)
+
+    def in_loop(self, func, *args):
+        # plugins run in worker threads, and the output queue belongs to the event loop
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if self.loop is None or running is self.loop:
+            func(*args)
+        else:
+            self.loop.call_soon_threadsafe(func, *args)
+
+    def clock(self):
+        return time.monotonic()
+
+    async def pause(self, seconds):
+        # the output queue waiting for its rate limit
+        await asyncio.sleep(seconds)
 
     @property
     def account_tag(self):
@@ -370,11 +437,28 @@ class Bot:
     def channels(self):
         return getattr(self.transport, 'channels')
 
-    def handle_event(self, event):
+    async def read_events(self):
+        async for event in self.transport.events():
+            self.dispatch(event)
+
+    def dispatch(self, event):
         if event.type == 'connected':
             self.connected()
-        elif event.type == 'message':
-            self.process_event(event)
+        elif event.type == 'disconnected':
+            # answers to what was asked before the drop would be out of date
+            dropped = self.output.clear()
+            if dropped:
+                self.logger.warning('disconnected, dropping {} messages that were waiting to be '
+                                    'sent'.format(dropped))
+        elif event.type == 'message' and not self.stopping:
+            task = asyncio.get_running_loop().create_task(self.process_event(event))
+            self.handlers.add(task)
+            task.add_done_callback(self.handled)
+
+    def handled(self, task):
+        self.handlers.discard(task)
+        if not task.cancelled() and task.exception():
+            self.logger.error('issue handling a message', exc_info=task.exception())
 
     def connected(self):
         if self.require_account and not self.account_tag:
@@ -385,11 +469,8 @@ class Bot:
             self.transport.join(*channel.split())
 
     def send_message(self, kind, target, text):
-        self.transport.send(Outgoing(kind, target, text))
-
-    def pause(self, seconds):
-        # flood protection between lines of output
-        time.sleep(seconds)
+        """Queue a message to send. Safe to call from a plugin's thread."""
+        self.in_loop(self.output.put, Outgoing(kind, target, text))
 
     def call_help(self, nick, op):
         cmds = {k: v.help_text for k, v in plugin.cmds.items()
@@ -401,7 +482,6 @@ class Bot:
         helpout = OrderedDict(sorted(cmds.items()))
         for h in helpout:
             self.send_message('privmsg', nick, '{} -- {}'.format(h, helpout[h]))
-            self.pause(.1)
         listeners = ', '.join(plugin.lstnrs)
         self.send_message('privmsg', nick, 'List of listeners: {}'.format(listeners))
         return None
@@ -427,8 +507,7 @@ class Bot:
             self.logger.info('quitting per request of {}'.format(nick))
             if not arg:
                 arg = "See y'all later!"
-            self.transport.close(arg)
-            sys.exit()
+            self.quit(arg)
         elif cmd == 'help' and not self.disable_help:
             self.call_help(nick, op)
         elif cmd == 'reload' and op:
@@ -573,7 +652,7 @@ class Bot:
             self.logger.debug(f'returning output: {output.msg}')
         return output
 
-    def process_event(self, event):
+    async def process_event(self, event):
         nick = event.source.nick
         user = event.source.user
         host = event.source.host
@@ -609,6 +688,8 @@ class Bot:
         else:
             arg = ''
         output = self.call_internal_commands(chan, nick, cmd, text, arg, self.connection, op=op)
+        if self.stopping:
+            return
         if not output:
             plugin_info = {
                 'chan': chan,
@@ -626,33 +707,43 @@ class Bot:
                 'op': op,
                 'account': account
             }
-            output = self.call_plugins(**plugin_info)
+            output = await self.run_plugins(plugin_info)
         if output:
             self.logger.debug(f'sending output: {output.msg}')
             self.process_output(self.connection, chan, output)
+
+    async def run_plugins(self, info):
+        # 1.x plugins are plain functions, so they run in a worker thread
+        key = None
+        if info['cmd'] in plugin.cmds:
+            # one run at a time per person, so spamming a slow command can't pile them up
+            key = (bans.lower(info['nick']), info['cmd'])
+            if key in self.running:
+                self.logger.debug('{} is still running for {}, ignoring'.format(
+                    info['cmd'], info['nick']))
+                return None
+            self.running.add(key)
+        try:
+            async with asyncio.timeout(self.handler_timeout):
+                return await asyncio.to_thread(self.call_plugins, **info)
+        except TimeoutError:
+            self.logger.error('{} took longer than {} seconds, giving up waiting for it'.format(
+                info['cmd'] if key else 'a listener', self.handler_timeout))
+            return None
+        finally:
+            self.running.discard(key)
 
     def process_output(self, c, chan, output):
         # c, the connection, is still passed for 1.x Bot subclasses that override this
         if not output.msg:
             return
+        kinds = {plugin.OutputType.Message: 'privmsg', plugin.OutputType.Action: 'action'}
+        if output.msg_type not in kinds:
+            self.logger.warning("Unsupported output type '{}'".format(output.msg_type))
+            return
         for msg in output.msg:
-            if output.msg_type == plugin.OutputType.Message:
-                self.logger.debug('output message: {}'.format(msg))
-                try:
-                    self.send_message('privmsg', chan, msg)
-                except MessageTooLong:
-                    self.logger.error('output message too long: {}'.format(msg))
-                    break
-            elif output.msg_type == plugin.OutputType.Action:
-                self.logger.debug('output action: {}'.format(msg))
-                try:
-                    self.send_message('action', chan, msg)
-                except MessageTooLong:
-                    self.logger.error('output message too long: {}'.format(msg))
-                    break
-            else:
-                self.logger.warning("Unsupported output type '{}'".format(output.msg_type))
-            self.pause(.5)
+            self.logger.debug('output {}: {}'.format(output.msg_type.value, msg))
+            self.send_message(kinds[output.msg_type], chan, msg)
 
 
 class TwitchBot(Bot):
@@ -693,9 +784,9 @@ class TwitchBot(Bot):
         self.logger.info('Joining Twitch Server')
         # always use tls, the oauth token is a password
         self.transport = TwitchIrcLibTransport(
-            self.handle_event, self.logger, self.server, self.port, nickname,
-            password='oauth:' + token, ssl_context=self.ssl_context(), bot_mode=self.bot_mode,
-            owner=self)
+            self.logger, self.server, self.port, nickname, password='oauth:' + token,
+            ssl_context=self.ssl_context(), bot_mode=self.bot_mode, owner=self)
+        self.setup_core()
         self.internal_commands = {self.cmd_prefix + k: v for k, v in self.internal_commands.items()}
         plugin.load_plugins(self.plugin_dir, use_prefix=self.use_prefix_for_plugins,
                             cmd_prefix=self.cmd_prefix, logger=self.logger)

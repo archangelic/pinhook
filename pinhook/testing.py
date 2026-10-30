@@ -6,13 +6,15 @@
         bot = TestBot(plugin_dir='plugins')
         assert bot.say('!roll 1d1') == ['1']
 """
+import asyncio
 from collections import namedtuple
 import logging
 import os
+import weakref
 
 from .bot import Bot
 from .store import Store
-from .transport.base import Event, Source
+from .transport.base import Event, Limits, Source
 
 # one thing the bot sent, kind is 'message', 'action' or 'notice'
 Sent = namedtuple('Sent', ['kind', 'target', 'text'])
@@ -35,23 +37,82 @@ class FakeChannel:
         return list(self.nicks)
 
 
+class Driver:
+    """Runs a bot's core a step at a time, so a test can wait for each answer.
+
+    Time only moves when the output queue waits for its rate limit, and those
+    waits are kept in pauses instead of taken.
+    """
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.loop = asyncio.new_event_loop()
+        weakref.finalize(self, self.loop.close)
+        self.now = 0.0
+        self.pauses = []
+        bot.loop = self.loop
+        bot.clock = lambda: self.now
+        bot.pause = self.pause
+
+    async def pause(self, seconds):
+        self.pauses.append(seconds)
+        self.now += seconds
+
+    def run(self, *events):
+        """Handle events, and any the transport has waiting, until the bot has sent every
+        answer. Raises SystemExit if the bot quit."""
+        self.loop.run_until_complete(self.settle(events))
+        if self.bot.stopping:
+            self.loop.run_until_complete(self.bot.transport.close(self.bot.quit_reason))
+            raise SystemExit
+
+    async def settle(self, events):
+        bot = self.bot
+        for event in events:
+            bot.dispatch(event)
+        while True:
+            while not bot.transport.queue.empty():
+                event = bot.transport.queue.get_nowait()
+                if event is not None:
+                    bot.dispatch(event)
+            running = {task for task in bot.handlers if not task.done()}
+            if running:
+                await asyncio.wait(running)
+            elif bot.output.targets:
+                await bot.output.flush()
+            else:
+                # one more turn, for anything a plugin's thread handed over
+                await asyncio.sleep(0)
+                if bot.transport.queue.empty() and not bot.handlers and not bot.output.targets:
+                    return
+
+
 class FakeTransport:
     # stands in for the network and records what the bot sends
     name = 'fake'
+    limits = Limits()
 
     def __init__(self, bot, nickname):
         self.bot = bot
         self.nick = nickname
         self.channels = {}
+        self.queue = asyncio.Queue()
         # 1.x plugins send through msg.bot.connection, so this is that too
         self.connection = self
 
-    def start(self):
+    async def connect(self):
         pass
 
-    def send(self, message):
+    async def events(self):
+        while True:
+            event = await self.queue.get()
+            if event is None:
+                return
+            yield event
+
+    async def send(self, message):
         kind = 'message' if message.kind == 'privmsg' else message.kind
-        self.bot.sent.append(Sent(kind, message.target, message.text))
+        self.bot.sent.append(Sent(kind, message.target, message.prefix + message.text))
 
     def join(self, channel, key=''):
         self.bot.add_channel(channel)
@@ -62,8 +123,9 @@ class FakeTransport:
     def supports(self, feature):
         return feature == 'account-tag'
 
-    def close(self, reason=''):
+    async def close(self, reason=''):
         self.bot.quit_message = reason
+        self.queue.put_nowait(None)
 
     # the irc library connection's methods, for msg.bot.connection
 
@@ -83,7 +145,7 @@ class FakeTransport:
         self.channels.pop(channel, None)
 
     def quit(self, message=''):
-        self.close(message)
+        self.bot.quit_message = message
 
     def mode(self, target, command):
         pass
@@ -118,10 +180,10 @@ class TestBot(Bot):
         options.setdefault('log_file', os.devnull)
         options.setdefault('ban_file', '')
         self.sent = []
-        self.pauses = []
         self.quit_message = None
         self._errors = _ErrorCatcher()
         super().__init__(list(channels), nickname, 'localhost', plugin_dir=plugin_dir, **options)
+        self.driver = Driver(self)
         for channel in channels:
             self.add_channel(channel)
         # a plugin that couldn't load fails here, not later
@@ -138,9 +200,10 @@ class TestBot(Bot):
         # stores stay in memory, look at one with bot.store('karma')
         return Store(name)
 
-    def pause(self, seconds):
-        # record flood protection pauses instead of waiting for them
-        self.pauses.append(seconds)
+    @property
+    def pauses(self):
+        """The waits for the rate limit the bot would have taken, in seconds."""
+        return self.driver.pauses
 
     def add_channel(self, channel):
         if channel not in self.channels:
@@ -178,7 +241,7 @@ class TestBot(Bot):
         start = len(self.sent)
         tags = {'account': account} if account else {}
         source = Source(nick, user or nick, host, account)
-        self.handle_event(Event('message', source, target, text, kind, tags))
+        self.driver.run(Event('message', source, target, text, kind, tags))
         self._raise_plugin_errors()
         return [s.text for s in self.sent[start:]
                 if s.target == reply_to and s.kind in ('message', 'action')]

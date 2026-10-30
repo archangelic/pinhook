@@ -61,7 +61,7 @@ Return one of these to reply where the message came from, the channel or the pri
 * `pinhook.plugin.message(text)`: a normal message
 * `pinhook.plugin.action(text)`: a `/me` action
 
-Both take a string or a list of strings. Each line is sent as its own message, with a short pause between lines so the bot doesn't flood the channel.
+Both take a string or a list of strings. Each line is sent as its own message. So the bot doesn't flood the channel, it sends up to 4 lines at once, then one every 2 seconds.
 
 ```python
 return pinhook.plugin.message(['line one', 'line two'])

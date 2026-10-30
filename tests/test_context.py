@@ -17,10 +17,11 @@ def test_reply_sends_straight_away(tmp_path):
         "def count(msg):\n"
         "    msg.reply('one')\n"
         "    msg.reply('two\\nthree')\n"
+        "    msg.reply(['four', 'five', 'six'])\n"
     )))
-    assert bot.say('!count') == ['one', 'two', 'three']
-    # same flood protection as a returned reply
-    assert bot.pauses == [.5, .5, .5]
+    assert bot.say('!count') == ['one', 'two', 'three', 'four', 'five', 'six']
+    # same flood protection as a returned reply: 4 lines at once, then one every 2 seconds
+    assert bot.pauses == [2, 2]
 
 
 def test_reply_to_a_private_message_goes_to_the_sender(tmp_path):

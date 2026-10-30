@@ -1,5 +1,4 @@
 import logging
-from types import SimpleNamespace
 
 import pytest
 
@@ -25,14 +24,6 @@ def clear_plugins():
                 if isinstance(handler, logging.FileHandler):
                     logger.removeHandler(handler)
                     handler.close()
-
-
-@pytest.fixture(autouse=True)
-def sleeps(monkeypatch):
-    # record flood protection pauses instead of waiting for them
-    calls = []
-    monkeypatch.setattr(pinhook_bot, 'time', SimpleNamespace(sleep=calls.append))
-    return calls
 
 
 @pytest.fixture
