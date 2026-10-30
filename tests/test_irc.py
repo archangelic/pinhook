@@ -137,6 +137,24 @@ def test_members_are_tracked_through_names_joins_and_leaving(tmp_path):
     assert w.say('!who', nick='newbie') == ['boss newbie op pinbot']
 
 
+def test_member_modes_come_from_names_and_mode_changes(tmp_path):
+    w = Wire(tmp_path).ready(isupport='CHANTYPES=# PREFIX=(ov)@+ CHANMODES=beI,k,l,imnpst')
+    w.receive(':irc.example.net 353 pinbot = #test :pinbot @op +voice ana',
+              ':irc.example.net 366 pinbot #test :End of /NAMES list.')
+    modes = w.bot.transport.member_modes
+    assert (modes('#test', 'OP'), modes('#test', 'voice'), modes('#test', 'ana')) == (
+        {'o'}, {'v'}, set())
+    # the ban and the key take an argument, the limit only when it's set, and m none
+    w.receive(':op!o@example.com MODE #test +bvk-o *!*@bad ana secret voice',
+              ':op!o@example.com MODE #test +lmo 10 voice',
+              ':op!o@example.com MODE #test -lv ana')
+    assert (modes('#test', 'voice'), modes('#test', 'ana')) == ({'o', 'v'}, set())
+    w.receive(':voice!v@example.com NICK loud')
+    assert modes('#test', 'loud') == {'o', 'v'}
+    w.receive(':loud!v@example.com PART #test')
+    assert modes('#test', 'loud') == set()
+
+
 def test_leaving_a_channel_forgets_its_members(tmp_path):
     w = Wire(tmp_path).ready()
     w.join('mal')

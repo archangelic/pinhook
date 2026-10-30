@@ -13,7 +13,7 @@ import ssl
 import irctokens
 
 from ..__version__ import __version__
-from .base import Event, Limits, Source, casefold
+from .base import Event, Limits, Source, casefold, is_channel
 
 # the longest !user@host a server shows for the bot, until it has seen its own
 HOSTMASK_GUESS = len('!') + 10 + len('@') + 63
@@ -69,6 +69,8 @@ class IrcTransport:
         # casefolded channel name: {casefolded nick: nick}, and the name as the server wrote it
         self.channels = {}
         self.channel_names = {}
+        # casefolded channel name: {casefolded nick: their mode letters there, like {'o'}}
+        self.member_modes_by_channel = {}
         self.server_caps = {}
         self.caps = set()
         self.negotiating = False
@@ -124,6 +126,10 @@ class IrcTransport:
 
     def joined(self):
         return list(self.channel_names.values())
+
+    def member_modes(self, channel, nick):
+        modes = self.member_modes_by_channel.get(self.casefold(channel), {})
+        return frozenset(modes.get(self.casefold(nick), ()))
 
     def supports(self, feature):
         return feature in self.caps
@@ -384,18 +390,26 @@ class IrcTransport:
     # channels and members
 
     def prefixes(self):
-        # PREFIX=(ov)@+ gives the symbols that can come before a nick in NAMES
-        prefix = self.isupport.get('PREFIX', '(qaohv)~&@%+')
-        return prefix.partition(')')[2] or '~&@%+'
+        # PREFIX=(ov)@+ gives the modes members can have, and the symbols NAMES shows for them
+        letters, _, symbols = self.isupport.get('PREFIX', '(qaohv)~&@%+').lstrip('(').partition(')')
+        if not symbols or len(letters) != len(symbols):
+            letters, symbols = 'qaohv', '~&@%+'
+        return dict(zip(symbols, letters))
 
     def on_names(self, line):
-        channel = self.channels.get(self.casefold(line.params[2]))
+        key = self.casefold(line.params[2])
+        channel = self.channels.get(key)
         if channel is None:
             return
         symbols = self.prefixes()
+        modes = self.member_modes_by_channel.setdefault(key, {})
         for name in line.params[3].split():
-            nick = name.lstrip(symbols).partition('!')[0]
+            nick = name.lstrip(''.join(symbols))
+            given = name[:len(name) - len(nick)]
+            nick = nick.partition('!')[0]
             channel[self.casefold(nick)] = nick
+            # without multi-prefix only the highest shows, which is enough to tell ops and voice
+            modes[self.casefold(nick)] = {symbols[s] for s in given}
 
     def on_join(self, line):
         nick = line.hostmask.nickname
@@ -415,8 +429,10 @@ class IrcTransport:
         if self.is_me(nick):
             self.channels.pop(key, None)
             self.channel_names.pop(key, None)
+            self.member_modes_by_channel.pop(key, None)
         elif key in self.channels:
             self.channels[key].pop(self.casefold(nick), None)
+            self.member_modes_by_channel.get(key, {}).pop(self.casefold(nick), None)
 
     def on_part(self, line):
         self.leave(line.params[0], line.hostmask.nickname)
@@ -429,7 +445,7 @@ class IrcTransport:
 
     def on_quit(self, line):
         folded = self.casefold(line.hostmask.nickname)
-        for members in self.channels.values():
+        for members in [*self.channels.values(), *self.member_modes_by_channel.values()]:
             members.pop(folded, None)
         self.emit(Event('quit', self.source(line), '', self.last(line, 0)))
 
@@ -438,6 +454,9 @@ class IrcTransport:
         for members in self.channels.values():
             if members.pop(self.casefold(old), None) is not None:
                 members[self.casefold(new)] = new
+        for modes in self.member_modes_by_channel.values():
+            if self.casefold(old) in modes:
+                modes[self.casefold(new)] = modes.pop(self.casefold(old))
         if self.is_me(old):
             self.nick = new
         self.emit(Event('nick', self.source(line), '', data={'new_nick': new}))
@@ -451,10 +470,35 @@ class IrcTransport:
             self.emit(Event('invite', self.source(line), line.params[1]))
 
     def on_mode(self, line):
+        if len(line.params) > 1 and is_channel(line.params[0]):
+            self.track_modes(line.params[0], line.params[1], line.params[2:])
         # only modes someone set, not the server setting the bot's own when it connects
         if line.source and '!' in line.source:
             self.emit(Event('mode', self.source(line), line.params[0],
                             data={'modes': line.params[1:]}))
+
+    def track_modes(self, channel, changes, args):
+        # MODE #games +ov-v mal ana troll. Which other modes take an argument comes from
+        # CHANMODES: lists and keys always, limits only when set, flags never
+        key = self.casefold(channel)
+        if key not in self.channels:
+            return
+        member = set(self.prefixes().values())
+        lists, keys, limits = (self.isupport.get('CHANMODES', 'beI,k,l,') + ',,').split(',')[:3]
+        args = list(args)
+        adding = True
+        for letter in changes:
+            if letter in '+-':
+                adding = letter == '+'
+            elif letter in member and args:
+                nick = self.casefold(args.pop(0))
+                modes = self.member_modes_by_channel.setdefault(key, {}).setdefault(nick, set())
+                if adding:
+                    modes.add(letter)
+                else:
+                    modes.discard(letter)
+            elif (letter in lists + keys or (letter in limits and adding)) and args:
+                args.pop(0)
 
     def source(self, line):
         tags = line.tags or {}

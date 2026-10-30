@@ -10,16 +10,17 @@ import ssl
 import time
 import warnings
 
-from . import bans
+from . import access
 from . import commands
 from . import compat
 from . import log
 from . import plugin
+from .access import Access
 from .context import Context
 from .output import OutputQueue
-from .registry import Registry, Switches
+from .registry import Handler, Registry, Switches
 from .store import PluginConfig, Store
-from .transport.base import Event, Outgoing, Transport, is_channel
+from .transport.base import Event, Outgoing, Source, Transport, is_channel
 from .transport.irc import IrcTransport, TwitchTransport
 
 
@@ -46,7 +47,11 @@ class Bot:
         'ops': 'list all ops',
         'ban': 'ban a user from using the bot, by account or host when possible',
         'unban': 'remove bot ban for user',
-        'banlist': 'list current bans'
+        'banlist': 'list current bans',
+        'allow': 'give someone access to a plugin or command',
+        'deny': 'keep someone off a plugin or command',
+        'revoke': 'take back an allow or deny',
+        'access': 'show who can use a plugin or command',
     }
     # keyword options Bot understands, subclasses can add their own
     options = {
@@ -54,7 +59,7 @@ class Bot:
         'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
-        'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels',
+        'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -136,6 +141,7 @@ class Bot:
         self.stores = {}
         self.plugin_config = dict(kwargs.get('plugin_config') or {})
         self.plugin_channels = dict(kwargs.get('plugin_channels') or {})
+        self.access_config = kwargs.get('access')
 
     def path(self, path):
         """Where a path from the options really is: relative ones are inside bot_dir, if set."""
@@ -161,14 +167,15 @@ class Bot:
         name = os.path.basename(self.config_file)
         try:
             config = self.config_loader()
+            self.access.configure(config.get('access'))
         except Exception as e:
             self.logger.error(
-                "couldn't read plugin_config from {} again, keeping the old settings: {}".format(
-                    self.config_file, e))
-            return (", but {} has a problem so plugin_config wasn't changed, "
+                "couldn't read plugin_config and access from {} again, keeping the old settings: "
+                "{}".format(self.config_file, e))
+            return (", but {} has a problem so plugin_config and access weren't changed, "
                     "see the log".format(name))
         self.plugin_config = dict(config.get('plugin_config') or {})
-        return ' (and plugin_config from {})'.format(name)
+        return ' (and plugin_config and access from {})'.format(name)
 
     def setup_plugins(self):
         # cmd_prefix can be one prefix or a list of them, plugin commands use them all
@@ -187,6 +194,8 @@ class Bot:
         # !help isn't listed with the rest, it's shown to everyone
         self.builtins = set(self.internal_commands) | {'help'}
         self.registry = Registry(self.bot_nick, self.prefixes, self.builtins, self.logger)
+        # who can use what, from the access config and !allow and !deny
+        self.access = Access(self, self.access_config, self.access_path())
         self.registry.load(self.plugin_dir)
         self.reset_timers()
         self.check_plugin_config()
@@ -195,14 +204,31 @@ class Bot:
         # where !enable and !disable are saved
         return os.path.join(self.data_dir, '{}.plugins.json'.format(self.bot_nick))
 
+    def access_path(self):
+        # where !allow and !deny are saved
+        return os.path.join(self.data_dir, '{}.access.json'.format(self.bot_nick))
+
     def check_plugin_config(self):
         # a section for a plugin that isn't loaded is probably a typo
         loaded = set(self.registry.plugins)
-        for name in sorted(set(self.plugin_config) - loaded - {'shared'}):
-            close = difflib.get_close_matches(name, loaded, n=1)
-            hint = ", did you mean '{}'?".format(close[0]) if close else ''
-            self.logger.warning("plugin_config has settings for '{}', but there's no plugin "
-                                "called that{}".format(name, hint))
+        sections = [('plugin_config', set(self.plugin_config) - {'shared'}),
+                    ('access.plugins', set(self.access.rules))]
+        for setting, names in sections:
+            for name in sorted(names - loaded):
+                close = difflib.get_close_matches(name, loaded, n=1)
+                hint = ", did you mean '{}'?".format(close[0]) if close else ''
+                self.logger.warning("{} has settings for '{}', but there's no plugin called "
+                                    "that{}".format(setting, name, hint))
+        for name, rule in sorted(self.access.rules.items()):
+            if name not in loaded:
+                continue
+            mine = {h.name for h in self.registry.plugins[name] if h.kind == 'command'}
+            for command in sorted(set(rule.commands) - mine):
+                close = difflib.get_close_matches(command, mine, n=1)
+                hint = ", did you mean '{}'?".format(close[0]) if close else ''
+                self.logger.warning("access.plugins.{}.commands has settings for '{}', but plugin "
+                                    "{} has no command called that{}".format(name, command, name,
+                                                                             hint))
 
     def open_store(self, name):
         return Store(name, os.path.join(self.data_dir, name + '.json'))
@@ -210,7 +236,7 @@ class Bot:
     def setup_bans(self, nickname, kwargs):
         self.config_bans = list(kwargs.get('banned_users', []))
         self.banned_users = list(self.config_bans)
-        saved = bans.load(self.ban_file)
+        saved = access.load_bans(self.ban_file)
         for entry in saved:
             if not self.nick_in(entry, self.banned_users):
                 self.banned_users.append(entry)
@@ -222,7 +248,7 @@ class Bot:
     def save_bans(self):
         # bans from the config stay in the config, the file keeps the ones made with !ban
         saved = [b for b in self.banned_users if not self.nick_in(b, self.config_bans)]
-        bans.save(self.ban_file, saved)
+        access.save_bans(self.ban_file, saved)
 
     def remember(self, nick, user, host, account):
         key = self.transport.casefold(nick)
@@ -233,8 +259,8 @@ class Bot:
 
     def ban_entry(self, target):
         # a nick on its own is easy to change, so ban their account if they're
-        # logged in, or their user and host if not
-        if bans.is_account(target) or bans.is_mask(target):
+        # logged in, or their user and host if not. !allow and !deny use it too
+        if access.is_account(target) or access.is_mask(target):
             return target, target
         seen = self.seen.get(self.transport.casefold(target))
         if not seen:
@@ -251,7 +277,7 @@ class Bot:
         fold = self.transport.casefold
         seen = self.seen.get(fold(target))
         removed = [b for b in self.banned_users
-                   if self.nick_in(b, [target]) or (seen and bans.matches(b, *seen, fold=fold))]
+                   if self.nick_in(b, [target]) or (seen and access.matches(b, *seen, fold=fold))]
         self.banned_users = [b for b in self.banned_users if b not in removed]
         return removed
 
@@ -265,8 +291,8 @@ class Bot:
 
     def is_op(self, source):
         """True if the sender of a message is one of the bot's ops."""
-        return bans.matches_any(self.ops, source.nick, source.user, source.host, source.account,
-                                fold=self.transport.casefold)
+        return access.matches_any(self.ops, source.nick, source.user, source.host, source.account,
+                                  fold=self.transport.casefold)
 
     def nick_in(self, nick, nicks):
         # irc nicks are case insensitive, so Troll and troll are the same person
@@ -468,15 +494,22 @@ class Bot:
         for line in lines:
             self.send_message(kind, target, line)
 
-    def call_help(self, nick, op, arg=''):
+    def call_help(self, nick, op, arg='', source=None, channel=None):
+        # source is who asked, and channel where, so the list can say what they can't use
         prefix = self.cmd_prefix
+        who = source or Source(nick)
+        where = channel if is_channel(channel or '') else None
         if arg:
-            return self.command_help(nick, op, arg)
-        commands = [h for h in self.registry.handlers() if h.kind == 'command']
-        cmds = {h.label(prefix): h.help_text for h in commands if not (h.ops or h.hide)}
+            return self.command_help(nick, op, arg, who, where)
+        cmds = {}
+        for handler in self.registry.handlers():
+            level = self.access.level(handler) if handler.kind == 'command' else None
+            if handler.kind != 'command' or handler.hide or (level == 'ops' and not op):
+                continue
+            cmds[handler.label(prefix) + self.access_note(handler, who, where)] = \
+                handler.help_text
         cmds.update({prefix + 'help': 'returns this output to private message'})
         if op:
-            cmds.update({h.label(prefix): h.help_text for h in commands if h.ops})
             cmds.update({prefix + k: v for k, v in self.internal_commands.items()})
         helpout = OrderedDict(sorted(cmds.items()))
         for h in helpout:
@@ -485,14 +518,23 @@ class Bot:
         self.send_message('privmsg', nick, 'List of listeners: {}'.format(listeners))
         return None
 
-    def command_help(self, nick, op, word):
+    def access_note(self, handler, who, channel):
+        # restricted commands show for everyone, so people know to ask for access
+        if self.access.allows(who, handler, channel):
+            return ''
+        if self.access.level(handler) == 'restricted':
+            return " (restricted, you don't have access)"
+        return " (you don't have access)"
+
+    def command_help(self, nick, op, word, who, channel):
         # !help roll: one command's help, its usage line and what its arguments mean
         handler = self.registry.find(word) or self.registry.find(word, addressed=True)
-        if handler is None or (handler.ops and not op):
+        if handler is None or (self.access.level(handler) == 'ops' and not op):
             self.send_message('privmsg', nick, "there's no command called {}".format(word))
             return None
-        self.send_message('privmsg', nick, '{} -- {}'.format(handler.label(self.cmd_prefix),
-                                                             handler.help_text))
+        self.send_message('privmsg', nick, '{}{} -- {}'.format(
+            handler.label(self.cmd_prefix), self.access_note(handler, who, channel),
+            handler.help_text))
         if handler.native:
             self.send_message('privmsg', nick, 'usage: ' + commands.usage(handler.name,
                                                                           handler.params))
@@ -500,8 +542,8 @@ class Bot:
                 self.send_message('privmsg', nick, line)
         return None
 
-    def call_internal_commands(self, channel, nick, cmd, arg, op=None):
-        # cmd is the command's name, without the prefix
+    def call_internal_commands(self, channel, nick, cmd, arg, op=None, source=None):
+        # cmd is the command's name, without the prefix. source is who sent it, if known
         output = None
         if op is None:
             op = self.nick_in(nick, self.ops)
@@ -519,10 +561,7 @@ class Bot:
                 arg = "See y'all later!"
             self.quit(arg)
         elif cmd == 'help' and not self.disable_help:
-            if arg:
-                self.call_help(nick, op, arg)
-            else:
-                self.call_help(nick, op)
+            self.call_help(nick, op, arg, source, channel)
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             config_note = self.reload_plugin_config()
@@ -571,22 +610,143 @@ class Bot:
         elif cmd == 'banlist' and op:
             banned = ', '.join(self.banned_users) or 'nobody'
             output = plugin.message('currently banned: {}'.format(banned))
+        elif cmd in ('allow', 'deny', 'revoke', 'access') and op:
+            output = plugin.message(self.access_command(cmd, nick, arg))
         return output
+
+    # !allow, !deny, !revoke and !access
+
+    def access_target(self, name):
+        # a plugin file, or a command written with or without its prefix.
+        # (plugin, None) for a plugin, (plugin, command) for a command
+        if name in self.registry.plugins:
+            return name, None
+        handler = self.registry.find(name) or self.registry.commands.get(name)
+        if handler is None:
+            return None
+        return handler.plugin, handler.name
+
+    def target_label(self, plugin, command):
+        if command is None:
+            return 'plugin ' + plugin
+        return self.registry.commands[command].label(self.cmd_prefix)
+
+    def target_handlers(self, plugin, command):
+        if command is not None:
+            return [self.registry.commands[command]]
+        return [h for h in self.registry.plugins[plugin] if h.kind in ('command', 'listener')]
+
+    def access_command(self, cmd, nick, arg):
+        try:
+            args = shlex.split(arg)
+        except ValueError:
+            args = arg.split()
+        usage = '{}: usage: {}{} <plugin or command>{}'.format(
+            nick, self.cmd_prefix, cmd, '' if cmd == 'access' else ' <who> [<who> ...]')
+        if not args or (cmd == 'access') != (len(args) == 1):
+            return usage
+        target = self.access_target(args[0])
+        if target is None:
+            return "{}: there's no plugin or command called {}".format(nick, args[0])
+        plugin_name, command = target
+        label = self.target_label(plugin_name, command)
+        if cmd == 'access':
+            return self.describe_access(plugin_name, command)
+        if cmd == 'revoke':
+            return self.revoke(nick, plugin_name, command, label, args[1:])
+        levels = {self.access.level(h) for h in self.target_handlers(plugin_name, command)}
+        if levels == {'ops'}:
+            # only the config file changes a level
+            return ("{}: {} is ops only, so it can't be given out or denied from chat. Its level "
+                    "is set in the config file".format(nick, label))
+        if cmd == 'allow' and 'restricted' not in levels:
+            return ("{}: {} is open to everyone, so access to it can't be given out. To make it "
+                    "restricted, set that in the config file".format(nick, label))
+        done = []
+        for target in args[1:]:
+            if self.access.is_group(target):
+                entry, description = target, target
+            else:
+                entry, description = self.ban_entry(target)
+            added = self.access.add(cmd, plugin_name, command, entry)
+            done.append(description + ('' if added else ' (already)'))
+        verb = 'gave access to {} to' if cmd == 'allow' else 'kept off {}:'
+        return '{}: {} {}'.format(nick, verb.format(label), ', '.join(done))
+
+    def revoke(self, nick, plugin_name, command, label, targets):
+        fold = self.transport.casefold
+        removed, in_config = [], []
+        for target in targets:
+            seen = self.seen.get(fold(target))
+
+            def wanted(entry):
+                # the entry itself, or one that matches the person last seen as target
+                return (fold(entry) == fold(target) or
+                        bool(seen) and not self.access.is_group(entry) and
+                        access.matches(entry, *seen, fold=fold))
+            removed += self.access.remove(plugin_name, command, wanted)
+            in_config += self.access.in_config(plugin_name, command, wanted)
+        reply = '{}: '.format(nick)
+        if removed:
+            reply += 'took back {} on {}'.format(', '.join(removed), label)
+        else:
+            reply += 'nothing to take back for {} on {}'.format(' '.join(targets), label)
+        if in_config:
+            reply += (' ({} is in the config file, so it stays until it\'s taken out there)'
+                      .format(', '.join(in_config)))
+        return reply
+
+    def describe_access(self, plugin_name, command):
+        # one line for the plugin or command, and one for each of a plugin's commands
+        # whose access differs from the plugin's
+        lines = []
+        handlers = self.target_handlers(plugin_name, command)
+        if command is None:
+            plugin_handler = Handler('listener', plugin_name, plugin_name, None)
+            lines.append(self.access_line('plugin ' + plugin_name, plugin_handler))
+            for handler in handlers:
+                if handler.kind == 'command':
+                    line = self.access_line(handler.label(self.cmd_prefix), handler)
+                    if line.partition(': ')[2] != lines[0].partition(': ')[2]:
+                        lines.append(line)
+        else:
+            lines.append(self.access_line(handlers[0].label(self.cmd_prefix), handlers[0]))
+        return lines
+
+    def access_line(self, label, handler):
+        level = self.access.level(handler)
+        if level == 'ops':
+            return '{}: ops only'.format(label)
+        parts = [level]
+        allowed = self.access.entries(handler, 'allow')
+        denied = self.access.entries(handler, 'deny')
+        if level == 'restricted':
+            parts.append('allowed: ' + (', '.join(['ops'] + allowed)))
+        if denied:
+            parts.append('denied: ' + ', '.join(denied))
+        return '{}: {}'.format(label, ', '.join(parts))
 
     def accepts(self, source):
         """True if the bot should act on something this person did."""
-        nick, user, host, account = source.nick, source.user, source.host, source.account
-        self.remember(nick, user, host, account)
-        fold = self.transport.casefold
-        if bans.matches_any(self.banned_users, nick, user, host, account, fold=fold):
-            self.logger.debug('ignoring banned user {}'.format(nick))
-            return False
+        self.remember(source.nick, source.user, source.host, source.account)
+        return not self.ignores(source, log=True)
+
+    def ignores(self, source, log=False):
+        """True if the bot ignores this person: they're banned, they're the bot, or
+        require_account is on and they aren't logged in."""
+        nick, fold = source.nick, self.transport.casefold
+        if access.matches_any(self.banned_users, nick, source.user, source.host, source.account,
+                              fold=fold):
+            if log:
+                self.logger.debug('ignoring banned user {}'.format(nick))
+            return True
         if fold(nick) == fold(self.transport.nick):
-            return False
-        if self.require_account and not account:
-            self.logger.debug('ignoring {}, not logged in to an account'.format(nick))
-            return False
-        return True
+            return True
+        if self.require_account and not source.account:
+            if log:
+                self.logger.debug('ignoring {}, not logged in to an account'.format(nick))
+            return True
+        return False
 
     async def process_other(self, event):
         # joins, parts, nick changes and the rest, for @on handlers
@@ -622,7 +782,8 @@ class Bot:
             # "pinhook: reload" runs a built-in command without its prefix too
             name = self.registry.strip_prefix(word) or (word if addressed else None)
         if name in self.builtins:
-            output = self.call_internal_commands(chan, nick, name, arg, op=op)
+            output = self.call_internal_commands(chan, nick, name, arg, op=op,
+                                                 source=event.source)
             if output and not self.stopping:
                 self.process_output(chan, output)
                 return
@@ -707,10 +868,16 @@ class Bot:
         ctx = Context(self, event, plugin=handler.plugin, addressed=addressed,
                       command=handler.name if command else None, arg=arg)
         label = handler.label(self.cmd_prefix)
-        if command and handler.ops and not ctx.is_op:
-            if handler.ops_msg:
-                self.send_text('privmsg', ctx.channel, handler.ops_msg)
-            return
+        # commands and what listens to people's messages go by access, timers and server events
+        # don't, since nobody in particular starts them
+        checked = command or handler.kind == 'listener' or handler.event in ('message', 'notice')
+        if checked and event.source:
+            channel = event.target if is_channel(event.target) else None
+            if not self.access.allows(event.source, handler, channel):
+                self.logger.debug('{} has no access to {}'.format(ctx.nick, label))
+                if command and handler.denied_msg:
+                    self.send_text('privmsg', ctx.channel, handler.denied_msg)
+                return
         kwargs = {}
         if command and handler.native:
             try:
@@ -789,7 +956,7 @@ class TwitchBot(Bot):
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'bot_dir', 'data_dir', 'plugin_config', 'address_by_nick',
-        'plugin_channels',
+        'plugin_channels', 'access',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):

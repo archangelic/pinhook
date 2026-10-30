@@ -46,14 +46,16 @@ def _mark(func, **spec):
     return func
 
 
-def command(name, help=None, ops=False, denied_msg='', error_msg='', timeout=None, hide=False):
+def command(name, help=None, ops=False, restricted=False, denied_msg='', error_msg='',
+            timeout=None, hide=False):
     """Make an async function a command. Its arguments after ctx come from the message, typed.
 
     Args:
         name: the command's name, without a prefix: 'roll' answers to !roll.
         help: shown in !help. Defaults to the first line of the function's docstring.
         ops: if True, only bot operators can run it.
-        denied_msg: what anyone else is told when they try. Empty means no reply.
+        restricted: if True, only ops and the people they give access to can run it.
+        denied_msg: what anyone who can't run it is told when they try. Empty means no reply.
         error_msg: said in chat if the command fails. Empty means the failure is only logged.
         timeout: seconds before the bot stops waiting for it, instead of the bot's default.
         hide: if True, leave it out of !help.
@@ -61,11 +63,14 @@ def command(name, help=None, ops=False, denied_msg='', error_msg='', timeout=Non
     if not NAME.match(name):
         raise ValueError("command names are letters, digits, - and _, without a prefix: "
                          "'{}'".format(name))
+    if ops and restricted:
+        raise ValueError("{} can be ops=True or restricted=True, not both".format(name))
 
     def mark(func):
         doc = (inspect.getdoc(func) or '').strip().splitlines()
         return _mark(func, kind='command', name=name, help_text=help or (doc[0] if doc else 'N/A'),
-                     ops=ops, ops_msg=denied_msg, error_msg=error_msg, timeout=timeout, hide=hide)
+                     ops=ops, restricted=restricted, denied_msg=denied_msg, error_msg=error_msg,
+                     timeout=timeout, hide=hide)
     return mark
 
 

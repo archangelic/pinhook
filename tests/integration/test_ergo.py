@@ -72,12 +72,12 @@ def test_reload_rereads_plugin_config_and_keeps_it_if_the_file_breaks(
     config['plugin_config']['karma']['label'] = 'points'
     path.write_text(json.dumps(config))
     assert messages(mal.say('!reload', channel, bot)) == [
-        'Plugins reloaded (and plugin_config from config.json)']
+        'Plugins reloaded (and plugin_config and access from config.json)']
     assert messages(mal.say('!karma pinhook', channel, bot)) == ['pinhook has 2 points']
     path.write_text('{"nickname": ')
     assert messages(mal.say('!reload', channel, bot)) == [
-        "Plugins reloaded, but config.json has a problem so plugin_config wasn't changed, "
-        "see the log"]
+        "Plugins reloaded, but config.json has a problem so plugin_config and access weren't "
+        "changed, see the log"]
     assert messages(mal.say('!karma pinhook', channel, bot)) == ['pinhook has 3 points']
 
 

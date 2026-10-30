@@ -25,16 +25,31 @@ class PluginError(Exception):
 
 
 class FakeChannel:
-    # the nicks in a channel, in the order they joined
+    # the nicks in a channel, in the order they joined, and their modes there
 
     def __init__(self):
         self.nicks = {}
+        self.modes = {}
 
     def add_user(self, nick):
         self.nicks[nick] = True
 
     def remove_user(self, nick):
         self.nicks.pop(nick, None)
+        self.modes.pop(nick, None)
+
+    def set_modes(self, changes):
+        # what a mode change like ['+ov', 'mal', 'ana'] does to the members' +o and +v
+        adding, args = True, list(changes[1:])
+        for letter in changes[0] if changes else '':
+            if letter in '+-':
+                adding = letter == '+'
+            elif letter in 'qaohv' and args:
+                modes = self.modes.setdefault(args.pop(0), set())
+                if adding:
+                    modes.add(letter)
+                else:
+                    modes.discard(letter)
 
     def users(self):
         return list(self.nicks)
@@ -136,6 +151,11 @@ class FakeTransport:
     def joined(self):
         return list(self.channels)
 
+    def member_modes(self, channel, nick):
+        if channel not in self.channels:
+            return frozenset()
+        return frozenset(self.channels[channel].modes.get(nick, ()))
+
     def supports(self, feature):
         return feature == 'account-tag'
 
@@ -196,6 +216,10 @@ class TestBot(Bot):
         # !enable and !disable stay in memory too
         return None
 
+    def access_path(self):
+        # and so do !allow and !deny
+        return None
+
     def open_store(self, name):
         # stores stay in memory, look at one with bot.store('karma')
         return Store(name)
@@ -244,7 +268,8 @@ class TestBot(Bot):
         kind is join, part, kick, quit, nick, topic, invite, mode or notice. channel
         is the bot's first channel unless given, or none for nick and quit. data is
         the rest: kicked='troll' for a kick, new_nick='mal_' for a nick change,
-        modes=['+o', 'mal'] for a mode change. A notice's channel can be the bot's nick.
+        modes=['+o', 'mal'] for a mode change, which gives mal +o in the channel the
+        way a real one would. A notice's channel can be the bot's nick.
         """
         if kind in ('nick', 'quit'):
             target = ''
@@ -255,6 +280,8 @@ class TestBot(Bot):
             self.channels[target].add_user(nick)
         elif kind == 'part' and target in self.channels:
             self.channels[target].remove_user(nick)
+        elif kind == 'mode' and target in self.channels:
+            self.channels[target].set_modes(data.get('modes', []))
         tags = {'account': account} if account else {}
         source = Source(nick, user or nick, host, account)
         if kind == 'notice':

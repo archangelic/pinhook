@@ -283,9 +283,10 @@ def test_reload_without_a_config_file_just_reloads(tmp_path):
 
 
 @pytest.mark.parametrize('new_config, reply, units', [
-    ('{"units": "imperial"}', 'Plugins reloaded (and plugin_config from config.json)', 'imperial'),
-    (None, "Plugins reloaded, but config.json has a problem so plugin_config wasn't changed, "
-           "see the log", 'metric'),
+    ('{"units": "imperial"}', 'Plugins reloaded (and plugin_config and access from config.json)',
+     'imperial'),
+    (None, "Plugins reloaded, but config.json has a problem so plugin_config and access weren't "
+           "changed, see the log", 'metric'),
 ])
 def test_reload_reads_plugin_config_from_the_config_file(tmp_path, new_config, reply, units):
     from unittest import mock

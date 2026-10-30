@@ -37,14 +37,16 @@ class Handler:
         params: a 2.0 command's typed arguments.
         event: the event an @on handler handles.
         interval: how many seconds apart an @every timer runs.
-        ops_msg: what someone who isn't an op is told when they try an ops command.
+        ops: True for an ops-only command, as its author wrote it.
+        restricted: True for a restricted command, as its author wrote it.
+        denied_msg: what someone who can't run a command is told when they try.
         error_msg: said in chat when a 2.0 command fails.
         timeout: seconds to wait for it, or None for the bot's default.
     """
 
     def __init__(self, kind, name, plugin_name, func, trigger=None, help_text='N/A', ops=False,
-                 ops_msg='', hide=False, native=False, params=(), event=None, error_msg='',
-                 timeout=None, interval=None):
+                 restricted=False, denied_msg='', hide=False, native=False, params=(), event=None,
+                 error_msg='', timeout=None, interval=None):
         self.kind = kind
         self.name = name
         self.trigger = trigger
@@ -52,7 +54,8 @@ class Handler:
         self.func = func
         self.help_text = help_text
         self.ops = ops
-        self.ops_msg = ops_msg
+        self.restricted = restricted
+        self.denied_msg = denied_msg
         self.hide = hide
         self.native = native
         self.params = list(params)
@@ -245,6 +248,8 @@ class Registry:
         if kind == 'listener':
             return Handler(kind, name, plugin_name, func)
         command, trigger = self.split_trigger(name)
+        options = dict(options)
+        options['denied_msg'] = options.pop('ops_msg', '')
         return Handler(kind, command, plugin_name, func, trigger=trigger, **options)
 
     def native_handler(self, plugin_name, func, spec):

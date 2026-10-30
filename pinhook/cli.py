@@ -46,6 +46,8 @@ class Config(Schema):
     data_dir = fields.Str()
     address_by_nick = fields.Bool()
     plugin_channels = fields.Dict(keys=fields.Str(), values=fields.List(fields.Str()))
+    # checked by the bot, which can say more about what's wrong
+    access = fields.Dict(keys=fields.Str())
 
     class Meta:
         unknown = INCLUDE
