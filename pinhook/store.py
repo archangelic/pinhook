@@ -2,6 +2,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 import json
 import os
+import threading
 
 
 def write_json(path, data):
@@ -59,6 +60,8 @@ class Store(dict):
         super().__init__()
         self.name = name
         self.path = path
+        # plugins run in worker threads, so two can save the same store at once
+        self._lock = threading.Lock()
         if path and os.path.exists(path):
             with open(path) as f:
                 try:
@@ -81,9 +84,10 @@ class Store(dict):
 
     def save_if_changed(self):
         """Save the store if anything in it changed since it was last saved."""
-        snapshot = self._snapshot()
-        if snapshot == self._saved:
-            return
-        if self.path:
-            write_json(self.path, json.loads(snapshot))
-        self._saved = snapshot
+        with self._lock:
+            snapshot = self._snapshot()
+            if snapshot == self._saved:
+                return
+            if self.path:
+                write_json(self.path, json.loads(snapshot))
+            self._saved = snapshot
