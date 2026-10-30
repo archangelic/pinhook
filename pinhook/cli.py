@@ -52,6 +52,7 @@ class Config(Schema):
     plugin_channels = fields.Dict(keys=fields.Str(), values=fields.List(fields.Str()))
     # checked by the bot, which can say more about what's wrong
     access = fields.Dict(keys=fields.Str())
+    history = fields.Dict(keys=fields.Str())
 
     class Meta:
         unknown = INCLUDE

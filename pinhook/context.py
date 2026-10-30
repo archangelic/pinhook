@@ -122,6 +122,14 @@ class Context:
         that name. This waits for the server, unlike members()."""
         return await self._bot.transport.whois(nick)
 
+    def history(self, limit=None):
+        """This channel's recent messages, oldest first, as history Entries: nick, text,
+        kind, time, msgid and own, True for the bot's. Empty unless the history option
+        lists the channel. limit keeps only that many of the newest."""
+        if not is_channel(self.channel or ''):
+            return ()
+        return self._bot.history.recent(self.channel, limit)
+
     def supports(self, feature):
         """True if the network supports feature, like 'account-tag'."""
         return self._bot.transport.supports(feature)

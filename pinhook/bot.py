@@ -2,6 +2,7 @@
 import asyncio
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import difflib
 import logging
 import os
@@ -17,7 +18,8 @@ from . import compat
 from . import log
 from . import plugin
 from .access import Access
-from .context import Context, text_lines
+from .context import Context, server_time, text_lines
+from .history import Entry, History
 from .output import OutputQueue
 from .registry import Handler, Registry, Switches
 from .store import PluginConfig, Store
@@ -75,6 +77,7 @@ class Bot:
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
         'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
+        'history',
         'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile',
     }
     log_levels = {
@@ -165,6 +168,7 @@ class Bot:
         self.plugin_config = dict(kwargs.get('plugin_config') or {})
         self.plugin_channels = dict(kwargs.get('plugin_channels') or {})
         self.access_config = kwargs.get('access')
+        self.history_config = kwargs.get('history')
 
     def path(self, path):
         """Where a path from the options really is: relative ones are inside bot_dir, if set."""
@@ -219,6 +223,8 @@ class Bot:
         self.registry = Registry(self.bot_nick, self.prefixes, self.builtins, self.logger)
         # who can use what, from the access config and !allow and !deny
         self.access = Access(self, self.access_config, self.access_path())
+        # recent messages, in the channels the history option lists
+        self.history = History(self.history_config, self.transport.casefold)
         self.registry.load(self.plugin_dir)
         self.reset_timers()
         self.check_plugin_config()
@@ -366,7 +372,7 @@ class Bot:
         self.timer_due = {}
         self.timer_busy = set()
         self.quitting = asyncio.Event()
-        self.output = OutputQueue(self.transport.send, self.transport.limits, self.logger,
+        self.output = OutputQueue(self.send_out, self.transport.limits, self.logger,
                                   clock=lambda: self.clock(), sleep=lambda s: self.pause(s),
                                   exempt=getattr(self.transport, 'exempt', None))
 
@@ -821,9 +827,31 @@ class Bot:
         await asyncio.gather(*(self.run_handler(h, event, None, '', None)
                                for h in self.registry.events.get(event.type, [])))
 
+    async def send_out(self, message):
+        # the output queue sends through here. Where the server doesn't echo the bot's
+        # messages back, history records them as they're sent
+        await self.transport.send(message)
+        if is_channel(message.target) and not self.transport.supports('echo-message'):
+            self.history.add(message.target, Entry(
+                self.transport.nick, message.prefix + message.text, message.kind,
+                datetime.now(timezone.utc), own=True))
+
+    def remember_message(self, event, own=False):
+        if is_channel(event.target):
+            self.history.add(event.target, Entry(
+                event.source.nick, event.text, event.kind,
+                server_time(event.tags.get('time')) or datetime.now(timezone.utc),
+                event.tags.get('msgid'), own))
+
     async def process_event(self, event):
+        if self.transport.casefold(event.source.nick) == self.transport.casefold(
+                self.transport.nick):
+            # the bot's own message, echoed back by the server
+            self.remember_message(event, own=True)
+            return
         if not self.accepts(event.source):
             return
+        self.remember_message(event)
         nick = event.source.nick
         if event.kind == 'notice':
             # notices never run commands or 1.x listeners, a bot shouldn't answer one by itself
@@ -1061,7 +1089,7 @@ class TwitchBot(Bot):
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'bot_dir', 'data_dir', 'plugin_config', 'address_by_nick',
-        'plugin_channels', 'access',
+        'plugin_channels', 'access', 'history',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):

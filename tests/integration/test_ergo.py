@@ -360,3 +360,28 @@ def test_threaded_replies_carry_the_reply_tag(names, users, start_bot):
     # the reply comes back tagged with the msgid ergo gave mallory's message
     line = mal.wait_for(':threaded')
     assert '+reply=' in line and line.split(' ', 1)[1].startswith(':' + bot + '!')
+
+
+HISTORY = '''
+from pinhook import command
+
+
+@command('recent')
+async def recent(ctx):
+    await ctx.reply(' | '.join('{}{}:{}'.format('*' if e.own else '', e.nick, e.text)
+                               for e in ctx.history()))
+
+
+@command('say')
+async def say(ctx, text: str):
+    await ctx.reply(text)
+'''
+
+
+def test_history_keeps_both_sides_through_echo_message(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'history': HISTORY}, history={'channels': [channel]})
+    assert messages(mal.say('!say hello', channel, bot)) == ['hello']
+    assert messages(mal.say('!recent', channel, bot)) == [
+        'mallory:!say hello | *{}:hello | mallory:!recent'.format(bot)]

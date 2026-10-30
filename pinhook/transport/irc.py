@@ -26,7 +26,8 @@ HOSTMASK_GUESS = len('!') + 10 + len('@') + 63
 # what the bot asks for when the server offers it
 WANTED_CAPS = ('account-tag', 'multi-prefix', 'userhost-in-names', 'extended-join',
                'account-notify', 'away-notify', 'chghost', 'setname', 'server-time',
-               'message-tags', 'invite-notify', 'cap-notify', 'batch', 'labeled-response')
+               'message-tags', 'invite-notify', 'cap-notify', 'batch', 'labeled-response',
+               'echo-message')
 # features plugins ask about that are client tags, like ctx.supports('typing')
 CLIENT_TAG_FEATURES = ('typing', 'reply', 'channel-context')
 # the WHOIS replies, by numeric
