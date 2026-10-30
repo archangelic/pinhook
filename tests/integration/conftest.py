@@ -218,7 +218,10 @@ def start_bot(tmp_path, names):
         bot = BotProcess(str(tmp_path), process)
         started.append(bot)
         if wait:
-            watcher.wait_for(' JOIN ', seconds=15)
+            # the bot's own JOIN, not one from a user who joined before it. Its nick can
+            # have something added if the nick was in use
+            while not watcher.wait_for(' JOIN ', seconds=15).startswith(':' + nick):
+                pass
         return bot
     yield start
     for bot in started:
