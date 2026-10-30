@@ -45,6 +45,7 @@ class Config(Schema):
     sasl_password = fields.Str()
     data_dir = fields.Str()
     address_by_nick = fields.Bool()
+    plugin_channels = fields.Dict(keys=fields.Str(), values=fields.List(fields.Str()))
 
     class Meta:
         unknown = INCLUDE

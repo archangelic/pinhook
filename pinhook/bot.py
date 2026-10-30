@@ -4,6 +4,7 @@ from collections import OrderedDict
 import difflib
 import logging
 import os
+import shlex
 import signal
 import ssl
 import time
@@ -15,7 +16,7 @@ from . import log
 from . import plugin
 from .context import Context
 from .output import OutputQueue
-from .registry import Registry
+from .registry import Registry, Switches
 from .store import PluginConfig, Store
 from .transport.base import Outgoing, Transport, is_channel
 from .transport.irc import IrcTransport, TwitchTransport
@@ -52,7 +53,7 @@ class Bot:
         'nickserv', 'log_level', 'log_file', 'server_pass', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
-        'sasl_account', 'sasl_password', 'address_by_nick',
+        'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels',
     }
     log_levels = {
         'critical': logging.CRITICAL,
@@ -133,6 +134,7 @@ class Bot:
         self.ban_file = self.path(ban_file) if ban_file else None
         self.stores = {}
         self.plugin_config = dict(kwargs.get('plugin_config') or {})
+        self.plugin_channels = dict(kwargs.get('plugin_channels') or {})
 
     def path(self, path):
         """Where a path from the options really is: relative ones are inside bot_dir, if set."""
@@ -178,13 +180,18 @@ class Bot:
             self.logger.warning('use_prefix_for_plugins is retired in pinhook 2.0 and does '
                                 'nothing: plugin commands always use cmd_prefix, so write them '
                                 'without one')
-        # names turned off with !disable: plugin files, commands and listeners
-        self.disabled = set()
+        # where plugins are on, from plugin_channels and !enable and !disable
+        self.switches = Switches(self.plugin_channels, self.switches_path(),
+                                 self.transport.casefold)
         # !help isn't listed with the rest, it's shown to everyone
         self.builtins = set(self.internal_commands) | {'help'}
         self.registry = Registry(self.bot_nick, self.prefixes, self.builtins, self.logger)
         self.registry.load(self.plugin_dir)
         self.check_plugin_config()
+
+    def switches_path(self):
+        # where !enable and !disable are saved
+        return os.path.join(self.data_dir, '{}.plugins.json'.format(self.bot_nick))
 
     def check_plugin_config(self):
         # a section for a plugin that isn't loaded is probably a typo
@@ -446,22 +453,8 @@ class Bot:
             self.registry.load(self.plugin_dir)
             self.check_plugin_config()
             output = plugin.message('Plugins reloaded' + config_note)
-        elif cmd == 'enable' and op:
-            if not self.known_name(arg):
-                output = plugin.message("{}: '{}' not found".format(nick, arg))
-            elif arg not in self.disabled:
-                output = plugin.message("{}: '{}' already enabled".format(nick, arg))
-            else:
-                self.disabled.discard(arg)
-                output = plugin.message("{}: '{}' enabled!".format(nick, arg))
-        elif cmd == 'disable' and op:
-            if not self.known_name(arg):
-                output = plugin.message("{}: '{}' not found".format(nick, arg))
-            elif arg in self.disabled:
-                output = plugin.message("{}: '{}' already disabled".format(nick, arg))
-            else:
-                self.disabled.add(arg)
-                output = plugin.message("{}: '{}' disabled!".format(nick, arg))
+        elif cmd in ('enable', 'disable') and op:
+            output = self.switch(cmd == 'enable', channel, nick, arg)
         elif cmd in ('op', 'deop', 'ban', 'unban') and op and not arg.split():
             output = plugin.message('{}: usage: {}{} <nick>'.format(nick, self.cmd_prefix, cmd))
         elif cmd == 'op' and op:
@@ -566,16 +559,49 @@ class Bot:
             return True, rest.lstrip()
         return False, text
 
-    def known_name(self, name):
-        # what !enable and !disable take: a plugin file, a command or a listener
-        names = set(self.registry.plugins)
+    def canonical_name(self, name):
+        # what !enable and !disable take: a plugin file, a command or a listener.
+        # a command written with its prefix, like !roll, means the command roll
+        if name in self.registry.plugins:
+            return name
         for handler in self.registry.handlers():
-            names.update((handler.name, handler.label(self.cmd_prefix)))
-        return name in names
+            if name in (handler.name, handler.label(self.cmd_prefix)):
+                return handler.name
+            if handler.kind == 'command' and self.registry.strip_prefix(name) == handler.name:
+                return handler.name
+        return None
 
-    def enabled_for(self, handler, channel):
-        names = {handler.name, handler.label(self.cmd_prefix), handler.plugin}
-        return not names & self.disabled
+    def switch(self, on, channel, nick, arg):
+        # !enable and !disable <name> [all | #channel]: the current channel by default,
+        # and everywhere from a private message
+        try:
+            args = shlex.split(arg)
+        except ValueError:
+            args = arg.split()
+        verb = 'enable' if on else 'disable'
+        scope_ok = len(args) < 2 or args[1] == 'all' or is_channel(args[1])
+        if not args or len(args) > 2 or not scope_ok:
+            return plugin.message('{}: usage: {}{} <plugin> [all | #channel]'.format(
+                nick, self.cmd_prefix, verb))
+        name = self.canonical_name(args[0])
+        if name is None:
+            return plugin.message("{}: '{}' not found".format(nick, args[0]))
+        where = args[1] if len(args) == 2 else channel
+        target = where if is_channel(where) else None
+        place = 'in ' + target if target else 'everywhere'
+        if target is None:
+            entry = self.switches.saved.get(name, {})
+            already = entry.get('all') == on and not entry.get('channels')
+        else:
+            already = self.switches.name_on(name, target) == on
+        if already:
+            return plugin.message("{}: '{}' is already {}d {}".format(nick, args[0], verb, place))
+        self.switches.set(name, on, target)
+        return plugin.message("{}: '{}' {}d {}".format(nick, args[0], verb, place))
+
+    def enabled_for(self, handler, target):
+        channel = target if is_channel(target) else None
+        return self.switches.is_on((handler.name, handler.plugin), channel)
 
     async def run_handler(self, handler, event, trigger, arg, nick_list, addressed=False):
         """Run one command or listener for a message, and send what it returns."""
@@ -643,6 +669,7 @@ class TwitchBot(Bot):
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'bot_dir', 'data_dir', 'plugin_config', 'address_by_nick',
+        'plugin_channels',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):

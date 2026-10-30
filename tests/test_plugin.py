@@ -60,7 +60,7 @@ def test_reload_keeps_disabled_plugins_disabled(tmp_path):
     bot = TestBot(plugin_dir=str(tmp_path), ops=['mal'])
     bot_with(tmp_path, stays="@p.command('!stays')\ndef stays(msg): return p.message('here')\n")
     bot.say('!reload', nick='mal')
-    assert bot.say('!disable !stays', nick='mal') == ["mal: '!stays' disabled!"]
+    assert bot.say('!disable !stays', nick='mal') == ["mal: '!stays' disabled in #test"]
     bot.say('!reload', nick='mal')
     assert bot.say('!stays') == []
 

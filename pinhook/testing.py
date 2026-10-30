@@ -176,6 +176,10 @@ class TestBot(Bot):
     def make_transport(self, server, nickname):
         return FakeTransport(self, nickname)
 
+    def switches_path(self):
+        # !enable and !disable stay in memory too
+        return None
+
     def open_store(self, name):
         # stores stay in memory, look at one with bot.store('karma')
         return Store(name)

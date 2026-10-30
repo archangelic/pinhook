@@ -3,12 +3,14 @@
 Every bot has its own registry, so two bots in one process never share plugins.
 """
 import importlib.util
+import json
 import os
 import re
 import sys
 import types
 
 from . import plugin
+from .store import write_json
 
 
 class LoadError(Exception):
@@ -189,3 +191,70 @@ class Registry:
             if word.startswith(prefix) and len(word) > len(prefix):
                 return word[len(prefix):]
         return None
+
+
+class Switches:
+    """Where plugins are on: plugin_channels from the config, with !enable and !disable on top.
+
+    A name is a plugin file, a command or a listener. For a message in a channel,
+    the channel's own !enable or !disable wins, then an "all" one, then
+    plugin_channels, which keeps a name to the channels it lists. Private
+    messages only follow "all".
+
+    Args:
+        limits: plugin_channels, {name: [channel, ...]}.
+        path: where !enable and !disable are saved, or None to keep them in memory.
+        fold: the server's case folding, so #Games and #games are one channel.
+    """
+
+    def __init__(self, limits, path, fold):
+        self.limits = {name: list(channels) for name, channels in (limits or {}).items()}
+        self.path = path
+        self.fold = fold
+        self.saved = self.load()
+
+    def load(self):
+        if not self.path or not os.path.exists(self.path):
+            return {}
+        with open(self.path) as f:
+            try:
+                saved = json.load(f)
+            except ValueError as e:
+                raise ValueError("couldn't read {}: {}".format(self.path, e))
+        if not isinstance(saved, dict):
+            raise ValueError('{} should hold a JSON object'.format(self.path))
+        return saved
+
+    def save(self):
+        if self.path:
+            write_json(self.path, self.saved)
+
+    def is_on(self, names, channel=None):
+        """True if none of names is off where the message is. channel is None if it's private."""
+        return all(self.name_on(name, channel) for name in names)
+
+    def name_on(self, name, channel):
+        entry = self.saved.get(name, {})
+        if channel is not None:
+            for saved_channel, on in entry.get('channels', {}).items():
+                if self.fold(saved_channel) == self.fold(channel):
+                    return on
+        if entry.get('all') is not None:
+            return entry['all']
+        if channel is not None and name in self.limits:
+            return self.fold(channel) in {self.fold(c) for c in self.limits[name]}
+        return True
+
+    def set(self, name, on, channel=None):
+        """Turn name on or off in channel, or everywhere when channel is None."""
+        entry = self.saved.setdefault(name, {'all': None, 'channels': {}})
+        if channel is None:
+            entry['all'] = on
+            entry['channels'] = {}
+        else:
+            channels = entry.setdefault('channels', {})
+            for saved_channel in list(channels):
+                if self.fold(saved_channel) == self.fold(channel):
+                    del channels[saved_channel]
+            channels[channel] = on
+        self.save()
