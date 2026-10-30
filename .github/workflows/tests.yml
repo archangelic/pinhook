@@ -19,7 +19,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v10
+      uses: astral-sh/setup-uv@v10.3.3
     - name: Set up Python ${{ matrix.python-version }}
       run: uv venv --python ${{ matrix.python-version }}
     - name: Install dependencies
@@ -34,7 +34,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v10
+      uses: astral-sh/setup-uv@v10.3.3
     - name: Check PEP 8, with lines up to 100 characters (set in setup.cfg)
       run: uv run --no-project --python 3.12 --with pycodestyle==2.15.0 pycodestyle pinhook tests examples setup.py
 
@@ -45,7 +45,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v10
+      uses: astral-sh/setup-uv@v10.3.3
     - name: Set up Python
       run: uv venv --python 3.11
     - name: Install dependencies
@@ -60,7 +60,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v10
+      uses: astral-sh/setup-uv@v10.3.3
     - name: Set up Python
       run: uv venv --python 3.12
     - name: Install dependencies
