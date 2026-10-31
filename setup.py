@@ -13,23 +13,23 @@ from setuptools import find_packages, setup, Command
 
 # Package meta-data.
 NAME = 'pinhook'
-DESCRIPTION = 'a pluggable irc bot framework in python'
+DESCRIPTION = 'python irc bot framework'
 URL = 'https://github.com/archangelic/pinhook'
 EMAIL = 'mhancock@archangelic.space'
 AUTHOR = 'M. Hancock'
-REQUIRES_PYTHON = '>=3.8'
+REQUIRES_PYTHON = '>=3.11'
 VERSION = None
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    'irc',
+    'irctokens>=2.0.2,<3',
     'click',
     'marshmallow',
+    'pyyaml',
 ]
 
 EXTRAS = {
-    'toml': ['toml; python_version < "3.11"'],
-    'yaml': ['pyyaml']
+    'yaml': [],
 }
 
 # The rest you shouldn't have to touch too much :)
@@ -98,7 +98,8 @@ setup(
     author_email=EMAIL,
     url=URL,
     python_requires=REQUIRES_PYTHON,
-    packages=['pinhook'],
+    packages=find_packages(include=['pinhook', 'pinhook.*']),
+    package_data={'pinhook': ['py.typed', 'templates/*']},
     entry_points={
         'console_scripts':
             ['pinhook=pinhook.cli:cli']
@@ -110,18 +111,23 @@ setup(
     classifiers=[
         # Trove classifiers
         # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
-        'License :: OSI Approved :: MIT License',
         'Development Status :: 5 - Production/Stable',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: 3.14',
+        'Programming Language :: Python :: 3.15',
+        'Framework :: AsyncIO',
+        'Topic :: Communications :: Chat :: Internet Relay Chat',
+        'Typing :: Typed',
     ],
+    project_urls={
+        'Documentation': 'https://archangelic.github.io/pinhook/',
+        'Changelog': 'https://github.com/archangelic/pinhook/blob/master/CHANGELOG.md',
+        'Source': 'https://github.com/archangelic/pinhook',
+    },
     # $ setup.py publish support.
     cmdclass={
         'upload': UploadCommand,
