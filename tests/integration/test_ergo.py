@@ -415,3 +415,15 @@ def test_recipes_run_as_commands(tmp_path, names, users, start_bot):
     start_bot(mal, plugins={'quotes': QUOTES})
     assert messages(mal.say('!gamenight', channel, bot)) == ['Tonight: Blades in the Dark, night 1']
     assert messages(mal.say('!gamenight', channel, bot)) == ['Tonight: Blades in the Dark, night 2']
+
+
+def test_ops_add_and_remove_recipes_from_chat(tmp_path, names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, ops=['mallory'])
+    assert messages(mal.say('!recipe add hug {nick} hugs {arg|default:everyone}', channel,
+                            bot)) == ['mallory: added !hug']
+    assert messages(mal.say('!hug', channel, bot)) == ['mallory hugs everyone']
+    assert (tmp_path / 'bot' / 'recipes' / 'hug.yaml').exists()
+    assert messages(mal.say('!recipe del hug', channel, bot)) == ['mallory: removed !hug']
+    assert messages(mal.say('!hug', channel, bot)) == []

@@ -318,7 +318,7 @@ def test_help_marks_what_someone_cant_use_and_hides_ops_only(tmp_path):
     op(bot, '!help')
     assert bot.sent_to('mal')[0].startswith(
         'commands: !access, !allow, !ban, !banlist, !deny, !deop, !disable, !enable, '
-        '!forecast, !help, !join, !op, !ops, !quit, !quote, !reload, !revoke, !shutdown, '
+        '!forecast, !help, !join, !op, !ops, !quit, !quote, !recipe, !reload, !revoke, !shutdown, '
         '!unban, !weather | listeners: echo')
     op(bot, '!help reload')
     assert bot.sent_to('mal')[-1] == '!reload -- force bot to reload all plugins'

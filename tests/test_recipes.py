@@ -241,3 +241,53 @@ def test_recipes_can_be_switched_off(tmp_path):
 def test_no_recipe_dir_means_no_recipes(tmp_path):
     bot = TestBot(plugin_dir=str(tmp_path))
     assert bot.recipes == {}
+
+
+# !recipe add and !recipe del
+
+def op(bot, text):
+    return bot.say(text, nick='mal', account='mal')
+
+
+def test_ops_add_one_line_recipes_from_chat(tmp_path):
+    bot = make(tmp_path)
+    assert op(bot, '!recipe add hug {nick} hugs {arg|default:everyone}') == ['mal: added !hug']
+    assert bot.say('!hug', nick='ana') == ['ana hugs everyone']
+    saved = (tmp_path / 'recipes' / 'hug.yaml').read_text()
+    assert saved.startswith('version: 1\nname: hug\nhelp: added by mal\n')
+    # an ordinary recipe file, so it loads again on restart
+    assert 'hug' in make(tmp_path).recipes
+
+
+def test_a_recipe_from_chat_is_checked_first(tmp_path):
+    bot = make(tmp_path)
+    assert op(bot, '!recipe add hug {nick hugs') == [
+        "mal: that recipe can't be saved: step 1 (reply): reply: a { is never closed in "
+        "'{nick hugs'"]
+    assert op(bot, '!recipe add bad {who}')[0].startswith(
+        "mal: that recipe can't be saved: step 1 (reply): {who} isn't set")
+    assert op(bot, '!recipe add game night x')[0] == 'mal: added !game'
+    assert op(bot, '!recipe add quote hi') == ['mal: quote is already a command']
+    assert op(bot, '!recipe add help hi') == ['mal: help is already a command']
+    assert not (tmp_path / 'recipes' / 'quote.yaml').exists()
+
+
+def test_ops_remove_recipes(tmp_path):
+    bot = make(tmp_path, hug="steps:\n  - reply: hugs\n")
+    assert op(bot, '!recipe del hug') == ['mal: removed !hug']
+    assert not (tmp_path / 'recipes' / 'hug.yaml').exists()
+    assert bot.say('!hug') == []
+    assert op(bot, '!recipe del hug') == ["mal: there's no recipe called hug"]
+
+
+def test_recipe_commands_are_ops_only_and_check_their_arguments(tmp_path):
+    bot = make(tmp_path)
+    assert bot.say('!recipe add hug hugs', nick='ana', account='ana') == []
+    assert op(bot, '!recipe add hug')[0].startswith('mal: usage: !recipe add <name> <reply>')
+    assert op(bot, '!recipe')[0].startswith('mal: usage')
+
+
+def test_without_a_recipe_dir_there_is_nowhere_to_save(tmp_path):
+    bot = TestBot(plugin_dir=str(tmp_path), ops=['$a:mal'])
+    assert op(bot, '!recipe add hug hugs') == [
+        "mal: this bot has no recipe_dir, so there's nowhere to save it"]

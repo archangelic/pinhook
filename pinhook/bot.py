@@ -12,6 +12,8 @@ import ssl
 import time
 import warnings
 
+import yaml
+
 from . import access
 from . import commands
 from . import compat
@@ -71,6 +73,7 @@ class Bot:
         'deny': 'keep someone off a plugin or command',
         'revoke': 'take back an allow or deny',
         'access': 'show who can use a plugin or command',
+        'recipe': 'add a one-line recipe, or remove a recipe',
     }
     # keyword options Bot understands, subclasses can add their own
     options = {
@@ -248,6 +251,53 @@ class Bot:
         if found:
             self.logger.info('loaded {} recipes from {}'.format(
                 len(self.recipes), self.recipe_dir))
+
+    def recipe_command(self, nick, arg):
+        # !recipe add <name> <reply template>, and !recipe del <name>
+        action, _, rest = arg.strip().partition(' ')
+        name, _, template = rest.strip().partition(' ')
+        usage = ('{}: usage: {p}recipe add <name> <reply>, like {p}recipe add hug {{nick}} '
+                 'hugs {{arg|default:everyone}}, or {p}recipe del <name>'.format(
+                     nick, p=self.cmd_prefix))
+        if action == 'add' and name and template.strip():
+            return self.add_recipe(nick, name, template.strip())
+        if action == 'del' and name and not template:
+            return self.remove_recipe(nick, name)
+        return usage
+
+    def add_recipe(self, nick, name, template):
+        if not self.recipe_dir:
+            return "{}: this bot has no recipe_dir, so there's nowhere to save it".format(nick)
+        if self.registry.find(name) or self.registry.commands.get(name) or \
+                name in self.builtins:
+            return '{}: {} is already a command'.format(nick, name)
+        data = {'version': recipes.loader.VERSION, 'name': name,
+                'help': 'added by {}'.format(nick), 'steps': [{'reply': template}]}
+        try:
+            recipes.parse_recipe(data, name)
+        except recipes.RecipeError as e:
+            return "{}: that recipe can't be saved: {}".format(nick, str(e).partition(': ')[2])
+        path = os.path.join(self.recipe_dir, name + '.yaml')
+        if os.path.exists(path):
+            return '{}: {} already exists, so {} is taken'.format(nick, path, name)
+        os.makedirs(self.recipe_dir, exist_ok=True)
+        with open(path, 'w') as f:
+            yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+        self.logger.info('recipe {} added by {}, saved to {}'.format(name, nick, path))
+        self.load_recipes()
+        return '{}: added {}{}'.format(nick, self.cmd_prefix, name)
+
+    def remove_recipe(self, nick, name):
+        recipe = getattr(self, 'recipes', {}).get(name)
+        if recipe is None or not recipe.path:
+            return "{}: there's no recipe called {}".format(nick, name)
+        folder = os.path.realpath(self.recipe_dir)
+        if os.path.dirname(os.path.realpath(recipe.path)) != folder:
+            return "{}: {} isn't in the recipe folder, so it's left alone".format(nick, name)
+        os.remove(recipe.path)
+        self.logger.info('recipe {} removed by {}, deleted {}'.format(name, nick, recipe.path))
+        self.load_recipes()
+        return '{}: removed {}{}'.format(nick, self.cmd_prefix, name)
 
     def recipe_handler(self, recipe):
         # a recipe is a command with one free-text argument, given to it as {arg}
@@ -718,6 +768,8 @@ class Bot:
             output = plugin.message('currently banned: {}'.format(banned))
         elif cmd in ('allow', 'deny', 'revoke', 'access') and op:
             output = plugin.message(self.access_command(cmd, nick, arg))
+        elif cmd == 'recipe' and op:
+            output = plugin.message(self.recipe_command(nick, arg))
         return output
 
     # !allow, !deny, !revoke and !access
