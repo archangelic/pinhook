@@ -288,7 +288,6 @@ class Bot:
         os.makedirs(self.recipe_dir, exist_ok=True)
         with open(path, 'w') as f:
             yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
-        self.logger.info('recipe {} added by {}, saved to {}'.format(name, nick, path))
         self.load_recipes()
         return '{}: added {}{}'.format(nick, self.cmd_prefix, name)
 
@@ -300,7 +299,6 @@ class Bot:
         if os.path.dirname(os.path.realpath(recipe.path)) != folder:
             return "{}: {} isn't in the recipe folder, so it's left alone".format(nick, name)
         os.remove(recipe.path)
-        self.logger.info('recipe {} removed by {}, deleted {}'.format(name, nick, recipe.path))
         self.load_recipes()
         return '{}: removed {}{}'.format(nick, self.cmd_prefix, name)
 
@@ -775,7 +773,25 @@ class Bot:
             output = plugin.message(self.access_command(cmd, nick, arg))
         elif cmd == 'recipe' and op:
             output = plugin.message(self.recipe_command(nick, arg))
+        if cmd in self.audited and op and output is not None:
+            self.audit(nick, source, cmd, arg, output)
         return output
+
+    # the commands that change who can do what, logged as audit lines
+    audited = {'op', 'deop', 'ban', 'unban', 'allow', 'deny', 'revoke', 'enable', 'disable',
+               'recipe'}
+
+    def audit(self, nick, source, cmd, arg, output):
+        """Log who ran a command that changes who can do what, and what it did. In JSON logs
+        the line carries "audit": true, so it can be kept longer than the rest."""
+        who = nick
+        if source is not None and source.account:
+            who = '{} (account {})'.format(nick, source.account)
+        reply = ' '.join(output.msg)
+        if reply.startswith(nick + ': '):
+            reply = reply[len(nick) + 2:]
+        ran = '{}{} {}'.format(self.cmd_prefix, cmd, arg.strip()).strip()
+        self.logger.info('{} ran {}: {}'.format(who, ran, reply), extra={'audit': True})
 
     # !allow, !deny, !revoke and !access
 
