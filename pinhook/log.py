@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+import json
 import logging
 import os
 import sys
@@ -28,6 +30,25 @@ class MaskingFormatter(logging.Formatter):
         return mask(super().format(record))
 
 
+class JsonFormatter(logging.Formatter):
+    """One JSON object per line, for log collectors: time, level, bot and message, with
+    "audit": true on changes to who can do what, and the traceback as error."""
+
+    def format(self, record):
+        line = {
+            'time': datetime.fromtimestamp(record.created, timezone.utc)
+                            .isoformat(timespec='milliseconds'),
+            'level': record.levelname.lower(),
+            'bot': record.name.partition('.')[2] or record.name,
+            'message': mask(record.getMessage()),
+        }
+        if getattr(record, 'audit', False):
+            line['audit'] = True
+        if record.exc_info:
+            line['error'] = mask(self.formatException(record.exc_info))
+        return json.dumps(line)
+
+
 logger = logging.getLogger('bot')
 formatter = MaskingFormatter(
     '%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s')
@@ -35,6 +56,7 @@ formatter = MaskingFormatter(
 streamhandler = logging.StreamHandler()
 streamhandler.setFormatter(formatter)
 logger.addHandler(streamhandler)
+FORMATS = {'text': formatter, 'json': JsonFormatter()}
 
 
 def get_bot_logger(nickname):
@@ -49,8 +71,8 @@ def get_bot_logger(nickname):
     return bot_logger
 
 
-def set_log_file(filename, target=logger):
-    """Log to filename, or to stdout when it's '-'."""
+def set_log_file(filename, target=logger, log_format='text'):
+    """Log to filename, or to stdout when it's '-', as text or json."""
     if filename == '-':
         handler: logging.Handler = logging.StreamHandler(sys.stdout)
         # the console handler on the parent writes to stderr, and once is enough
@@ -61,5 +83,5 @@ def set_log_file(filename, target=logger):
         if folder:
             os.makedirs(folder, exist_ok=True)
         handler = logging.FileHandler(filename)
-    handler.setFormatter(formatter)
+    handler.setFormatter(FORMATS[log_format])
     target.addHandler(handler)

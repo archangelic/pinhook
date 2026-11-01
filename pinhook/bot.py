@@ -82,7 +82,7 @@ class Bot:
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
         'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
-        'history', 'recipe_dir',
+        'history', 'recipe_dir', 'log_format',
         'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile',
     }
     log_levels = {
@@ -171,6 +171,7 @@ class Bot:
         # '-' is stdout, for containers and service managers that collect it
         log_file = kwargs.get('log_file') or log_file
         self.log_file = log_file if log_file == '-' else self.path(log_file)
+        self.log_format = kwargs.get('log_format') or 'text'
         ban_file = kwargs.get('ban_file', ban_file)
         self.ban_file = self.path(ban_file) if ban_file else None
         self.stores = {}
@@ -430,8 +431,10 @@ class Bot:
             return
         if log_level not in self.log_levels:
             raise ValueError("log_level must be one of: off, {}".format(', '.join(self.log_levels)))
+        if self.log_format not in log.FORMATS:
+            raise ValueError('log_format must be text or json')
         self.logger.disabled = False
-        log.set_log_file(self.log_file, self.logger)
+        log.set_log_file(self.log_file, self.logger, self.log_format)
         self.logger.setLevel(self.log_levels[log_level])
         self.logger.info('Logging started!')
 
@@ -1201,7 +1204,7 @@ class TwitchBot(Bot):
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'bot_dir', 'data_dir', 'plugin_config', 'address_by_nick',
-        'plugin_channels', 'access', 'history', 'recipe_dir',
+        'plugin_channels', 'access', 'history', 'recipe_dir', 'log_format',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):
