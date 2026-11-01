@@ -114,12 +114,14 @@ class Template:
         source: the template as written.
         names: the variables it uses, by their first name, like 'sorted' for
             {sorted.summary}.
+        paths: the variables it uses in full, like 'sorted.summary'.
     """
 
     def __init__(self, source):
         self.source = source
         self.parts = parse(source)
-        self.names = [part[0].split('.')[0] for part in self.parts if isinstance(part, tuple)]
+        self.paths = [part[0] for part in self.parts if isinstance(part, tuple)]
+        self.names = [path.split('.')[0] for path in self.paths]
 
     def render(self, lookup):
         """The template with its variables filled in. lookup(path) gives a value."""

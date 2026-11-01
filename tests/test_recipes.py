@@ -96,6 +96,30 @@ steps:
     assert bot.say('!games') == ['games: ']
 
 
+def test_a_store_key_no_recipe_sets_is_warned_about(tmp_path, caplog):
+    bot = make(tmp_path, addgame="steps:\n  - store: games\n    add: '{arg}'\n", games='''
+steps:
+  - reply: '{store.game|sorted}'
+  - for_each: store.players
+    steps:
+      - reply: '{item}'
+        when: store.mode is quiet
+''')
+    assert bot.recipe_warnings == [
+        'games reads store.game, which no recipe sets, did you mean store.games?',
+        'games reads store.mode, which no recipe sets',
+        'games reads store.players, which no recipe sets']
+    assert 'games reads store.mode' in caplog.text
+    # a warning, not a problem: the recipe still loads and runs
+    assert sorted(bot.recipes) == ['addgame', 'games']
+
+
+def test_store_keys_some_recipe_sets_arent_warned_about(tmp_path):
+    bot = make(tmp_path, addgame="steps:\n  - store: games\n    add: '{arg}'\n",
+               games="steps:\n  - reply: '{store.games|sorted}'\n")
+    assert bot.recipe_warnings == []
+
+
 def test_for_each_and_when(tmp_path):
     bot = make(tmp_path, roll_call='''
 steps:

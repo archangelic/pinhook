@@ -11,6 +11,7 @@
 
 Files are read with pyyaml's safe_load, never its full loader, which can run code.
 """
+import difflib
 import os
 import re
 from dataclasses import dataclass
@@ -97,6 +98,41 @@ def load_recipes(folder):
             continue
         recipes[recipe.name] = recipe
     return recipes, problems
+
+
+def store_keys(steps):
+    """The store keys some steps read and the ones they set, as two sets, loops included."""
+    reads, sets = set(), set()
+    for step in steps:
+        paths = [step.when.path] if step.when else []
+        kinds = STEPS[step.type].fields
+        for name, value in step.fields.items():
+            if kinds[name] == 'template':
+                paths += value.paths
+            elif kinds[name] == 'path':
+                paths.append(value)
+            elif kinds[name] == 'steps':
+                inner_reads, inner_sets = store_keys(value)
+                reads |= inner_reads
+                sets |= inner_sets
+        if step.type == 'store':
+            sets.add(step.fields['store'])
+        reads.update(path.split('.')[1] for path in paths if path.startswith('store.'))
+    return reads, sets
+
+
+def store_warnings(recipes):
+    """A warning for each store key a recipe reads that no recipe sets. All recipes share
+    one store, so this is most often a typo, like store.game where another sets games."""
+    keys = {name: store_keys(recipe.steps) for name, recipe in recipes.items()}
+    sets = set().union(*(recipe_sets for _, recipe_sets in keys.values()))
+    warnings = []
+    for name, (reads, _) in keys.items():
+        for key in sorted(reads - sets):
+            close = difflib.get_close_matches(key, sets, n=1)
+            hint = ', did you mean store.{}?'.format(close[0]) if close else ''
+            warnings.append('{} reads store.{}, which no recipe sets{}'.format(name, key, hint))
+    return warnings
 
 
 def parse_recipe(data, default_name, path=None):

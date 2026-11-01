@@ -239,7 +239,8 @@ class Bot:
 
     def load_recipes(self):
         """Load the recipes in recipe_dir as commands, replacing any loaded before. A recipe
-        that can't load, or whose name another command has, is logged and left out."""
+        that can't load, or whose name another command has, is logged and left out, and a
+        store key a recipe reads but none sets is warned about."""
         self.registry.remove_plugin(RECIPES)
         found, problems = recipes.load_recipes(self.recipe_dir)
         handlers = [self.recipe_handler(recipe) for recipe in found.values()]
@@ -248,6 +249,10 @@ class Bot:
             self.logger.error("couldn't load a recipe: {}".format(problem))
         self.recipes = {h.name: found[h.name] for h in self.registry.plugins[RECIPES]}
         self.recipe_problems = problems
+        # recipes share one store, so a key nothing sets is most often a typo
+        self.recipe_warnings = recipes.store_warnings(self.recipes)
+        for warning in self.recipe_warnings:
+            self.logger.warning(warning)
         if found:
             self.logger.info('loaded {} recipes from {}'.format(
                 len(self.recipes), self.recipe_dir))
