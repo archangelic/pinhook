@@ -166,3 +166,76 @@ def test_quoted_names_are_fine(tmp_path):
     result, bot = run_cli(tmp_path, config, name='config.yaml')
     assert result.exit_code == 0, result.output
     assert bot.call_args.kwargs['channels'] == ['#games']
+
+
+GOOD_PLUGIN = '''from pinhook import Plugin, command
+
+
+class Hello(Plugin):
+    def setup(self, previous):
+        self.ready = True
+
+    def teardown(self):
+        open(__file__ + '.teardown', 'w').close()
+
+    @command('hello')
+    async def hello(self, ctx):
+        await ctx.reply('hi')
+'''
+
+
+def bot_folder(tmp_path, config, plugins=None, recipes=None):
+    for folder, files in (('plugins', plugins or {}), ('recipes', recipes or {})):
+        (tmp_path / folder).mkdir()
+        for name, text in files.items():
+            (tmp_path / folder / name).write_text(text)
+    path = tmp_path / 'config.yaml'
+    path.write_text("nickname: 'pinbot'\nserver: 'localhost'\nchannels: ['#test']\n"
+                    "bot_dir: '{}'\n{}".format(tmp_path, config))
+    return path
+
+
+def check(path):
+    return CliRunner().invoke(cli, ['check', str(path)])
+
+
+def test_check_says_what_it_loaded(tmp_path):
+    path = bot_folder(tmp_path, '', plugins={'hello.py': GOOD_PLUGIN},
+                      recipes={'hug.yaml': "version: 1\nsteps:\n  - reply: '{nick} hugs'\n"})
+    result = check(path)
+    assert result.exit_code == 0, result.output
+    assert result.output == ('{} is fine. Loaded 1 plugin with 1 command, and 1 recipe\n'
+                             .format(path))
+    # setup ran when the plugin loaded, and teardown before check finished
+    assert (tmp_path / 'plugins' / 'hello.py.teardown').exists()
+    # nothing was logged to a file
+    assert not (tmp_path / 'logs').exists()
+
+
+def test_check_lists_warnings_and_still_passes(tmp_path):
+    path = bot_folder(tmp_path, 'ssl_requred: true\n', recipes={
+        'games.yaml': "version: 1\nsteps:\n  - reply: '{store.game}'\n"})
+    result = check(path)
+    assert result.exit_code == 0, result.output
+    assert "warning: unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?" \
+        in result.output
+    assert 'warning: games reads store.game, which no recipe sets' in result.output
+    assert 'has 2 warnings. Loaded 0 plugins with 0 commands, and 1 recipe' in result.output
+
+
+def test_check_fails_on_a_plugin_or_recipe_that_cant_load(tmp_path):
+    path = bot_folder(tmp_path, '', plugins={'broken.py': 'def oops(:\n'},
+                      recipes={'bad.yaml': "version: 1\nsteps:\n  - reply: '{nope}'\n"})
+    result = check(path)
+    assert result.exit_code == 1
+    assert 'error: could not load plugin broken: SyntaxError' in result.output
+    assert "{nope} isn't set by this point" in result.output
+    assert 'has 2 errors and 0 warnings' in result.output
+    assert 'Traceback' not in result.output
+
+
+def test_check_stops_at_config_problems(tmp_path):
+    path = bot_folder(tmp_path, "port: 'sixsixsixseven'\n")
+    result = check(path)
+    assert result.exit_code == 1
+    assert 'port: Not a valid integer.' in result.output

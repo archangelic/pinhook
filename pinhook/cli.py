@@ -1,10 +1,13 @@
 import functools
+import logging
 import os
 import re
 
 import click
 import yaml
+from . import log
 from .bot import Bot
+from .recipes.engine import RECIPES
 from marshmallow import Schema, fields, validate, INCLUDE, ValidationError
 
 
@@ -218,3 +221,69 @@ def run(config, conf_format):
     bot.config_file = config_file
     bot.config_loader = functools.partial(load_conf_file, config_file, conf_format)
     bot.start()
+
+
+class Collect(logging.Handler):
+    """Keeps the warnings and errors a bot logs, for pinhook check."""
+
+    def __init__(self):
+        super().__init__(logging.WARNING)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def describe(record):
+    # the message, and for a plugin that failed to load, the error's last line
+    text = record.getMessage()
+    if record.exc_info and record.exc_info[1] is not None:
+        error = record.exc_info[1]
+        text += ': {}: {}'.format(type(error).__name__, error)
+    return text
+
+
+def plural(count, word):
+    return '{} {}{}'.format(count, word, '' if count == 1 else 's')
+
+
+@cli.command()
+@click.argument('config', type=click.File('rb'))
+@click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml']))
+def check(config, conf_format):
+    """Check CONFIG, and the plugins and recipes it uses, without connecting.
+
+    Plugins are loaded to check them, so their setup runs, then their teardown.
+    """
+    name = config.name
+    settings = read_conf(config, conf_format)
+    found = Collect()
+    # the bot's warnings come back as a list here, not as log lines
+    log.logger.addHandler(found)
+    log.logger.removeHandler(log.streamhandler)
+    try:
+        bot = Bot(**dict(settings, log_level='warning', log_file=os.devnull))
+        bot.registry.teardown()
+    except (ValueError, OSError) as e:
+        raise click.ClickException(str(e))
+    finally:
+        log.logger.removeHandler(found)
+        log.logger.addHandler(log.streamhandler)
+    errors = [describe(r) for r in found.records if r.levelno >= logging.ERROR]
+    warnings = [describe(r) for r in found.records if r.levelno < logging.ERROR]
+    for text in errors:
+        click.echo('error: ' + text, err=True)
+    for text in warnings:
+        click.echo('warning: ' + text, err=True)
+    plugins = [p for p in bot.registry.plugins if p != RECIPES]
+    commands = sum(1 for p in plugins for h in bot.registry.plugins[p] if h.kind == 'command')
+    loaded = '{} with {}, and {}'.format(
+        plural(len(plugins), 'plugin'), plural(commands, 'command'),
+        plural(len(bot.recipes), 'recipe'))
+    if errors:
+        raise click.ClickException('{} has {} and {}. Loaded {}'.format(
+            name, plural(len(errors), 'error'), plural(len(warnings), 'warning'), loaded))
+    if warnings:
+        click.echo('{} has {}. Loaded {}'.format(name, plural(len(warnings), 'warning'), loaded))
+    else:
+        click.echo('{} is fine. Loaded {}'.format(name, loaded))
