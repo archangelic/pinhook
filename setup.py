@@ -100,7 +100,7 @@ setup(
     url=URL,
     python_requires=REQUIRES_PYTHON,
     packages=find_packages(include=['pinhook', 'pinhook.*']),
-    package_data={'pinhook': ['py.typed']},
+    package_data={'pinhook': ['py.typed', 'templates/*']},
     entry_points={
         'console_scripts':
             ['pinhook=pinhook.cli:cli']

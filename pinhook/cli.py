@@ -6,6 +6,7 @@ import re
 import click
 import yaml
 from . import log
+from . import scaffold
 from .bot import Bot
 from .recipes.engine import RECIPES
 from marshmallow import Schema, fields, validate, INCLUDE, ValidationError
@@ -287,3 +288,42 @@ def check(config, conf_format):
         click.echo('{} has {}. Loaded {}'.format(name, plural(len(warnings), 'warning'), loaded))
     else:
         click.echo('{} is fine. Loaded {}'.format(name, loaded))
+
+
+@cli.group()
+def new():
+    """Make a bot folder, a plugin or a recipe from a template."""
+
+
+EDIT = click.option('--edit/--no-edit', default=None,
+                    help='Open it in an editor, or just save it. Asks when not given.')
+
+
+@new.command('bot')
+@click.argument('name')
+def new_bot(name):
+    """Make the folder NAME, with a config, an example plugin and its test."""
+    made = scaffold.new_bot(name)
+    click.echo('Made {}/ with {}'.format(name, ', '.join(made)))
+    click.echo('Edit {0}/config.yaml, then from {0}/ run: pinhook check config.yaml, then '
+               'pinhook run config.yaml'.format(name))
+
+
+@new.command('plugin')
+@click.argument('name')
+@EDIT
+def new_plugin(name, edit):
+    """Make plugins/NAME.py, a class plugin, and its test in tests/."""
+    path, test = scaffold.new_plugin(name)
+    click.echo('Made {} and {}'.format(path, test))
+    scaffold.offer_editor(path, edit)
+
+
+@new.command('recipe')
+@click.argument('name')
+@EDIT
+def new_recipe(name, edit):
+    """Make recipes/NAME.yaml, a recipe with an example step."""
+    path = scaffold.new_recipe(name)
+    click.echo('Made {}'.format(path))
+    scaffold.offer_editor(path, edit)

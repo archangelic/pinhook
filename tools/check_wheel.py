@@ -1,4 +1,4 @@
-"""Check that a built wheel holds every module in the source tree, and py.typed.
+"""Check that a built wheel holds every file in the package: modules, templates and py.typed.
 
     python tools/check_wheel.py dist/pinhook-2.0.0-py3-none-any.whl
 """
@@ -9,8 +9,8 @@ import zipfile
 
 def main(wheel):
     inside = set(zipfile.ZipFile(wheel).namelist())
-    wanted = {path.as_posix() for path in pathlib.Path('pinhook').rglob('*.py')}
-    wanted.add('pinhook/py.typed')
+    wanted = {path.as_posix() for path in pathlib.Path('pinhook').rglob('*')
+              if path.is_file() and '__pycache__' not in path.parts}
     missing = sorted(wanted - inside)
     for name in missing:
         print('{} is missing {}'.format(wheel, name))
