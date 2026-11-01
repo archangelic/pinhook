@@ -68,6 +68,35 @@ class Config(Schema):
 ENV_VAR = re.compile(r'\$\$\{|\$\{(?:file:([^}]+)|([A-Za-z_][A-Za-z0-9_]*))\}')
 
 
+ENV_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+
+
+def load_secrets(config_name):
+    """Set the variables in secrets.env, beside the config, for ${NAME} to read. One already
+    in the environment wins, so a service manager or container can supply it instead."""
+    path = os.path.join(os.path.dirname(config_name), 'secrets.env')
+    if not os.path.isfile(path):
+        return
+    if os.name == 'posix' and os.stat(path).st_mode & 0o077:
+        click.echo('warning: other users can read {0}. Make it yours only: chmod 600 {0}'
+                   .format(path), err=True)
+    with open(path) as f:
+        for number, line in enumerate(f, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('export '):
+                line = line[len('export '):].lstrip()
+            key, equals, value = line.partition('=')
+            key, value = key.strip(), value.strip()
+            # the line itself isn't shown, since it holds a secret
+            if not equals or not ENV_NAME.match(key):
+                raise click.ClickException('{} line {} should be NAME=value'.format(path, number))
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+                value = value[1:-1]
+            os.environ.setdefault(key, value)
+
+
 def read_secret_file(path, name):
     # relative paths are beside the config. A file's last line break isn't part of it
     path = os.path.join(os.path.dirname(name), os.path.expanduser(path))
@@ -225,8 +254,12 @@ def cli():
 @click.argument('config', type=click.File('rb'))
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml']))
 def run(config, conf_format):
-    """Connect and run the bot that CONFIG describes."""
+    """Connect and run the bot that CONFIG describes.
+
+    Variables in secrets.env, beside CONFIG, are set first, for ${NAME} to read.
+    """
     config_file = config.name
+    load_secrets(config_file)
     config = read_conf(config, conf_format)
     try:
         bot = Bot(**config)
@@ -271,6 +304,7 @@ def check(config, conf_format):
     Plugins are loaded to check them, so their setup runs, then their teardown.
     """
     name = config.name
+    load_secrets(name)
     settings = read_conf(config, conf_format)
     found = Collect()
     # the bot's warnings come back as a list here, not as log lines

@@ -18,5 +18,6 @@ ops:
 # plugins/, recipes/, data/ and logs/ are in the folder pinhook runs from
 bot_dir: '.'
 
-# Secrets never go in this file. Write ${NAME} here and set NAME in the environment
+# Secrets never go in this file. Write ${NAME} here and NAME=value in secrets.env
+# beside it, readable only by you. A NAME set in the environment wins
 # sasl_password: '${SASL_PASSWORD}'

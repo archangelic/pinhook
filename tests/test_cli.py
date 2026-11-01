@@ -1,4 +1,5 @@
 import json
+import os
 from unittest import mock
 
 from click.testing import CliRunner
@@ -258,4 +259,48 @@ def test_a_missing_file_secret_names_the_file(tmp_path):
     assert result.exit_code == 1
     assert "uses ${file:/run/secrets/nope}, but it can't be read: No such file or directory" \
         in result.output
+    bot.assert_not_called()
+
+
+def secrets_env(tmp_path, monkeypatch, text, mode=0o600):
+    # a copy of the environment, so what secrets.env sets goes away after the test
+    monkeypatch.setattr(os, 'environ', dict(os.environ))
+    path = tmp_path / 'secrets.env'
+    path.write_text(text)
+    path.chmod(mode)
+    return path
+
+
+def test_secrets_env_beside_the_config_is_read(tmp_path, monkeypatch):
+    secrets_env(tmp_path, monkeypatch, '# for pinbot\n\nPH_NS_PASS=hunter2\n'
+                                       'export PH_SERVER_PASS="sword fish"\n')
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='${PH_NS_PASS}',
+                                         server_pass='${PH_SERVER_PASS}'))
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.kwargs['ns_pass'] == 'hunter2'
+    assert bot.call_args.kwargs['server_pass'] == 'sword fish'
+    assert 'warning' not in result.output
+
+
+def test_the_environment_wins_over_secrets_env(tmp_path, monkeypatch):
+    secrets_env(tmp_path, monkeypatch, 'PH_NS_PASS=from-the-file\n')
+    os.environ['PH_NS_PASS'] = 'from-the-environment'
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='${PH_NS_PASS}'))
+    assert bot.call_args.kwargs['ns_pass'] == 'from-the-environment'
+
+
+def test_a_secrets_env_others_can_read_is_warned_about(tmp_path, monkeypatch):
+    path = secrets_env(tmp_path, monkeypatch, 'PH_NS_PASS=hunter2\n', mode=0o644)
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='${PH_NS_PASS}'))
+    assert result.exit_code == 0
+    assert 'warning: other users can read {0}. Make it yours only: chmod 600 {0}'.format(path) \
+        in result.output
+
+
+def test_a_bad_secrets_env_line_is_named_without_showing_it(tmp_path, monkeypatch):
+    path = secrets_env(tmp_path, monkeypatch, 'PH_A=1\nhunter2\n')
+    result, bot = run_cli(tmp_path, BASE)
+    assert result.exit_code == 1
+    assert '{} line 2 should be NAME=value'.format(path) in result.output
+    assert 'hunter2' not in result.output
     bot.assert_not_called()
