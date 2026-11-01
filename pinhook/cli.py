@@ -118,13 +118,17 @@ def expand_env(value, name):
 
     def replace(match):
         if match.group(1):
-            return read_secret_file(match.group(1), name)
-        if match.group(2) is None:
+            secret = read_secret_file(match.group(1), name)
+        elif match.group(2) is None:
             return '${'
-        if match.group(2) not in os.environ:
+        elif match.group(2) not in os.environ:
             raise click.ClickException("{} uses ${{{}}}, but that environment variable isn't set"
                                        .format(name, match.group(2)))
-        return os.environ[match.group(2)]
+        else:
+            secret = os.environ[match.group(2)]
+        # whatever came from ${...} is masked in the log
+        log.hide(secret)
+        return secret
     return ENV_VAR.sub(replace, value)
 
 
@@ -288,7 +292,7 @@ def describe(record):
     if record.exc_info and record.exc_info[1] is not None:
         error = record.exc_info[1]
         text += ': {}: {}'.format(type(error).__name__, error)
-    return text
+    return log.mask(text)
 
 
 def plural(count, word):

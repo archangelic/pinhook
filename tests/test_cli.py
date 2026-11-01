@@ -1,9 +1,13 @@
 import json
+import logging
 import os
+import sys
 from unittest import mock
 
+import pytest
 from click.testing import CliRunner
 
+from pinhook import log
 from pinhook.bot import Bot
 from pinhook.cli import Config, cli
 
@@ -17,6 +21,12 @@ def run_cli(tmp_path, config, name='config.json'):
 
 
 BASE = {'nickname': 'pinbot', 'server': 'localhost', 'channels': ['#test']}
+
+
+@pytest.fixture(autouse=True)
+def no_secrets(monkeypatch):
+    # what one test's config hid would be masked in the next test's output
+    monkeypatch.setattr(log, 'secrets', set())
 
 
 def test_config_schema_knows_every_bot_option():
@@ -304,3 +314,26 @@ def test_a_bad_secrets_env_line_is_named_without_showing_it(tmp_path, monkeypatc
     assert '{} line 2 should be NAME=value'.format(path) in result.output
     assert 'hunter2' not in result.output
     bot.assert_not_called()
+
+
+def test_values_from_the_environment_and_files_are_masked_in_the_log(tmp_path, monkeypatch):
+    monkeypatch.setenv('PH_NS_PASS', 'hunter2')
+    monkeypatch.setenv('PH_SHORT', 'ab')
+    (tmp_path / 'token').write_text('oauth-abc123\n')
+    run_cli(tmp_path, dict(BASE, ns_pass='${PH_NS_PASS}', server_pass='${file:token}',
+                           nickserv='${PH_SHORT}'))
+    record = logging.LogRecord('bot.pinbot', logging.ERROR, __file__, 1,
+                               'login failed for hunter2 with %s, ab', ('oauth-abc123',), None)
+    line = log.formatter.format(record)
+    assert line.endswith('login failed for *** with ***, ab')
+
+
+def test_masking_covers_tracebacks():
+    log.hide('hunter2')
+    try:
+        raise ValueError('bad password hunter2')
+    except ValueError:
+        record = logging.LogRecord('bot', logging.ERROR, __file__, 1, 'oops', (),
+                                   sys.exc_info())
+    assert 'hunter2' not in log.formatter.format(record)
+    assert 'ValueError: bad password ***' in log.formatter.format(record)

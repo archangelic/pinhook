@@ -1,8 +1,35 @@
 import logging
 import os
 
+# values that came from ${...} in the config, kept out of the log
+secrets: set[str] = set()
+# a shorter value would mask common words all through the log
+SHORTEST_SECRET = 4
+
+
+def hide(value):
+    """Show value as *** in log lines from now on."""
+    if len(value) >= SHORTEST_SECRET:
+        secrets.add(value)
+
+
+def mask(text):
+    """text with every hidden value replaced by ***, longest first."""
+    for secret in sorted(secrets, key=len, reverse=True):
+        text = text.replace(secret, '***')
+    return text
+
+
+class MaskingFormatter(logging.Formatter):
+    """Formats log lines with hidden values masked, tracebacks included."""
+
+    def format(self, record):
+        return mask(super().format(record))
+
+
 logger = logging.getLogger('bot')
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s')
+formatter = MaskingFormatter(
+    '%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(message)s')
 # Set console logger
 streamhandler = logging.StreamHandler()
 streamhandler.setFormatter(formatter)
