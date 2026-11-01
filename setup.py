@@ -99,7 +99,8 @@ setup(
     author_email=EMAIL,
     url=URL,
     python_requires=REQUIRES_PYTHON,
-    packages=['pinhook', 'pinhook.transport'],
+    packages=find_packages(include=['pinhook', 'pinhook.*']),
+    package_data={'pinhook': ['py.typed']},
     entry_points={
         'console_scripts':
             ['pinhook=pinhook.cli:cli']
