@@ -112,6 +112,17 @@ def test_external_logs_in_with_the_client_certificate(tmp_path):
     assert lines(w.sent()) == ['AUTHENTICATE +']
 
 
+def test_external_reports_the_account_the_server_chose(tmp_path, caplog):
+    w = Wire(tmp_path)
+    w.bot.transport.client_cert = True
+    w.connect()
+    w.receive(':irc.example.net CAP * LS :sasl=EXTERNAL', ':irc.example.net CAP * ACK :sasl',
+              'AUTHENTICATE +')
+    w.receive(':irc.example.net 900 pinbot pinbot!pin@host certacct :You are now logged in',
+              ':irc.example.net 903 pinbot :SASL authentication successful')
+    assert 'logged in as certacct with SASL EXTERNAL' in caplog.text
+
+
 def test_a_failed_external_login_gives_certificate_advice(tmp_path, caplog):
     w = Wire(tmp_path)
     w.bot.transport.client_cert = True

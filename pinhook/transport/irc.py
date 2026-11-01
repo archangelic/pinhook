@@ -113,6 +113,8 @@ class IrcTransport:
         self.negotiating = False
         self.authenticating = False
         self.sasl_logged_in = False
+        # the account the server says the bot logged in to, from 900
+        self.logged_in_as = None
         # the SASL login under way, and the challenge it's been sent so far
         self.sasl = None
         self.challenge = ''
@@ -331,7 +333,7 @@ class IrcTransport:
 
     handlers = {
         'PING': 'on_ping', 'ERROR': 'on_error', 'CAP': 'on_cap',
-        'AUTHENTICATE': 'on_authenticate', '903': 'on_sasl_success',
+        'AUTHENTICATE': 'on_authenticate', '900': 'on_logged_in', '903': 'on_sasl_success',
         '902': 'on_sasl_fail', '904': 'on_sasl_fail', '905': 'on_sasl_fail', '906': 'on_sasl_fail',
         '001': 'on_welcome', '005': 'on_isupport', '433': 'on_nick_in_use', '353': 'on_names',
         '376': 'on_registered', '422': 'on_registered', '731': 'on_monitor_offline',
@@ -595,11 +597,17 @@ class IrcTransport:
         for chunk in sasl.encode(response):
             self.write('AUTHENTICATE', [chunk])
 
+    def on_logged_in(self, line):
+        # nick, nick!user@host, account, text. With EXTERNAL the server picks the account
+        # from the certificate, so it can differ from sasl_account
+        if len(line.params) > 2:
+            self.logged_in_as = line.params[2]
+
     def on_sasl_success(self, line):
         self.sasl_logged_in = True
         self.authenticating = False
-        self.logger.info('logged in as {} with SASL {}'.format(self.sasl_account,
-                                                               self.sasl.name))
+        self.logger.info('logged in as {} with SASL {}'.format(
+            self.logged_in_as or self.sasl_account, self.sasl.name))
         if self.negotiating:
             self.end_caps()
 
