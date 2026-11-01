@@ -6,8 +6,11 @@ how to run them.
 import hashlib
 import json
 import os
+import socket
 import ssl
 import time
+import urllib.error
+import urllib.request
 
 from conftest import HOST, TLS_DIR, NickTaken, register
 
@@ -469,3 +472,37 @@ def test_sasl_external_logs_in_with_a_client_certificate(names, users, start_bot
     watcher.send('WHOIS ' + bot)
     assert 'pinhookcert :is logged in as' in watcher.wait_for(' 330 ')
     assert 'logged in as pinhookcert with SASL EXTERNAL' in running.log()
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind((HOST, 0))
+        return s.getsockname()[1]
+
+
+def get(url):
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            return response.status, response.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+def test_the_health_endpoint_says_when_the_bot_is_ready(names, users, start_bot):
+    bot, channel = names
+    port = free_port()
+    watcher = users('watcher', channel=channel)
+    start_bot(watcher, health_port=port)
+    base = 'http://{}:{}'.format(HOST, port)
+    assert get(base + '/healthz') == (200, 'ok\n')
+    # the join reaches the watcher at about the moment the bot sees it
+    end = time.time() + 10
+    while get(base + '/readyz') != (200, 'ready\n') and time.time() < end:
+        time.sleep(0.1)
+    assert get(base + '/readyz') == (200, 'ready\n')
+    watcher.send('KICK {} {} :out'.format(channel, bot))
+    watcher.wait_for(' KICK ')
+    end = time.time() + 10
+    while get(base + '/readyz')[0] != 503 and time.time() < end:
+        time.sleep(0.1)
+    assert get(base + '/readyz') == (503, 'not in {}\n'.format(channel))

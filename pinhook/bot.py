@@ -17,6 +17,7 @@ import yaml
 from . import access
 from . import commands
 from . import compat
+from . import health
 from . import log
 from . import plugin
 from .access import Access
@@ -82,7 +83,7 @@ class Bot:
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
         'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
-        'history', 'recipe_dir', 'log_format',
+        'history', 'recipe_dir', 'log_format', 'health_port', 'health_host',
         'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile',
     }
     log_levels = {
@@ -172,6 +173,9 @@ class Bot:
         log_file = kwargs.get('log_file') or log_file
         self.log_file = log_file if log_file == '-' else self.path(log_file)
         self.log_format = kwargs.get('log_format') or 'text'
+        # the health endpoint, off unless health_port is set
+        self.health_port = kwargs.get('health_port')
+        self.health_host = kwargs.get('health_host') or '127.0.0.1'
         ban_file = kwargs.get('ban_file', ban_file)
         self.ban_file = self.path(ban_file) if ban_file else None
         self.stores = {}
@@ -487,6 +491,8 @@ class Bot:
             core.create_task(self.read_events())
             sender = core.create_task(self.output.run())
             timers = core.create_task(self.run_timers())
+            if self.health_port:
+                checks = core.create_task(health.serve(self, self.health_host, self.health_port))
             await self.quitting.wait()
             try:
                 # answers already on their way, then everything waiting to be sent
@@ -499,6 +505,8 @@ class Bot:
                                     .format(self.output.waiting()))
             sender.cancel()
             timers.cancel()
+            if self.health_port:
+                checks.cancel()
             self.registry.teardown()
             await self.transport.close(self.quit_reason)
 
@@ -1204,7 +1212,8 @@ class TwitchBot(Bot):
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'bot_dir', 'data_dir', 'plugin_config', 'address_by_nick',
-        'plugin_channels', 'access', 'history', 'recipe_dir', 'log_format',
+        'plugin_channels', 'access', 'history', 'recipe_dir', 'log_format', 'health_port',
+        'health_host',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):

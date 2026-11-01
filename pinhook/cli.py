@@ -36,6 +36,8 @@ class Config(Schema):
     log_level = fields.Str(validate=validate.OneOf(['off'] + list(Bot.log_levels)))
     log_file = fields.Str()
     log_format = fields.Str(validate=validate.OneOf(['text', 'json']))
+    health_port = fields.Int(allow_none=True, validate=validate.Range(1, 65535))
+    health_host = fields.Str()
     server_pass = fields.Str()
     cmd_prefix = PrefixField()
     use_prefix_for_plugins = fields.Bool()
