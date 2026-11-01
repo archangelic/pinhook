@@ -1,0 +1,412 @@
+"""Each bot's plugins: loading them from plugin_dir, and finding their commands and handlers.
+
+Every bot has its own registry, so two bots in one process never share plugins.
+A plugin file can hold 1.x commands and listeners, 2.0 handlers made with
+pinhook.command and pinhook.on, and Plugin classes whose methods are handlers.
+"""
+import importlib.abc
+import importlib.util
+import inspect
+import os
+import re
+import sys
+import types
+import weakref
+
+from . import commands
+from . import plugin
+from .api import Plugin
+from .store import read_json_object, write_json
+
+
+class LoadError(Exception):
+    """A plugin file that can't be loaded alongside the others."""
+
+
+_registries: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+
+
+class PluginFinder(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        package, _, name = fullname.rpartition('.')
+        registry = _registries.get(package)
+        if registry is None:
+            return None
+        file = os.path.join(registry.plugin_dir, name + '.py')
+        if not os.path.isfile(file):
+            return None
+        return importlib.util.spec_from_file_location(fullname, file,
+                                                      loader=PluginLoader(registry))
+
+
+class PluginLoader(importlib.abc.Loader):
+    def __init__(self, registry):
+        self.registry = registry
+
+    def exec_module(self, module):
+        self.registry.run_file(module)
+
+
+sys.meta_path.append(PluginFinder())
+
+
+class Handler:
+    """A command, listener or event handler, registered by a plugin file.
+
+    Attributes:
+        kind: 'command', 'listener' (1.x), 'event' (2.0 @on) or 'timer' (2.0 @every).
+        name: a command's name without a prefix, a listener's name, or an event
+            handler's function name.
+        trigger: for a 1.x command whose word doesn't start with one of the bot's
+            prefixes, like '.weather', the word it answers to. None otherwise.
+        plugin: the plugin file's name, which names its store and config section.
+        func: the function to call.
+        native: True for 2.0 handlers, which are async and take a ctx.
+        params: a 2.0 command's typed arguments.
+        event: the event an @on handler handles.
+        interval: how many seconds apart an @every timer runs.
+        ops: True for an ops-only command, as its author wrote it.
+        restricted: True for a restricted command, as its author wrote it.
+        denied_msg: what someone who can't run a command is told when they try.
+        error_msg: said in chat when a 2.0 command fails.
+        timeout: seconds to wait for it, or None for the bot's default.
+        aliases: a 2.0 command's other names, which run it too.
+    """
+
+    def __init__(self, kind, name, plugin_name, func, trigger=None, help_text='N/A', ops=False,
+                 restricted=False, denied_msg='', hide=False, native=False, params=(), event=None,
+                 error_msg='', timeout=None, interval=None, aliases=()):
+        self.kind = kind
+        self.name = name
+        self.trigger = trigger
+        self.plugin = plugin_name
+        self.func = func
+        self.help_text = help_text
+        self.ops = ops
+        self.restricted = restricted
+        self.denied_msg = denied_msg
+        self.hide = hide
+        self.native = native
+        self.params = list(params)
+        self.event = event
+        self.error_msg = error_msg
+        self.timeout = timeout
+        self.interval = interval
+        self.aliases = tuple(aliases)
+
+    def label(self, prefix):
+        """How the bot writes it in logs and !help: the word that runs a command."""
+        if self.kind != 'command':
+            return self.name
+        return self.trigger or prefix + self.name
+
+
+def module_name(name):
+    return re.sub(r'\W', '_', name).lower()
+
+
+class Registry:
+    """The commands and handlers one bot's plugins registered.
+
+    Args:
+        bot_name: the bot's nick, which names its plugins' modules.
+        prefixes: the command prefixes, like ['!'].
+        reserved: names plugins can't use, the bot's own commands.
+        logger: the bot's logger.
+    """
+
+    def __init__(self, bot_name, prefixes, reserved, logger):
+        self.package = 'pinhook_plugins.' + module_name(bot_name)
+        self.plugin_dir = ''
+        self.imported = {}
+        self.prefixes = list(prefixes)
+        self.reserved = set(reserved)
+        self.logger = logger
+        self.instances = {}
+        self.clear()
+
+    def clear(self):
+        self.commands = {}
+        self.literals = {}
+        self.listeners = {}
+        self.events = {}
+        self.timers = []
+        self.plugins = {}
+
+    def load(self, plugin_dir):
+        """Load every .py file in plugin_dir, replacing whatever was loaded before."""
+        self.logger.info('clearing plugin cache')
+        old = self.instances
+        self.instances = {}
+        self.clear()
+        self.logger.info('checking plugin directory')
+        if not os.path.exists(plugin_dir):
+            self.logger.info('plugin directory {} not found, creating'.format(plugin_dir))
+            os.makedirs(plugin_dir)
+        self.plugin_dir = plugin_dir
+        self.make_packages()
+        for file_name in sorted(os.listdir(plugin_dir)):
+            if not file_name.endswith('.py'):
+                continue
+            name = file_name[:-3]
+            self.logger.info('loading plugin {}'.format(name))
+            try:
+                legacy, module = self.import_file(name)
+                self.add(name, legacy, module, old)
+            except Exception:
+                self.logger.exception('could not load plugin {}'.format(name))
+        self.teardown(old.values())
+        for handler in self.handlers():
+            self.logger.debug('adding {} {}'.format(handler.kind, handler.name))
+
+    def teardown(self, instances=None):
+        """Call teardown on Plugin instances, all of this registry's by default."""
+        for instance in list(self.instances.values() if instances is None else instances):
+            try:
+                instance.teardown()
+            except Exception:
+                self.logger.exception('{}.teardown failed'.format(type(instance).__name__))
+
+    def make_packages(self):
+        for name in [name for name in sys.modules if name.startswith(self.package + '.')]:
+            del sys.modules[name]
+        for package in ('pinhook_plugins', self.package):
+            if package not in sys.modules or package == self.package:
+                module = types.ModuleType(package)
+                module.__path__ = []
+                sys.modules[package] = module
+        _registries[self.package] = self
+        self.imported = {}
+
+    def import_file(self, name):
+        importlib.import_module(self.package + '.' + name)
+        return self.imported[name]
+
+    def run_file(self, module):
+        path = module.__spec__.origin
+        with open(path, 'rb') as f:
+            code = compile(f.read(), path, 'exec')
+        with plugin._lock:
+            outer = plugin._collector
+            plugin._collector = []
+            try:
+                exec(code, module.__dict__)
+                self.imported[module.__name__.rpartition('.')[2]] = (plugin._collector, module)
+            finally:
+                plugin._collector = outer
+
+    def add(self, plugin_name, legacy, module, old_instances):
+        found = [(None, self.handler(plugin_name, *entry)) for entry in legacy]
+        classes = self.plugin_classes(module)
+        for owner, func, spec in self.native(module):
+            found.append((owner, self.native_handler(plugin_name, func, spec)))
+        taken = {}
+        for owner, handler in found:
+            if handler.kind in ('event', 'timer'):
+                continue
+            for word in (handler.trigger or handler.name,) + handler.aliases:
+                key = (handler.kind, word)
+                label = handler.label(self.prefixes[0]) if word == handler.name else \
+                    self.prefixes[0] + word
+                if key in taken:
+                    raise LoadError('plugin {} registers {} {} twice'.format(
+                        plugin_name, handler.kind, label))
+                taken[key] = handler
+                other = self.owner(handler, word)
+                if other:
+                    raise LoadError('plugin {} registers {} {}, which {} already has'.format(
+                        plugin_name, handler.kind, label, other))
+        for owner, handler in found:
+            if handler.kind == 'command' and handler.native:
+                try:
+                    handler.params = commands.params_of(handler.func, 2 if owner else 1)
+                except TypeError as e:
+                    raise LoadError('plugin {}: {}'.format(plugin_name, e))
+        instances = self.make_instances(plugin_name, classes, old_instances)
+        handlers = []
+        for owner, handler in found:
+            if owner is not None:
+                handler.func = handler.func.__get__(instances[owner], owner)
+            handlers.append(handler)
+        for handler in handlers:
+            if handler.kind == 'listener':
+                self.listeners[handler.name] = handler
+            elif handler.kind == 'event':
+                self.events.setdefault(handler.event, []).append(handler)
+            elif handler.kind == 'timer':
+                self.timers.append(handler)
+            elif handler.trigger:
+                self.literals[handler.trigger] = handler
+            else:
+                for word in (handler.name,) + handler.aliases:
+                    self.commands[word] = handler
+        self.plugins[plugin_name] = handlers
+        for cls, instance in instances.items():
+            self.instances[(plugin_name, cls.__qualname__)] = instance
+
+    def add_handlers(self, plugin_name, handlers):
+        """Add commands that don't come from a plugin file, like recipes, under plugin_name.
+        One whose name is taken is left out. Returns the problems, as text."""
+        problems, added = [], []
+        for handler in handlers:
+            other = self.owner(handler)
+            if other:
+                problems.append('{} {} is already a command of {}'.format(
+                    plugin_name, handler.label(self.prefixes[0]), other))
+                continue
+            self.commands[handler.name] = handler
+            added.append(handler)
+        self.plugins[plugin_name] = added
+        return problems
+
+    def remove_plugin(self, plugin_name):
+        """Take out the commands added under plugin_name with add_handlers, like recipes
+        before they're loaded again."""
+        for handler in self.plugins.pop(plugin_name, []):
+            if handler.kind == 'command' and self.commands.get(handler.name) is handler:
+                del self.commands[handler.name]
+
+    @staticmethod
+    def plugin_classes(module):
+        return [value for value in vars(module).values()
+                if inspect.isclass(value) and issubclass(value, Plugin) and value is not Plugin
+                and value.__module__ == module.__name__]
+
+    def native(self, module):
+        for value in vars(module).values():
+            if inspect.isfunction(value) and value.__module__ == module.__name__:
+                for spec in value.__dict__.get('_pinhook', []):
+                    yield None, value, spec
+        for cls in self.plugin_classes(module):
+            for _, func in inspect.getmembers(cls, inspect.isfunction):
+                for spec in func.__dict__.get('_pinhook', []):
+                    yield cls, func, spec
+
+    def make_instances(self, plugin_name, classes, old_instances):
+        instances = {}
+        try:
+            for cls in classes:
+                instance = cls()
+                instance.setup(old_instances.get((plugin_name, cls.__qualname__)))
+                instances[cls] = instance
+        except Exception:
+            self.teardown(instances.values())
+            raise
+        return instances
+
+    def handler(self, plugin_name, kind, name, func, options):
+        if kind == 'listener':
+            return Handler(kind, name, plugin_name, func)
+        command, trigger = self.split_trigger(name)
+        options = dict(options)
+        options['denied_msg'] = options.pop('ops_msg', '')
+        return Handler(kind, command, plugin_name, func, trigger=trigger, **options)
+
+    def native_handler(self, plugin_name, func, spec):
+        spec = dict(spec)
+        kind, name = spec.pop('kind'), spec.pop('name')
+        return Handler(kind, name, plugin_name, func, native=True, **spec)
+
+    def split_trigger(self, word):
+        name = self.strip_prefix(word)
+        if name:
+            return name, None
+        if word[:1].isalnum():
+            return word, None
+        return word, word
+
+    def owner(self, handler, word=None):
+        if handler.kind == 'listener':
+            other = self.listeners.get(handler.name)
+        elif handler.trigger:
+            other = self.literals.get(handler.trigger)
+        else:
+            word = word or handler.name
+            if word in self.reserved:
+                return 'the bot itself'
+            other = self.commands.get(word)
+        return 'plugin ' + other.plugin if other else None
+
+    def handlers(self):
+        return [h for handlers in self.plugins.values() for h in handlers]
+
+    def listener_names(self):
+        return sorted(set(self.listeners) | {h.name for h in self.events.get('message', [])})
+
+    def find(self, word, addressed=False):
+        """The command a message's first word runs, or None.
+
+        A word written with one of the bot's prefixes runs the command of that
+        name. Addressing the bot by nick also runs one without a prefix, and so does
+        addressed=True, for a name given without one, like a recipe step's.
+        """
+        if word in self.literals:
+            return self.literals[word]
+        name = self.strip_prefix(word)
+        if name is None and addressed:
+            name = word
+        return self.commands.get(name) if name else None
+
+    def strip_prefix(self, word):
+        for prefix in sorted(self.prefixes, key=len, reverse=True):
+            if word.startswith(prefix) and len(word) > len(prefix):
+                return word[len(prefix):]
+        return None
+
+
+class Switches:
+    """Where plugins are on: plugin_channels from the config, with !enable and !disable on top.
+
+    A name is a plugin file, a command or a listener. For a message in a channel,
+    the channel's own !enable or !disable wins, then an "all" one, then
+    plugin_channels, which keeps a name to the channels it lists. Private
+    messages only follow "all".
+
+    Args:
+        limits: plugin_channels, {name: [channel, ...]}.
+        path: where !enable and !disable are saved, or None to keep them in memory.
+        fold: the server's case folding, so #Games and #games are one channel.
+    """
+
+    def __init__(self, limits, path, fold):
+        self.limits = {name: list(channels) for name, channels in (limits or {}).items()}
+        self.path = path
+        self.fold = fold
+        self.saved = self.load()
+
+    def load(self):
+        return read_json_object(self.path)
+
+    def save(self):
+        if self.path:
+            write_json(self.path, self.saved)
+
+    def is_on(self, names, channel=None):
+        """True if none of names is off where the message is. channel is None if it's private."""
+        return all(self.name_on(name, channel) for name in names)
+
+    def name_on(self, name, channel):
+        entry = self.saved.get(name, {})
+        if channel is not None:
+            for saved_channel, on in entry.get('channels', {}).items():
+                if self.fold(saved_channel) == self.fold(channel):
+                    return on
+        if entry.get('all') is not None:
+            return entry['all']
+        if channel is not None and name in self.limits:
+            return self.fold(channel) in {self.fold(c) for c in self.limits[name]}
+        return True
+
+    def set(self, name, on, channel=None):
+        """Turn name on or off in channel, or everywhere when channel is None."""
+        entry = self.saved.setdefault(name, {'all': None, 'channels': {}})
+        if channel is None:
+            entry['all'] = on
+            entry['channels'] = {}
+        else:
+            channels = entry.setdefault('channels', {})
+            for saved_channel in list(channels):
+                if self.fold(saved_channel) == self.fold(channel):
+                    del channels[saved_channel]
+            channels[channel] = on
+        self.save()
