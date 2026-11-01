@@ -81,6 +81,46 @@ def expand_env(value, name):
     return ENV_VAR.sub(replace, value)
 
 
+# YAML's two traps for IRC: # starts a comment, so an unquoted channel name vanishes, and
+# no, off, yes and on are read as false and true
+QUOTE_CHANNELS = ("a channel name isn't quoted, so YAML read it as a comment. Quote channel "
+                  "names, like channels: ['#games']")
+# an unquoted # inside a flow list, like [#games] or ['#a', #b]
+FLOW_CHANNEL = re.compile(r'[\[,]\s*#')
+
+
+def channel_lists(data):
+    # every list of channel names in a config, by where it is
+    yield 'channels', data.get('channels', [])
+    plugin_channels = data.get('plugin_channels')
+    if isinstance(plugin_channels, dict):
+        for name, channels in plugin_channels.items():
+            yield 'plugin_channels.{}'.format(name), channels
+    history = data.get('history')
+    if isinstance(history, dict) and 'channels' in history:
+        yield 'history.channels', history['channels']
+
+
+def yaml_traps(data, text):
+    """Problems from YAML's traps for IRC, as (setting, problem) pairs."""
+    problems = []
+    if not isinstance(data, dict):
+        return problems
+    for name, channels in channel_lists(data):
+        if channels is None or (isinstance(channels, list) and None in channels):
+            problems.append((name, QUOTE_CHANNELS))
+    if isinstance(data.get('nickname'), bool):
+        match = re.search(r'^nickname:\s*(\S+)', text, re.M)
+        word = match.group(1) if match else str(data['nickname']).lower()
+        problems.append(('nickname', "YAML read {} as {}, not a name. Quote it, like "
+                         "nickname: '{}'".format(word, str(data['nickname']).lower(), word)))
+    ops = data.get('ops')
+    if isinstance(ops, list) and any(isinstance(op, bool) for op in ops):
+        problems.append(('ops', "YAML read an op as true or false, not a name, which happens "
+                         "to no, off, yes and on. Quote it, like - 'no'"))
+    return problems
+
+
 def flatten_problems(messages, path=''):
     # nested settings give nested errors, list them as plugin_config.weather: ...
     for key, msgs in messages.items():
@@ -130,11 +170,17 @@ def read_conf(config, conf_format):
         output = check_conf(schema, to_json, config.name)
     elif conf_format == 'yaml':
         # safe_load, since the full loader can run code from the file
+        text = config.read().decode('utf-8', 'replace')
         try:
-            to_yaml = yaml.safe_load(config.read())
+            to_yaml = yaml.safe_load(text)
         except yaml.YAMLError as e:
+            hint = '\n' + QUOTE_CHANNELS if FLOW_CHANNEL.search(text) else ''
             raise click.ClickException("{} isn't valid YAML, or holds something configs don't "
-                                       "allow:\n{}".format(config.name, e))
+                                       "allow:\n{}{}".format(config.name, e, hint))
+        traps = yaml_traps(to_yaml, text)
+        if traps:
+            raise click.ClickException('{} has problems:\n{}'.format(
+                config.name, '\n'.join('  {}: {}'.format(*trap) for trap in traps)))
         output = check_conf(schema, to_yaml, config.name)
     return output
 

@@ -131,3 +131,38 @@ def test_plugin_config_sections_must_be_mappings(tmp_path):
     assert result.exit_code != 0
     assert 'plugin_config.weather: Not a valid mapping type.' in result.output
     assert 'defaultdict' not in result.output
+
+
+def test_unquoted_channel_names_in_a_flow_list_say_to_quote_them(tmp_path):
+    config = 'nickname: pinbot\nserver: x\nchannels: [#games, #chat]\n'
+    result, bot = run_cli(tmp_path, config, name='config.yaml')
+    assert result.exit_code == 1
+    assert "a channel name isn't quoted, so YAML read it as a comment" in result.output
+    bot.assert_not_called()
+
+
+def test_unquoted_channel_names_in_a_block_list_say_to_quote_them(tmp_path):
+    config = ("nickname: pinbot\nserver: x\nchannels:\n  - #games\n  - '#chat'\n"
+              "plugin_channels:\n  dice: #games\n")
+    result, bot = run_cli(tmp_path, config, name='config.yaml')
+    assert result.exit_code == 1
+    assert "  channels: a channel name isn't quoted" in result.output
+    assert "  plugin_channels.dice: a channel name isn't quoted" in result.output
+    bot.assert_not_called()
+
+
+def test_a_nick_yaml_reads_as_a_boolean_says_to_quote_it(tmp_path):
+    config = "nickname: off\nserver: x\nchannels: ['#games']\nops:\n  - yes\n"
+    result, bot = run_cli(tmp_path, config, name='config.yaml')
+    assert result.exit_code == 1
+    assert "nickname: YAML read off as false, not a name. Quote it, like nickname: 'off'" \
+        in result.output
+    assert 'ops: YAML read an op as true or false' in result.output
+    bot.assert_not_called()
+
+
+def test_quoted_names_are_fine(tmp_path):
+    config = "nickname: 'off'\nserver: x\nchannels: ['#games']  # the main one\n"
+    result, bot = run_cli(tmp_path, config, name='config.yaml')
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.kwargs['channels'] == ['#games']
