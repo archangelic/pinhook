@@ -28,3 +28,12 @@ def test_commands_that_change_nothing_and_non_ops_arent_audited(tmp_path, caplog
     bot.say('!banlist', nick='mal', account='mal')
     bot.say('!ban mal', nick='ana')
     assert audit_lines(caplog) == []
+
+
+def test_log_file_dash_logs_to_stdout_and_only_there(tmp_path, capsys):
+    bot = TestBot(log_file='-', data_dir=str(tmp_path))
+    bot.logger.warning('to stdout')
+    out, err = capsys.readouterr()
+    assert out.endswith(' - WARNING - bot.testbot - test_logs - to stdout\n')
+    assert 'to stdout' not in err
+    assert not (tmp_path / '-').exists()

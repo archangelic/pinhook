@@ -168,7 +168,9 @@ class Bot:
         recipe_dir = kwargs.get('recipe_dir', 'recipes')
         self.recipe_dir = self.path(recipe_dir) if recipe_dir else None
         self.data_dir = self.path(kwargs.get('data_dir', 'data'))
-        self.log_file = self.path(kwargs.get('log_file') or log_file)
+        # '-' is stdout, for containers and service managers that collect it
+        log_file = kwargs.get('log_file') or log_file
+        self.log_file = log_file if log_file == '-' else self.path(log_file)
         ban_file = kwargs.get('ban_file', ban_file)
         self.ban_file = self.path(ban_file) if ban_file else None
         self.stores = {}

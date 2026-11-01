@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 
 # values that came from ${...} in the config, kept out of the log
 secrets: set[str] = set()
@@ -44,15 +45,21 @@ def get_bot_logger(nickname):
     for handler in list(bot_logger.handlers):
         bot_logger.removeHandler(handler)
         handler.close()
+    bot_logger.propagate = True
     return bot_logger
 
 
 def set_log_file(filename, target=logger):
-    # make the logs folder the first time
-    folder = os.path.dirname(filename)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
-    # Set file logger
-    filehandler = logging.FileHandler(filename)
-    filehandler.setFormatter(formatter)
-    target.addHandler(filehandler)
+    """Log to filename, or to stdout when it's '-'."""
+    if filename == '-':
+        handler: logging.Handler = logging.StreamHandler(sys.stdout)
+        # the console handler on the parent writes to stderr, and once is enough
+        target.propagate = False
+    else:
+        # make the logs folder the first time
+        folder = os.path.dirname(filename)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        handler = logging.FileHandler(filename)
+    handler.setFormatter(formatter)
+    target.addHandler(handler)
