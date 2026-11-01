@@ -11,7 +11,7 @@ def run_cli(tmp_path, config, name='config.json'):
     path = tmp_path / name
     path.write_text(config if isinstance(config, str) else json.dumps(config))
     with mock.patch('pinhook.cli.Bot') as bot:
-        result = CliRunner().invoke(cli, [str(path)])
+        result = CliRunner().invoke(cli, ['run', str(path)])
     return result, bot
 
 
@@ -47,6 +47,23 @@ def test_toml_config_loads(tmp_path):
     assert bot.call_args.kwargs['bot_mode'] is False
 
 
+def test_a_config_with_no_command_runs_the_bot_with_a_warning(tmp_path):
+    path = tmp_path / 'config.json'
+    path.write_text(json.dumps(BASE))
+    with mock.patch('pinhook.cli.Bot') as bot:
+        result = CliRunner().invoke(cli, [str(path)])
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.kwargs['nickname'] == 'pinbot'
+    bot.return_value.start.assert_called_once()
+    assert "'pinhook {0}' is shorthand for 'pinhook run {0}'".format(path) in result.output
+    assert 'will be deprecated in a future version' in result.output
+
+
+def test_no_arguments_lists_the_commands():
+    result = CliRunner().invoke(cli, [])
+    assert 'run' in result.output and 'Run, check and create pinhook bots.' in result.output
+
+
 def test_config_mistakes_are_listed_without_traceback(tmp_path):
     result, bot = run_cli(tmp_path, dict(BASE, port='sixsixsixseven', log_level='verbose'))
     assert result.exit_code != 0
@@ -61,7 +78,7 @@ def test_bot_startup_errors_are_shown_plainly(tmp_path):
     path.write_text(json.dumps(BASE))
     error = ValueError("couldn't read ban file bans.json: oops")
     with mock.patch('pinhook.cli.Bot', side_effect=error):
-        result = CliRunner().invoke(cli, [str(path)])
+        result = CliRunner().invoke(cli, ['run', str(path)])
     assert result.exit_code != 0
     assert "Error: couldn't read ban file bans.json: oops" in result.output
 

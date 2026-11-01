@@ -214,7 +214,8 @@ def start_bot(tmp_path, names):
         (tmp_path / 'config.json').write_text(json.dumps(config))
         run = tmp_path / 'run'
         run.mkdir(exist_ok=True)
-        process = subprocess.Popen([pinhook_command(), str(tmp_path / 'config.json')], cwd=str(run),
+        process = subprocess.Popen([pinhook_command(), 'run', str(tmp_path / 'config.json')],
+                                   cwd=str(run),
                                    env=dict(os.environ, **(env or {})),
                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         bot = BotProcess(str(tmp_path), process)

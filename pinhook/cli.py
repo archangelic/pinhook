@@ -136,10 +136,29 @@ def read_conf(config, conf_format):
     return output
 
 
-@click.command()
+class Pinhook(click.Group):
+    """pinhook's commands. `pinhook config.yaml`, with no command, still runs the bot, as in 1.x."""
+
+    def parse_args(self, ctx, args):
+        if args and args[0] not in self.commands and not args[0].startswith('-'):
+            click.echo("warning: 'pinhook {0}' is shorthand for 'pinhook run {0}', and the "
+                       "shorthand will be deprecated in a future version. Use 'pinhook run {0}'"
+                       .format(args[0]), err=True)
+            args = ['run'] + list(args)
+        return super().parse_args(ctx, args)
+
+
+@click.group(cls=Pinhook)
+@click.version_option(package_name='pinhook')
+def cli():
+    """Run, check and create pinhook bots."""
+
+
+@cli.command()
 @click.argument('config', type=click.File('rb'))
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml', 'toml']))
-def cli(config, conf_format):
+def run(config, conf_format):
+    """Connect and run the bot that CONFIG describes."""
     config_file = config.name
     config = read_conf(config, conf_format)
     try:
