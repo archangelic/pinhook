@@ -36,7 +36,7 @@ jobs:
     - name: Set up uv
       uses: astral-sh/setup-uv@v10.3.3
     - name: Check PEP 8, with lines up to 100 characters (set in setup.cfg)
-      run: uv run --no-project --python 3.12 --with pycodestyle==2.15.0 pycodestyle pinhook tests examples setup.py
+      run: uv run --no-project --python 3.12 --with pycodestyle==2.15.0 pycodestyle pinhook tests examples tools setup.py
 
   mypy:
 
@@ -63,8 +63,13 @@ jobs:
       uses: astral-sh/setup-uv@v10.3.3
     - name: Set up Python
       run: uv venv --python 3.12
-    - name: Install dependencies
-      run: uv pip install -e . pytest
+    # the built wheel, not the source tree, so a module left out of the package fails here
+    - name: Build the wheel
+      run: uv build --wheel --out-dir dist
+    - name: Check the wheel holds every module
+      run: python3 tools/check_wheel.py dist/*.whl
+    - name: Install the wheel
+      run: uv pip install dist/*.whl pytest
     - name: Start an Ergo IRC server
       run: tests/integration/ergo.sh
     - name: Run tests against Ergo
