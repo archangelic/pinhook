@@ -1,0 +1,10 @@
+version: 1
+name: <name>
+help: say hello, like <name> ana
+# Steps run in order, as the person who started the recipe. {nick}, {channel},
+# {arg} and {members} are always set, and a step's save sets one more.
+steps:
+  - reply: '{nick} says hello to {arg|default:everyone}'
+  # - command: 'roll 2 20'
+  #   save: rolled
+  # - reply: 'and rolled {rolled}'

@@ -1,0 +1,7 @@
+from pinhook.testing import TestBot
+
+
+def test_<name>():
+    bot = TestBot(plugin_dir='plugins')
+    assert bot.say('!<name>') == ['hello, world! (1)']
+    assert bot.say('!<name> ana') == ['hello, ana! (2)']

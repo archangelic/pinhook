@@ -1,0 +1,12 @@
+"""<name>, a pinhook plugin."""
+from pinhook import Plugin, command
+
+
+class <Name>(Plugin):
+    def setup(self, previous):
+        self.count = previous.count if previous else 0
+
+    @command('<name>', help='say hello, like <name> ana')
+    async def <name>(self, ctx, who: str = 'world'):
+        self.count += 1
+        await ctx.reply(f'hello, {who}! ({self.count})')

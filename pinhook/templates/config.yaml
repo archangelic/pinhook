@@ -1,0 +1,23 @@
+# <name>'s settings. Check them with `pinhook check config.yaml`, then start the bot
+# with `pinhook run config.yaml`.
+
+nickname: '<name>'
+server: 'irc.libera.chat'
+port: 6697
+ssl_required: true
+
+# Quote channel names: YAML reads an unquoted # as the start of a comment
+channels:
+  - '#<name>-test'
+
+# Ops run the bot's admin commands, like !reload and !allow. $a: matches a services
+# account, so nobody gets op powers by taking your nick
+ops:
+  - '$a:youraccount'
+
+# plugins/, recipes/, data/ and logs/ are in this folder
+bot_dir: '.'
+
+# Secrets never go in this file. Write ${NAME} here and NAME=value in secrets.env
+# beside it, readable only by you. A NAME set in the environment wins
+# sasl_password: '${SASL_PASSWORD}'
