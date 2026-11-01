@@ -9,7 +9,7 @@ import os
 import ssl
 import time
 
-from conftest import HOST, TLS_DIR, register
+from conftest import HOST, TLS_DIR, NickTaken, register
 
 KARMA = ("import pinhook.plugin\n\n\n"
          "@pinhook.plugin.command('!karma')\n"
@@ -447,11 +447,16 @@ def test_sasl_external_logs_in_with_a_client_certificate(names, users, start_bot
     bot, channel = names
     with open(os.path.join(TLS_DIR, 'client.pem')) as f:
         fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(f.read())).hexdigest()
-    # the bot's account, with the client certificate added to it
-    owner = users(bot, port=6668)
-    owner.send('PRIVMSG NickServ :REGISTER botpassword')
-    owner.wait_for('NickServ')
-    owner.send('PRIVMSG NickServ :IDENTIFY {} botpassword'.format(bot))
+    # an account with the client certificate added to it. A certificate belongs to one
+    # account, and the server keeps its accounts while it runs, so every run uses this one
+    try:
+        owner = users('pinhookcert', port=6668)
+        owner.send('PRIVMSG NickServ :REGISTER botpassword')
+        owner.wait_for('NickServ')
+    except NickTaken:
+        # an earlier run registered it, and the account holds the nick
+        owner = users(bot + 'o', port=6668)
+    owner.send('PRIVMSG NickServ :IDENTIFY pinhookcert botpassword')
     owner.wait_for('NickServ')
     owner.send('PRIVMSG NickServ :CERT ADD ' + fingerprint)
     owner.wait_for('NickServ')
@@ -462,5 +467,5 @@ def test_sasl_external_logs_in_with_a_client_certificate(names, users, start_bot
                         ssl_keyfile=os.path.join(TLS_DIR, 'client.key'),
                         env={'SSL_CERT_FILE': os.path.join(TLS_DIR, 'ca.pem')})
     watcher.send('WHOIS ' + bot)
-    assert 'is logged in as' in watcher.wait_for(' 330 ')
-    assert 'logged in as {} with SASL EXTERNAL'.format(bot) in running.log()
+    assert 'pinhookcert :is logged in as' in watcher.wait_for(' 330 ')
+    assert 'logged in as pinhookcert with SASL EXTERNAL' in running.log()

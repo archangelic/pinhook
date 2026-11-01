@@ -88,7 +88,8 @@ sed -e 's/^        "127.0.0.1:6667":/        "127.0.0.1:6668":/' \
     -e '/^    sts:/,/preload:/ s/enabled: false/enabled: true/' \
     -e '/^    sts:/,/preload:/ s/port: 6697/port: 6698/' \
     ircd.yaml | sed -e 's/^        "127.0.0.1:6697":/        "127.0.0.1:6698":/' > tls/ircd.yaml
-(cd tls && { [ -f ircd.db ] || ../ergo initdb --conf ircd.yaml --quiet; })
+# its accounts start fresh each time, since a client certificate can belong to only one
+(cd tls && rm -f ircd.db && ../ergo initdb --conf ircd.yaml --quiet)
 
 ./ergo run --conf ircd.yaml > ergo.log 2>&1 &
 echo $! > ergo.pid
