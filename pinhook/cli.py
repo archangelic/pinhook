@@ -63,8 +63,20 @@ class Config(Schema):
         unknown = INCLUDE
 
 
-# ${NAME} is read from the environment, $${ is a literal ${
-ENV_VAR = re.compile(r'\$\$\{|\$\{([A-Za-z_][A-Za-z0-9_]*)\}')
+# ${NAME} is read from the environment and ${file:PATH} from a file, like a Docker or
+# Kubernetes secret. $${ is a literal ${
+ENV_VAR = re.compile(r'\$\$\{|\$\{(?:file:([^}]+)|([A-Za-z_][A-Za-z0-9_]*))\}')
+
+
+def read_secret_file(path, name):
+    # relative paths are beside the config. A file's last line break isn't part of it
+    path = os.path.join(os.path.dirname(name), os.path.expanduser(path))
+    try:
+        with open(path) as f:
+            return f.read().rstrip('\r\n')
+    except OSError as e:
+        raise click.ClickException("{} uses ${{file:{}}}, but it can't be read: {}".format(
+            name, path, e.strerror))
 
 
 def expand_env(value, name):
@@ -76,12 +88,14 @@ def expand_env(value, name):
         return value
 
     def replace(match):
-        if match.group(1) is None:
+        if match.group(1):
+            return read_secret_file(match.group(1), name)
+        if match.group(2) is None:
             return '${'
-        if match.group(1) not in os.environ:
+        if match.group(2) not in os.environ:
             raise click.ClickException("{} uses ${{{}}}, but that environment variable isn't set"
-                                       .format(name, match.group(1)))
-        return os.environ[match.group(1)]
+                                       .format(name, match.group(2)))
+        return os.environ[match.group(2)]
     return ENV_VAR.sub(replace, value)
 
 

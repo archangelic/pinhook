@@ -239,3 +239,23 @@ def test_check_stops_at_config_problems(tmp_path):
     result = check(path)
     assert result.exit_code == 1
     assert 'port: Not a valid integer.' in result.output
+
+
+def test_file_secrets_are_read_without_their_last_line_break(tmp_path):
+    (tmp_path / 'secrets').mkdir()
+    (tmp_path / 'secrets' / 'ns_pass').write_text('hunter2\n')
+    absolute = tmp_path / 'server_pass'
+    absolute.write_text('swordfish')
+    config = dict(BASE, ns_pass='${file:secrets/ns_pass}', server_pass='${file:%s}' % absolute)
+    result, bot = run_cli(tmp_path, config)
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.kwargs['ns_pass'] == 'hunter2'
+    assert bot.call_args.kwargs['server_pass'] == 'swordfish'
+
+
+def test_a_missing_file_secret_names_the_file(tmp_path):
+    result, bot = run_cli(tmp_path, dict(BASE, ns_pass='${file:/run/secrets/nope}'))
+    assert result.exit_code == 1
+    assert "uses ${file:/run/secrets/nope}, but it can't be read: No such file or directory" \
+        in result.output
+    bot.assert_not_called()
