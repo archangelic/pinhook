@@ -118,7 +118,9 @@ def read_conf(config, conf_format):
         elif config.name.endswith(('.yaml', '.yml')):
             conf_format = 'yaml'
         elif config.name.endswith(('.toml', '.tml')):
-            conf_format = 'toml'
+            raise click.ClickException(
+                '{} is TOML, which pinhook 2.0 no longer reads. Write the same settings to a '
+                'YAML or JSON file'.format(config.name))
         else:
             raise click.ClickException(
                 'Could not detect file format, please supply using --format option')
@@ -127,12 +129,13 @@ def read_conf(config, conf_format):
         to_json = json.loads(config.read())
         output = check_conf(schema, to_json, config.name)
     elif conf_format == 'yaml':
-        to_yaml = yaml.load(config.read(), Loader=yaml.FullLoader)
+        # safe_load, since the full loader can run code from the file
+        try:
+            to_yaml = yaml.safe_load(config.read())
+        except yaml.YAMLError as e:
+            raise click.ClickException("{} isn't valid YAML, or holds something configs don't "
+                                       "allow:\n{}".format(config.name, e))
         output = check_conf(schema, to_yaml, config.name)
-    elif conf_format == 'toml':
-        import tomllib
-        to_toml = tomllib.load(config)
-        output = check_conf(schema, to_toml, config.name)
     return output
 
 
@@ -156,7 +159,7 @@ def cli():
 
 @cli.command()
 @click.argument('config', type=click.File('rb'))
-@click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml', 'toml']))
+@click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml']))
 def run(config, conf_format):
     """Connect and run the bot that CONFIG describes."""
     config_file = config.name

@@ -35,16 +35,19 @@ def test_unknown_config_keys_are_passed_to_bot(tmp_path):
     assert bot.call_args.kwargs['ssl_requred'] is True
 
 
-def test_toml_config_loads(tmp_path):
-    result, bot = run_cli(tmp_path, (
-        'nickname = "pinbot"\n'
-        'server = "localhost"\n'
-        'channels = ["#test"]\n'
-        'bot_mode = false\n'
-    ), name='config.toml')
-    assert result.exit_code == 0, result.output
-    assert bot.call_args.kwargs['nickname'] == 'pinbot'
-    assert bot.call_args.kwargs['bot_mode'] is False
+def test_toml_configs_are_refused_with_what_to_do(tmp_path):
+    result, bot = run_cli(tmp_path, 'nickname = "pinbot"\n', name='config.toml')
+    assert result.exit_code != 0
+    assert 'is TOML, which pinhook 2.0 no longer reads' in result.output
+    bot.assert_not_called()
+
+
+def test_yaml_that_would_run_code_is_refused(tmp_path):
+    config = 'nickname: !!python/object/apply:os.getcwd []\nserver: x\nchannels: ["#t"]\n'
+    result, bot = run_cli(tmp_path, config, name='config.yaml')
+    assert result.exit_code == 1
+    assert "isn't valid YAML, or holds something configs don't allow" in result.output
+    bot.assert_not_called()
 
 
 def test_a_config_with_no_command_runs_the_bot_with_a_warning(tmp_path):
