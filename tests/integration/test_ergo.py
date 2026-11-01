@@ -3,11 +3,13 @@
 Each test runs the real pinhook command with a config file. See conftest.py for
 how to run them.
 """
+import hashlib
 import json
 import os
+import ssl
 import time
 
-from conftest import HOST, register
+from conftest import HOST, TLS_DIR, register
 
 KARMA = ("import pinhook.plugin\n\n\n"
          "@pinhook.plugin.command('!karma')\n"
@@ -427,3 +429,38 @@ def test_ops_add_and_remove_recipes_from_chat(tmp_path, names, users, start_bot)
     assert (tmp_path / 'bot' / 'recipes' / 'hug.yaml').exists()
     assert messages(mal.say('!recipe del hug', channel, bot)) == ['mallory: removed !hug']
     assert messages(mal.say('!hug', channel, bot)) == []
+
+
+def test_sts_moves_the_bot_to_tls_and_is_remembered(tmp_path, names, users, start_bot):
+    bot, channel = names
+    watcher = users('watcher', channel=channel, port=6668)
+    # the bot connects without TLS, and the server's STS policy sends it to 6698
+    start_bot(watcher, port=6668, env={'SSL_CERT_FILE': os.path.join(TLS_DIR, 'ca.pem')})
+    watcher.send('WHOIS ' + bot)
+    assert 'secure connection' in watcher.wait_for(' 671 ')
+    policies = json.loads((tmp_path / 'bot' / 'data' / 'sts.json').read_text())
+    assert policies[HOST]['port'] == 6698
+    assert policies[HOST]['expires'] > time.time()
+
+
+def test_sasl_external_logs_in_with_a_client_certificate(names, users, start_bot):
+    bot, channel = names
+    with open(os.path.join(TLS_DIR, 'client.pem')) as f:
+        fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(f.read())).hexdigest()
+    # the bot's account, with the client certificate added to it
+    owner = users(bot, port=6668)
+    owner.send('PRIVMSG NickServ :REGISTER botpassword')
+    owner.wait_for('NickServ')
+    owner.send('PRIVMSG NickServ :IDENTIFY {} botpassword'.format(bot))
+    owner.wait_for('NickServ')
+    owner.send('PRIVMSG NickServ :CERT ADD ' + fingerprint)
+    owner.wait_for('NickServ')
+    owner.close()
+    watcher = users('watcher', channel=channel, port=6668)
+    running = start_bot(watcher, port=6698, ssl_required=True,
+                        ssl_certfile=os.path.join(TLS_DIR, 'client.pem'),
+                        ssl_keyfile=os.path.join(TLS_DIR, 'client.key'),
+                        env={'SSL_CERT_FILE': os.path.join(TLS_DIR, 'ca.pem')})
+    watcher.send('WHOIS ' + bot)
+    assert 'is logged in as' in watcher.wait_for(' 330 ')
+    assert 'logged in as {} with SASL EXTERNAL'.format(bot) in running.log()

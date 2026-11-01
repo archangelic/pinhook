@@ -18,6 +18,8 @@ import time
 import pytest
 
 HOST = os.environ.get('PINHOOK_ERGO')
+# the second server ergo.sh starts, for STS and SASL EXTERNAL: 6668 plain, 6698 with TLS
+TLS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '.ergo', 'tls')
 PASSWORDS = {'malacct': 'correcthorse-mal', 'trollacct': 'correcthorse-troll'}
 
 
@@ -37,9 +39,9 @@ class NickTaken(Exception):
 class User:
     """Someone on the IRC server, talking over a plain socket."""
 
-    def __init__(self, nick, account=None):
+    def __init__(self, nick, account=None, port=6667):
         self.nick = nick
-        self.sock = socket.create_connection((HOST, 6667), timeout=10)
+        self.sock = socket.create_connection((HOST, port), timeout=10)
         self.buf = b''
         self.lines = []
         self.send('NICK ' + nick)
@@ -161,8 +163,8 @@ def names(request):
 def users():
     made = []
 
-    def make(nick, account=None, channel=None):
-        u = User(nick, account)
+    def make(nick, account=None, channel=None, port=6667):
+        u = User(nick, account, port)
         if channel:
             u.join(channel)
         made.append(u)
