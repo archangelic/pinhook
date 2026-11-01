@@ -91,8 +91,9 @@ async def reply(run, fields):
 @step('store', {'store': 'name', 'set': 'template', 'add': 'template', 'remove': 'template',
                 'clear': 'flag'}, one_of=({'set', 'add', 'remove', 'clear'},))
 async def store(run, fields):
-    """Keep something in the recipe's store, which lasts between restarts and reads back
-    as {store.key}: set it, add to a list, remove from one, or clear it."""
+    """Keep something in the recipes' store, which every recipe shares, lasts between
+    restarts and reads back as {store.key}: set it, add to a list, remove from one, or
+    clear it."""
     run.store_change(fields)
 
 

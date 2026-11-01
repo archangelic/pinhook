@@ -212,6 +212,28 @@ class Registry:
         for cls, instance in instances.items():
             self.instances[(plugin_name, cls.__qualname__)] = instance
 
+    def add_handlers(self, plugin_name, handlers):
+        """Add commands that don't come from a plugin file, like recipes, under plugin_name.
+        One whose name is taken is left out. Returns the problems, as text."""
+        problems, added = [], []
+        for handler in handlers:
+            other = self.owner(handler)
+            if other:
+                problems.append('{} {} is already a command of {}'.format(
+                    plugin_name, handler.label(self.prefixes[0]), other))
+                continue
+            self.commands[handler.name] = handler
+            added.append(handler)
+        self.plugins[plugin_name] = added
+        return problems
+
+    def remove_plugin(self, plugin_name):
+        """Take out the commands added under plugin_name with add_handlers, like recipes
+        before they're loaded again."""
+        for handler in self.plugins.pop(plugin_name, []):
+            if handler.kind == 'command' and self.commands.get(handler.name) is handler:
+                del self.commands[handler.name]
+
     @staticmethod
     def plugin_classes(module):
         # every Plugin class the file defines gets an instance, handlers or not

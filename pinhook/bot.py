@@ -21,6 +21,8 @@ from .access import Access
 from .context import Context, server_time, text_lines
 from .history import Entry, History
 from .output import OutputQueue
+from . import recipes
+from .recipes.engine import RECIPES, run_recipe
 from .registry import Handler, Registry, Switches
 from .store import PluginConfig, Store
 from .transport.base import Event, Outgoing, Source, Transport, is_channel
@@ -77,7 +79,7 @@ class Bot:
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
         'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
-        'history',
+        'history', 'recipe_dir',
         'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile',
     }
     log_levels = {
@@ -160,6 +162,8 @@ class Bot:
             log_file = '{}.log'.format(nickname)
             ban_file = '{}.bans.json'.format(nickname)
         self.plugin_dir = self.path(kwargs.get('plugin_dir', 'plugins'))
+        recipe_dir = kwargs.get('recipe_dir', 'recipes')
+        self.recipe_dir = self.path(recipe_dir) if recipe_dir else None
         self.data_dir = self.path(kwargs.get('data_dir', 'data'))
         self.log_file = self.path(kwargs.get('log_file') or log_file)
         ban_file = kwargs.get('ban_file', ban_file)
@@ -226,8 +230,33 @@ class Bot:
         # recent messages, in the channels the history option lists
         self.history = History(self.history_config, self.transport.casefold)
         self.registry.load(self.plugin_dir)
+        self.load_recipes()
         self.reset_timers()
         self.check_plugin_config()
+
+    def load_recipes(self):
+        """Load the recipes in recipe_dir as commands, replacing any loaded before. A recipe
+        that can't load, or whose name another command has, is logged and left out."""
+        self.registry.remove_plugin(RECIPES)
+        found, problems = recipes.load_recipes(self.recipe_dir)
+        handlers = [self.recipe_handler(recipe) for recipe in found.values()]
+        problems += self.registry.add_handlers(RECIPES, handlers)
+        for problem in problems:
+            self.logger.error("couldn't load a recipe: {}".format(problem))
+        self.recipes = {h.name: found[h.name] for h in self.registry.plugins[RECIPES]}
+        self.recipe_problems = problems
+        if found:
+            self.logger.info('loaded {} recipes from {}'.format(
+                len(self.recipes), self.recipe_dir))
+
+    def recipe_handler(self, recipe):
+        # a recipe is a command with one free-text argument, given to it as {arg}
+        async def run(ctx, arg=''):
+            await run_recipe(self, recipe, ctx, arg)
+        return Handler('command', recipe.name, RECIPES, run, help_text=recipe.help,
+                       ops=recipe.access == 'ops', restricted=recipe.access == 'restricted',
+                       native=True, params=[commands.Param(
+                           'arg', str, '', 'what the recipe is given, as {arg}')])
 
     def switches_path(self):
         # where !enable and !disable are saved
@@ -239,15 +268,22 @@ class Bot:
 
     def check_plugin_config(self):
         # a section for a plugin that isn't loaded is probably a typo
-        loaded = set(self.registry.plugins)
+        loaded = set(self.registry.plugins) - {RECIPES}
         sections = [('plugin_config', set(self.plugin_config) - {'shared'}),
-                    ('access.plugins', set(self.access.rules))]
+                    ('access.plugins', set(self.access.rules) - {RECIPES})]
         for setting, names in sections:
             for name in sorted(names - loaded):
                 close = difflib.get_close_matches(name, loaded, n=1)
                 hint = ", did you mean '{}'?".format(close[0]) if close else ''
                 self.logger.warning("{} has settings for '{}', but there's no plugin called "
                                     "that{}".format(setting, name, hint))
+        recipe_rule = self.access.rules.get(RECIPES)
+        for name in sorted(set(recipe_rule.commands) if recipe_rule else ()):
+            if name not in self.recipes:
+                close = difflib.get_close_matches(name, self.recipes, n=1)
+                hint = ", did you mean '{}'?".format(close[0]) if close else ''
+                self.logger.warning("access.recipes has settings for '{}', but there's no "
+                                    "recipe called that{}".format(name, hint))
         for name, rule in sorted(self.access.rules.items()):
             if name not in loaded:
                 continue
@@ -635,6 +671,7 @@ class Bot:
             self.logger.info('reloading plugins per request of {}'.format(nick))
             config_note = self.reload_plugin_config()
             self.registry.load(self.plugin_dir)
+            self.load_recipes()
             self.reset_timers()
             self.check_plugin_config()
             output = plugin.message('Plugins reloaded' + config_note)
@@ -1089,7 +1126,7 @@ class TwitchBot(Bot):
         'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'bot_dir', 'data_dir', 'plugin_config', 'address_by_nick',
-        'plugin_channels', 'access', 'history',
+        'plugin_channels', 'access', 'history', 'recipe_dir',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):

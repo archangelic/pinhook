@@ -53,6 +53,7 @@ class Config(Schema):
     # checked by the bot, which can say more about what's wrong
     access = fields.Dict(keys=fields.Str())
     history = fields.Dict(keys=fields.Str())
+    recipe_dir = fields.Str(allow_none=True)
 
     class Meta:
         unknown = INCLUDE

@@ -385,3 +385,33 @@ def test_history_keeps_both_sides_through_echo_message(names, users, start_bot):
     assert messages(mal.say('!say hello', channel, bot)) == ['hello']
     assert messages(mal.say('!recent', channel, bot)) == [
         'mallory:!say hello | *{}:hello | mallory:!recent'.format(bot)]
+
+
+QUOTES = '''
+from pinhook import command
+
+
+@command('quote')
+async def quote(ctx, topic: str = 'any'):
+    await ctx.reply('Blades in the Dark' if topic == 'games' else 'a quote')
+'''
+
+GAMENIGHT = '''version: 1
+help: pick tonight's game
+steps:
+  - command: 'quote games'
+    save: game
+  - store: nights
+    add: '{game}'
+  - reply: 'Tonight: {game}, night {store.nights|count}'
+'''
+
+
+def test_recipes_run_as_commands(tmp_path, names, users, start_bot):
+    bot, channel = names
+    (tmp_path / 'bot' / 'recipes').mkdir(parents=True)
+    (tmp_path / 'bot' / 'recipes' / 'gamenight.yaml').write_text(GAMENIGHT)
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'quotes': QUOTES})
+    assert messages(mal.say('!gamenight', channel, bot)) == ['Tonight: Blades in the Dark, night 1']
+    assert messages(mal.say('!gamenight', channel, bot)) == ['Tonight: Blades in the Dark, night 2']

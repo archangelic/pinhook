@@ -224,6 +224,8 @@ class TestBot(Bot):
     def __init__(self, plugin_dir='plugins', nickname='testbot', channels=('#test',), **options):
         options.setdefault('log_file', os.devnull)
         options.setdefault('ban_file', '')
+        # no recipes unless the test points at a folder of them
+        options.setdefault('recipe_dir', None)
         self.sent = []
         self.quit_message = None
         self._errors = _ErrorCatcher()

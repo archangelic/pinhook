@@ -11,6 +11,7 @@ import fnmatch
 import json
 import os
 
+from .recipes.engine import RECIPES
 from .store import write_json
 from .transport.base import CHANOP_MODES, VOICED_MODES, casefold
 
@@ -122,10 +123,10 @@ def parse_config(config):
     config = config or {}
     if not isinstance(config, dict):
         raise ValueError('access should be settings like {default: open, plugins: {...}}')
-    unknown = sorted(set(config) - {'default', 'groups', 'plugins'})
+    unknown = sorted(set(config) - {'default', 'groups', 'plugins', 'recipes'})
     if unknown:
         raise ValueError("access has settings pinhook doesn't know: {}. It takes default, "
-                         "groups and plugins".format(', '.join(unknown)))
+                         "groups, plugins and recipes".format(', '.join(unknown)))
     default = config.get('default', 'open')
     if default not in LEVELS:
         raise ValueError('access.default should be open, restricted or ops, not {!r}'.format(
@@ -146,6 +147,14 @@ def parse_config(config):
     if not isinstance(plugins, dict):
         raise ValueError('access.plugins should map plugin names to their settings')
     rules = {name: parse_rule(value, 'access.plugins.' + name) for name, value in plugins.items()}
+    # recipes are commands of their own pseudo plugin, so their settings sit under it
+    recipes = config.get('recipes') or {}
+    if not isinstance(recipes, dict):
+        raise ValueError('access.recipes should map recipe names to their settings')
+    if recipes:
+        rules[RECIPES] = Rule(commands={
+            name: parse_rule(value, 'access.recipes.' + name, commands=False)
+            for name, value in recipes.items()})
     return default, groups, rules
 
 
