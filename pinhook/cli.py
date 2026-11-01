@@ -260,7 +260,9 @@ def cli():
 @cli.command()
 @click.argument('config', type=click.File('rb'))
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml']))
-def run(config, conf_format):
+@click.option('--reload', is_flag=True,
+              help='Reload plugins and recipes when their files change, for development.')
+def run(config, conf_format, reload):
     """Connect and run the bot that CONFIG describes.
 
     Variables in secrets.env, beside CONFIG, are set first, for ${NAME} to read.
@@ -275,6 +277,7 @@ def run(config, conf_format):
         raise click.ClickException(str(e))
     bot.config_file = config_file
     bot.config_loader = functools.partial(load_conf_file, config_file, conf_format)
+    bot.reload_on_change = reload
     bot.start()
 
 

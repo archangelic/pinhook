@@ -102,6 +102,10 @@ class Bot:
     # set by the pinhook command, so !reload can read plugin_config from the config file again
     config_file = None
     config_loader = None
+    # set by pinhook run --reload, to reload plugins and recipes when their files change,
+    # checking every watch_interval seconds
+    reload_on_change = False
+    watch_interval = 1.0
 
     def __init__(self, channels, nickname, server, **kwargs):
         self.port = kwargs.get('port', 6667)
@@ -493,6 +497,8 @@ class Bot:
             timers = core.create_task(self.run_timers())
             if self.health_port:
                 checks = core.create_task(health.serve(self, self.health_host, self.health_port))
+            if self.reload_on_change:
+                watcher = core.create_task(self.watch_files())
             await self.quitting.wait()
             try:
                 # answers already on their way, then everything waiting to be sent
@@ -507,6 +513,8 @@ class Bot:
             timers.cancel()
             if self.health_port:
                 checks.cancel()
+            if self.reload_on_change:
+                watcher.cancel()
             self.registry.teardown()
             await self.transport.close(self.quit_reason)
 
@@ -596,6 +604,42 @@ class Bot:
             await self.run_handler(handler, Event('timer'), None, '', None)
         finally:
             self.timer_busy.discard(handler)
+
+    def reload(self):
+        """Load plugins and recipes again, with plugin_config and access from the config
+        file. Says what happened to the config, for !reload's reply."""
+        config_note = self.reload_plugin_config()
+        self.registry.load(self.plugin_dir)
+        self.load_recipes()
+        self.reset_timers()
+        self.check_plugin_config()
+        return config_note
+
+    def watched_files(self):
+        # what --reload watches: plugin and recipe files, by when each last changed
+        found = {}
+        for folder, ends in ((self.plugin_dir, ('.py',)), (self.recipe_dir, ('.yaml', '.yml'))):
+            if not folder or not os.path.isdir(folder):
+                continue
+            for name in os.listdir(folder):
+                path = os.path.join(folder, name)
+                if name.endswith(ends) and os.path.isfile(path):
+                    found[path] = os.stat(path).st_mtime_ns
+        return found
+
+    async def watch_files(self):
+        """For pinhook run --reload: reload when a plugin or recipe file is added, changed or
+        removed."""
+        seen = self.watched_files()
+        while True:
+            await asyncio.sleep(self.watch_interval)
+            now = self.watched_files()
+            if now != seen:
+                changed = sorted(set(now) ^ set(seen) | {p for p in now if now[p] != seen.get(p)})
+                self.logger.info('reloading plugins, since {} changed'.format(
+                    ', '.join(os.path.basename(p) for p in changed)))
+                self.reload()
+                seen = now
 
     async def run_timers(self):
         # checks at least once a second, so timers from a !reload start on time
@@ -735,12 +779,7 @@ class Bot:
             self.call_help(nick, op, arg, source, channel)
         elif cmd == 'reload' and op:
             self.logger.info('reloading plugins per request of {}'.format(nick))
-            config_note = self.reload_plugin_config()
-            self.registry.load(self.plugin_dir)
-            self.load_recipes()
-            self.reset_timers()
-            self.check_plugin_config()
-            output = plugin.message('Plugins reloaded' + config_note)
+            output = plugin.message('Plugins reloaded' + self.reload())
         elif cmd in ('enable', 'disable') and op:
             output = self.switch(cmd == 'enable', channel, nick, arg)
         elif cmd in ('op', 'deop', 'ban', 'unban') and op and not arg.split():
