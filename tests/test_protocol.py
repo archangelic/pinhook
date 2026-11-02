@@ -1,7 +1,7 @@
 """The bot's side of the IRC protocol, checked with raw lines in and out.
 
-These only look at IRC lines, so they check pinhook whichever IRC library it
-uses underneath, see wire.py.
+These only look at IRC lines, so they check the bot however its transport is
+written underneath, see wire.py.
 """
 import socket
 import ssl
@@ -30,23 +30,23 @@ def test_capabilities_are_asked_for_before_nick_and_user(tmp_path):
     assert lines(w.connect()) == ['CAP LS 302', 'NICK pinbot', 'USER pinbot 0 * pinbot']
 
 
-def test_account_tags_are_requested_and_negotiation_ends(tmp_path):
+def test_wanted_caps_are_requested_and_negotiation_ends(tmp_path):
     w = Wire(tmp_path)
     w.connect()
     # a * means the list carries on in another line
     w.receive(':irc.example.net CAP * LS * :multi-prefix away-notify')
     assert lines(w.sent()) == []
-    w.receive(':irc.example.net CAP * LS :account-tag chghost')
-    assert lines(w.sent()) == ['CAP REQ account-tag']
-    w.receive(':irc.example.net CAP * ACK :account-tag')
+    w.receive(':irc.example.net CAP * LS :account-tag chghost example.org/other')
+    assert lines(w.sent()) == ['CAP REQ account-tag multi-prefix away-notify chghost']
+    w.receive(':irc.example.net CAP * ACK :account-tag multi-prefix away-notify chghost')
     assert lines(w.sent()) == ['CAP END']
     assert w.bot.account_tag
 
 
-def test_negotiation_ends_when_server_lacks_account_tags(tmp_path):
+def test_negotiation_ends_when_server_offers_nothing_wanted(tmp_path):
     w = Wire(tmp_path)
     w.connect()
-    w.receive(':irc.example.net CAP * LS :multi-prefix')
+    w.receive(':irc.example.net CAP * LS :example.org/other')
     assert lines(w.sent()) == ['CAP END']
     assert not w.bot.account_tag
 
@@ -132,12 +132,16 @@ def test_failed_sasl_login_carries_on_and_says_why(tmp_path, caplog):
             'check sasl_account and sasl_password') in caplog.text
 
 
-@pytest.mark.parametrize('ls', ['account-tag', 'sasl=EXTERNAL'])
-def test_server_without_sasl_plain_is_reported(tmp_path, caplog, ls):
+@pytest.mark.parametrize('ls, offers', [
+    ('account-tag', "it doesn't offer SASL"),
+    ('sasl=EXTERNAL', 'it offers EXTERNAL'),
+])
+def test_server_without_a_usable_sasl_is_reported(tmp_path, caplog, ls, offers):
     w = sasl_bot(tmp_path, sasl_password='hunter2')
     w.receive(':irc.example.net CAP * LS :' + ls)
-    assert 'AUTHENTICATE PLAIN' not in lines(w.sent())
-    assert "this server doesn't offer SASL PLAIN logins" in caplog.text
+    assert not any(line.startswith('AUTHENTICATE') for line in lines(w.sent()))
+    assert ("the bot can't log in with SASL here, so it isn't logged in: {}, and the bot "
+            "has a password".format(offers)) in caplog.text
 
 
 def test_no_sasl_password_means_no_sasl(tmp_path):

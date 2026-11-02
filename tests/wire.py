@@ -1,32 +1,31 @@
-"""Drive a real Bot with raw IRC lines, through a fake server connection.
+"""Drive a real Bot with raw IRC lines, through its IRC transport.
 
 Tests written with Wire only see the IRC lines going in and out, so they don't
-depend on which IRC library pinhook uses underneath. Swapping that library
-(like irctokens in 2.0) means reimplementing this file, and the same tests then
-check the new version.
+depend on how the transport is written. Changing how it reads and writes the
+network means changing this file, and the same tests then check the new version.
 """
+import asyncio
 import os
 import re
 
+import irctokens
+
 from pinhook import bot as pinhook_bot
+from pinhook.testing import Driver
 
 SERVER = 'irc.example.net'
 
 
-class FakeSocket:
-    # stands in for the network: lines are queued for the bot, and what it sends is kept
+class FakeWriter:
 
     def __init__(self):
-        self.inbox = b''
         self.outbox = b''
 
-    def recv(self, size):
-        data, self.inbox = self.inbox[:size], self.inbox[size:]
-        return data
-
-    def send(self, data):
+    def write(self, data):
         self.outbox += data
-        return len(data)
+
+    async def drain(self):
+        pass
 
     def close(self):
         pass
@@ -77,27 +76,30 @@ class Wire:
             bot = cls(list(channels), nickname, SERVER, **options)
         self.bot = bot
         self.nickname = nickname
-        self.pauses = []
-        bot.pause = self.pauses.append
-        self.socket = FakeSocket()
+        self.driver = Driver(bot)
+        self.writer = FakeWriter()
         self.joined = set()
         self._read = 0
+
+    @property
+    def pauses(self):
+        """The waits for the rate limit the bot would have taken, in seconds."""
+        return self.driver.pauses
 
     # connecting
 
     def connect(self):
         """Connect to the fake server. The bot sends its first lines, like CAP LS."""
-        self.bot.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
-                         connect_factory=self.bot.cap_factory(lambda address: self.socket))
+        self.bot.transport.begin(self.writer)
         return self.sent()
 
     def connect_fails(self, error):
         """Try to connect, with the network failing with error. Returns what was raised."""
-        def factory(address):
+        async def open_connection(*args, **kwargs):
             raise error
+        self.bot.transport.open_connection = open_connection
         try:
-            self.bot.connect(SERVER, 6667, self.nickname, None, ircname=self.nickname,
-                             connect_factory=self.bot.cap_factory(factory))
+            asyncio.run(self.bot.transport.open())
         except Exception as e:
             return e
 
@@ -121,9 +123,8 @@ class Wire:
     def receive(self, *lines):
         """Send the bot raw lines from the server."""
         for line in lines:
-            self.socket.inbox += (line + '\r\n').encode()
-        while self.socket.inbox:
-            self.bot.connection.process_data()
+            self.bot.transport.handle(irctokens.tokenise(line))
+        self.driver.run()
 
     def join(self, nick, channel='#test', user=None, host='example.com'):
         self.receive(':{}!{}@{} JOIN {}'.format(nick, user or nick, host, channel))
@@ -151,7 +152,7 @@ class Wire:
 
     def sent(self):
         """Lines the bot has sent since the last call, as Sent objects."""
-        lines = self.socket.outbox.decode('utf-8', 'replace').split('\r\n')
+        lines = self.writer.outbox.decode('utf-8', 'replace').split('\r\n')
         new, self._read = lines[self._read:-1], len(lines) - 1
         return [Sent(line) for line in new]
 
@@ -159,7 +160,7 @@ class Wire:
 def lines(sent):
     """Sent lines as 'COMMAND param param', for asserts.
 
-    Where the : goes is up to the IRC library (CAP REQ account-tag and
+    Where the : goes is up to the transport (CAP REQ account-tag and
     CAP REQ :account-tag mean the same), so it's left out.
     """
     return [' '.join([s.raw_command] + s.raw_params) for s in sent]
