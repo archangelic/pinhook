@@ -1,36 +1,64 @@
-# Twitch bots
+# Twitch
 
-pinhook has a bot class made for Twitch chat:
+pinhook runs Twitch bots over Twitch's chat servers, with the same plugins, recipes and access rules as on IRC.
 
-```python
-from pinhook.bot import TwitchBot
+## Connect the bot account
 
-bot = TwitchBot(
-    nickname='ph-bot',
-    channel='#channel',
-    token='super-secret-oauth-token'
-)
-bot.start()
+Make an OAuth token for the bot's Twitch account, with the `chat:read` and `chat:edit` scopes. Then, beside the config:
+
+```bash
+pinhook connect twitch twitch.yaml
 ```
 
-`token` is the bot account's oauth token, without the `oauth:` part. TwitchBot always connects to `irc.chat.twitch.tv` over ssl, so the token isn't sent in plain text.
+It asks for the token without showing it, saves it as `TWITCH_TOKEN` in `secrets.env`, readable only by you, and says what the config still needs.
 
-Plugins work exactly the same as on IRC.
+## Configure it
 
-## Options
+Save this as `twitch.yaml`:
 
-TwitchBot takes fewer [options](options.md), since Twitch handles the server and ssl:
+```yaml
+platform: twitch
+nickname: 'gamebot'
+channels:
+  - '#yourchannel'
+token: '${TWITCH_TOKEN}'
+bot_dir: '.'
+```
 
-* [`port`](options.md#port) (default: `6697`)
-* [`ops`](options.md#ops)
-* [`banned_users`](options.md#banned_users)
-* [`ban_file`](options.md#ban_file)
-* [`plugin_dir`](options.md#plugin_dir)
-* [`cmd_prefix`](options.md#cmd_prefix)
-* [`use_prefix_for_plugins`](options.md#use_prefix_for_plugins)
-* [`disable_help`](options.md#disable_help)
-* [`bot_mode`](options.md#bot_mode)
-* [`log_level`](options.md#log_level)
-* [`log_file`](options.md#log_file)
+A Twitch bot joins one channel, and needs no `server`. A token pasted with `oauth:` in front works too.
 
-Twitch doesn't have services accounts, so use nicks in `ops` and `banned_users`. Twitch usernames can't be changed freely like IRC nicks can.
+## Run it
+
+```bash
+pinhook check twitch.yaml
+pinhook run twitch.yaml
+```
+
+## How Twitch differs
+
+| | On Twitch |
+| --- | --- |
+| Rate limits | 20 lines in any 30 seconds, and one a second in channels where the bot isn't a moderator, VIP or the broadcaster |
+| Message length | 500 characters. Longer replies are split |
+| Repeats | Twitch drops a line identical to the last one, so the bot adds an invisible character to every other repeat |
+| `ctx.account` | the sender's numeric user ID, which stays the same when they rename |
+| `ctx.is_chanop` | `True` for the broadcaster and moderators |
+| `ctx.action` | sent as `/me` |
+| `ctx.notice` | a notice to the channel is sent as a message. One to a person isn't sent, and the bot logs a warning once per plugin |
+| Private replies and `!help` | answered in the channel, addressed to the person |
+| Join and part events | late, and not for everyone in a big channel |
+
+`ctx.supports('notice')` and `ctx.supports('private')` are `False` on Twitch, so a plugin picks its own fallback.
+
+## Use badges for access
+
+Badges are [access groups](access-levels.md#use-groups): `broadcaster`, `moderator`, `vip` and `subscriber`, from each person's latest message. `chanops` is the broadcaster and moderators, and `voiced` adds VIPs.
+
+```yaml
+access:
+  plugins:
+    clips:
+      allow: [subscriber, vip]
+```
+
+Entries on Twitch are nicks and `$a:` user IDs. Hostmasks stop the bot with an error.
