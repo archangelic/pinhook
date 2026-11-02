@@ -37,5 +37,12 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         version=$(python -c "import re; print(re.search(r\"'(\d+\.\d+)\", open('pinhook/__version__.py').read()).group(1))")
-        mike deploy --push --update-aliases "$version" latest
-        mike set-default --push latest
+        # a pre-release's docs go up under its version, and latest stays on the last release
+        if [ "$PRERELEASE" = true ]; then
+          mike deploy --push "$version"
+        else
+          mike deploy --push --update-aliases "$version" latest
+          mike set-default --push latest
+        fi
+      env:
+        PRERELEASE: ${{ github.event.release.prerelease || false }}
