@@ -852,10 +852,17 @@ class Bot:
         return self.switch(False, channel, nick, arg)
 
     def op_command(self, nick, arg, channel):
+        added, problems = [], []
         for who in arg.split():
+            problem = access.entry_problem(self.transport, who)
+            if problem:
+                problems.append(problem)
+                continue
             if not self.nick_in(who, self.ops):
                 self.ops.append(who)
-        return '{}: {} added as op'.format(nick, arg)
+            added.append(who)
+        said = (['{} added as op'.format(' '.join(added))] if added else []) + problems
+        return '{}: {}'.format(nick, '. '.join(said))
 
     def deop_command(self, nick, arg, channel):
         for who in arg.split():

@@ -219,3 +219,11 @@ def test_a_reply_to_someone_names_them_on_every_line(tmp_path):
         "    await ctx.reply(['one', 'two\\nthree'], private=True)\n")
     w = twitch(tmp_path)
     assert texts(say(w, '!lines', 'ana')) == ['ana: one', 'ana: two', 'ana: three']
+
+
+def test_op_refuses_entries_twitch_doesnt_use(tmp_path):
+    w = twitch(tmp_path, ops=['streamer'])
+    assert texts(say(w, '!op *!*@host friend', 'streamer')) == [
+        "streamer: friend added as op. *!*@host is a hostmask, which twitch doesn't use. It "
+        "takes nicks and $a:accounts"]
+    assert w.bot.ops == ['streamer', 'friend']
