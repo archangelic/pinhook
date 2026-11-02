@@ -4,6 +4,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import difflib
+import functools
 import logging
 import os
 import shlex
@@ -1220,18 +1221,23 @@ class Bot:
         label = handler.label(self.cmd_prefix)
         if not self.enabled_for(handler, event.target):
             return 'refused', '{} is switched off here'.format(label)
-        ctx = Context(self, event, plugin=handler.plugin, addressed=addressed,
-                      command=handler.name if command else None, arg=arg, capture=capture)
+        # the context is only built for a handler that's going to run, or to say no
+        make_context = functools.partial(
+            Context, self, event, plugin=handler.plugin, addressed=addressed,
+            command=handler.name if command else None, arg=arg, capture=capture)
         # commands and what listens to people's messages go by access, timers and server events
         # don't, since nobody in particular starts them
         checked = command or handler.kind == 'listener' or handler.event in ('message', 'notice')
         if checked and event.source:
             channel = event.target if is_channel(event.target) else None
             if not self.access.allows(event.source, handler, channel):
-                self.logger.debug('{} has no access to {}'.format(ctx.nick, label))
+                nick = event.source.nick
+                self.logger.debug('{} has no access to {}'.format(nick, label))
                 if command and handler.denied_msg:
+                    ctx = make_context()
                     ctx.out('privmsg', ctx.channel, handler.denied_msg)
-                return 'refused', "{} doesn't have access to {}".format(ctx.nick, label)
+                return 'refused', "{} doesn't have access to {}".format(nick, label)
+        ctx = make_context()
         kwargs = {}
         if command and handler.native:
             try:
