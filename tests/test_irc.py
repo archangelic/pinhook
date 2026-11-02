@@ -177,6 +177,14 @@ def test_ctcp_version_is_answered_and_kept_from_plugins(tmp_path):
     assert lines(sent) == ['NOTICE mal \x01VERSION pinhook {}\x01'.format(__version__)]
 
 
+def test_a_flood_of_ctcps_gets_one_reply(tmp_path):
+    w = Wire(tmp_path, plugins={'echo': ECHO}).ready()
+    sent = []
+    for nick in ('mal', 'kim', 'ana'):
+        sent += w.message(nick, '\x01PING 123\x01', target='pinbot')
+    assert lines(sent) == ['NOTICE mal \x01PING 123\x01']
+
+
 def test_twitch_asks_for_its_capabilities_after_registering(tmp_path):
     bot = pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'),
                                 log_file=str(tmp_path / 't.log'))

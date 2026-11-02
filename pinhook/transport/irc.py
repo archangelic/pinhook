@@ -94,6 +94,7 @@ class IrcTransport(IrcIdentity):
     def reset(self):
         # what a connection learns, forgotten when it drops. A WHOIS still waiting won't
         # be answered now
+        self.last_ctcp = float('-inf')
         for waiting in getattr(self, 'whois_waiting', {}).values():
             if not waiting.done():
                 waiting.set_result(None)
@@ -973,7 +974,19 @@ class IrcTransport(IrcIdentity):
         self.emit(Event('message', self.source(line), line.params[0], line.params[1], 'notice',
                         dict(line.tags or {})))
 
+    # at most one CTCP reply this often. They skip the output queue, so a flood of CTCPs
+    # mustn't become a flood of replies that gets the bot disconnected
+    ctcp_interval = 2.0
+
     def answer_ctcp(self, nick, ctcp, rest):
+        if ctcp not in ('VERSION', 'PING'):
+            return
+        now = time.monotonic()
+        if now - self.last_ctcp < self.ctcp_interval:
+            self.logger.debug('not answering a CTCP {} from {}, one was answered just now'.format(
+                ctcp, nick))
+            return
+        self.last_ctcp = now
         if ctcp == 'VERSION':
             self.write('NOTICE', [nick, '\x01VERSION pinhook {}\x01'.format(__version__)])
         elif ctcp == 'PING':
