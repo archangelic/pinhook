@@ -95,10 +95,22 @@ class Context:
         self.msgid = self.tags.get('msgid')
         self.time = server_time(self.tags.get('time')) or datetime.now(timezone.utc)
         self.plugin = plugin
-        self.store = bot.store(plugin) if plugin else {}
+        # the plugin's store, opened when the handler first uses ctx.store
+        self._store = None
         self.config = bot.config_for(plugin) if plugin else PluginConfig('plugin')
         self.bot = BotInfo(bot)
         self.logger = bot.logger
+
+    @property
+    def store(self):
+        if self._store is None:
+            self._store = self._bot.store(self.plugin) if self.plugin else {}
+        return self._store
+
+    def save_store(self):
+        """Save the plugin's store, if the handler used it and changed something."""
+        if self._store is not None and self.plugin:
+            self._store.save_if_changed()
 
     def members(self, channel=None):
         """Who is in channel, this one by default, as Members: each one's nick, account,

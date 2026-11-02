@@ -1252,7 +1252,7 @@ class Bot:
             async with asyncio.timeout(timeout):
                 if handler.native:
                     output = await handler.func(ctx, **kwargs)
-                    ctx.store.save_if_changed()
+                    ctx.save_store()
                 else:
                     # 1.x plugins are plain functions, so each runs on a thread of its own
                     worker = self.workers.get(handler.plugin)
