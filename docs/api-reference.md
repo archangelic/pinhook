@@ -48,6 +48,12 @@ Generated from pinhook's own code and type hints. [The context](the-context.md),
 
 ## Bots
 
+::: pinhook.config.load_bot
+
+::: pinhook.config.ConfigError
+    options:
+      members: false
+
 ::: pinhook.bot.Bot
     options:
       members: [start, quit, commands, run_as, store]

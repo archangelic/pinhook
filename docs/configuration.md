@@ -94,6 +94,19 @@ pinhook check config.yaml
 
 `check` validates the config, loads the plugins and recipes, and lists every warning and error. It fails on errors. `pinhook check --strict` fails on warnings too, for CI.
 
+## Run it from Python
+
+`load_bot` makes the bot a config describes, the same way `pinhook run` does, with `secrets.env`, `${...}` and relative paths:
+
+```python
+from pinhook.config import load_bot
+
+bot = load_bot('gamebot/config.yaml')
+bot.start()
+```
+
+A mistake in the config raises `ConfigError`, saying what's wrong.
+
 ## Pick the platform
 
 `platform` is `irc` unless set. A Twitch bot sets `platform: twitch`. [Twitch](twitch.md) covers it.
