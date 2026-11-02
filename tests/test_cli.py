@@ -364,7 +364,7 @@ def test_platform_twitch_runs_a_twitch_bot(tmp_path, monkeypatch):
     result, bot = run_twitch(tmp_path, dict(TWITCH, token='${PH_TWITCH_TOKEN}', ops=['mal']))
     assert result.exit_code == 0, result.output
     assert bot.call_args.args == ('gamebot', '#mychannel', 'abc123def')
-    assert bot.call_args.kwargs == {'ops': ['mal']}
+    assert bot.call_args.kwargs == {'ops': ['mal'], 'config_dir': str(tmp_path)}
     bot.return_value.start.assert_called_once()
 
 
@@ -421,3 +421,25 @@ def test_a_bad_pinhook_variable_is_named_like_a_config_problem(tmp_path, monkeyp
     result, bot = run_cli(tmp_path, BASE)
     assert result.exit_code == 1
     assert 'health_port: Not a valid integer.' in result.output
+
+
+def test_relative_paths_start_from_the_config_file(tmp_path, monkeypatch):
+    (tmp_path / 'gamebot' / 'plugins').mkdir(parents=True)
+    (tmp_path / 'gamebot' / 'plugins' / 'hello.py').write_text(GOOD_PLUGIN)
+    (tmp_path / 'gamebot' / 'config.yaml').write_text(
+        "nickname: 'pinbot'\nserver: 'localhost'\nchannels: ['#test']\nbot_dir: '.'\n")
+    elsewhere = tmp_path / 'elsewhere'
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    result = CliRunner().invoke(cli, ['check', '../gamebot/config.yaml'])
+    assert result.exit_code == 0, result.output
+    assert 'Loaded 1 plugin with 1 command' in result.output
+
+
+def test_without_bot_dir_paths_start_from_the_config_file_too(tmp_path):
+    result, bot = run_cli(tmp_path, dict(BASE, plugin_dir='my_plugins'))
+    assert bot.call_args.kwargs['config_dir'] == str(tmp_path)
+    real = Bot(['#test'], 'pinbot', 'localhost', plugin_dir='my_plugins', log_file=os.devnull,
+               config_dir=str(tmp_path))
+    assert real.plugin_dir == str(tmp_path / 'my_plugins')
+    assert real.data_dir == str(tmp_path / 'data')

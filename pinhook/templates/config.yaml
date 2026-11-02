@@ -1,5 +1,5 @@
-# <name>'s settings. From this folder, check them with `pinhook check config.yaml`,
-# then start the bot with `pinhook run config.yaml`.
+# <name>'s settings. Check them with `pinhook check config.yaml`, then start the bot
+# with `pinhook run config.yaml`.
 
 nickname: '<name>'
 server: 'irc.libera.chat'
@@ -15,7 +15,7 @@ channels:
 ops:
   - '$a:youraccount'
 
-# plugins/, recipes/, data/ and logs/ are in the folder pinhook runs from
+# plugins/, recipes/, data/ and logs/ are in this folder
 bot_dir: '.'
 
 # Secrets never go in this file. Write ${NAME} here and NAME=value in secrets.env

@@ -84,9 +84,10 @@ class Config(Schema):
                                       'channels')
 
 
-def make_bot(config):
-    """The bot a checked config describes: a Bot, or a TwitchBot for platform: twitch."""
-    config = dict(config)
+def make_bot(config, config_file):
+    """The bot a checked config describes: a Bot, or a TwitchBot for platform: twitch. Its
+    relative paths start from the config file's folder."""
+    config = dict(config, config_dir=os.path.dirname(os.path.abspath(config_file)))
     if config.pop('platform', 'irc') == 'twitch':
         # Twitch's own tools give the token with oauth: in front, which TwitchBot adds
         token = config.pop('token').removeprefix('oauth:')
@@ -330,7 +331,7 @@ def run(config, conf_format, reload):
     load_secrets(config_file)
     config = read_conf(config, conf_format)
     try:
-        bot = make_bot(config)
+        bot = make_bot(config, config_file)
     except ValueError as e:
         # a bad log_level or ban file, say what's wrong without a traceback
         raise click.ClickException(str(e))
@@ -380,7 +381,7 @@ def check(config, conf_format):
     log.logger.addHandler(found)
     log.logger.removeHandler(log.streamhandler)
     try:
-        bot = make_bot(dict(settings, log_level='warning', log_file=os.devnull))
+        bot = make_bot(dict(settings, log_level='warning', log_file=os.devnull), name)
         bot.registry.teardown()
     except (ValueError, OSError) as e:
         raise click.ClickException(str(e))
@@ -422,8 +423,8 @@ def new_bot(name):
     """Make the folder NAME, with a config, an example plugin and its test."""
     made = scaffold.new_bot(name)
     click.echo('Made {}/ with {}'.format(name, ', '.join(made)))
-    click.echo('Edit {0}/config.yaml, then from {0}/ run: pinhook check config.yaml, then '
-               'pinhook run config.yaml'.format(name))
+    click.echo('Edit {0}/config.yaml, then run pinhook check {0}/config.yaml and pinhook run '
+               '{0}/config.yaml'.format(name))
 
 
 @new.command('plugin')

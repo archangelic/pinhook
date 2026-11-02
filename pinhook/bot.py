@@ -56,6 +56,9 @@ class Bot:
         server: the server to connect to.
         **kwargs: any of the bot's options, like port, ssl_required or ops. See
             https://archangelic.github.io/pinhook/latest/options/
+            config_dir is the folder relative paths are in, including bot_dir's: the
+            config file's folder when pinhook run starts the bot, and the working
+            directory by default.
 
     Call start() to connect and run until the bot quits.
     """
@@ -163,8 +166,12 @@ class Bot:
 
     def setup_paths(self, nickname, kwargs):
         # with bot_dir set, everything lives in one folder: plugins/, data/ and logs/.
-        # without it, files go where they did in 1.11
-        self.bot_dir = os.path.expanduser(kwargs['bot_dir']) if kwargs.get('bot_dir') else None
+        # without it, files go where they did in 1.11. Either way, relative paths start
+        # from config_dir, which isn't an option of its own
+        self.config_dir = kwargs.pop('config_dir', None) or ''
+        bot_dir = kwargs.get('bot_dir')
+        self.bot_dir = os.path.join(self.config_dir, os.path.expanduser(bot_dir)) if bot_dir \
+            else None
         if self.bot_dir:
             log_file = os.path.join('logs', '{}.log'.format(nickname))
             ban_file = os.path.join('data', '{}.bans.json'.format(nickname))
@@ -191,11 +198,9 @@ class Bot:
         self.history_config = kwargs.get('history')
 
     def path(self, path):
-        """Where a path from the options really is: relative ones are inside bot_dir, if set."""
-        path = os.path.expanduser(path)
-        if self.bot_dir and not os.path.isabs(path):
-            return os.path.join(self.bot_dir, path)
-        return path
+        """Where a path from the options really is: relative ones are inside bot_dir, if
+        set, or else config_dir."""
+        return os.path.join(self.bot_dir or self.config_dir, os.path.expanduser(path))
 
     def store(self, name):
         """The saved data for the plugin file called name, the same dict as its msg.store."""
