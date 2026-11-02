@@ -120,6 +120,9 @@ def test_who_members_whois_and_supports(bot):
     assert mal(bot, '!who') == [
         'nick=mal account=mal op=True chanop=False private=False addressed=False bot=testbot']
     assert bot.say('testbot: who', nick='ana')[0].endswith('addressed=True bot=testbot')
+    assert mal(bot, '!details') == [
+        'event=message kind=privmsg command=details text=!details user=mal host=example.com '
+        'bot=False msgid=None tags=account utc=True channels=#test']
     assert bot.say('!members', nick='ana') == ['3 here, me=ana']
     assert bot.say('!whois ana') == ['ana account=None']
     assert bot.say('!whois nobody') == ['nobody']

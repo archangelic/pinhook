@@ -663,6 +663,9 @@ def test_the_showcase_bot_runs_on_a_real_server(tmp_path, names, users, start_bo
     assert messages(mal.say('!types hi 3 1.5 yes b 7 the rest', channel, bot)) == [
         'hi 3 1.5 True b 7 the rest']
     assert messages(mal.say('!count', channel, bot)) == ['counted 1 with modern']
+    # a real server gives what TestBot can't: a message ID and server-time
+    details = messages(mal.say('!details', channel, bot))[0]
+    assert 'msgid=None' not in details and 'time' in details.split(' tags=')[1]
     assert messages(mal.say('!gamenight', channel, bot))[0].startswith(
         'Tonight: mallory rolled 2d6. ')
     assert messages(mal.say('!reload', channel, bot))[0].startswith('Plugins reloaded')

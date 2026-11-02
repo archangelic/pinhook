@@ -38,6 +38,8 @@ class Tour(Plugin):
     @command('count')
     async def count(self, ctx: Context) -> None:
         ctx.store['count'] = ctx.store.get('count', 0) + 1
+        # saved now, instead of after the handler finishes
+        ctx.save_store()
         await ctx.reply(f"counted {ctx.store['count']} with {ctx.config.get('word')}")
 
     @command('history')
@@ -74,6 +76,15 @@ class Tour(Plugin):
         await ctx.reply(f'nick={ctx.nick} account={ctx.account} op={ctx.is_op} '
                         f'chanop={ctx.is_chanop} private={ctx.is_private} '
                         f'addressed={ctx.addressed} bot={ctx.bot.nick}')
+
+    @command('details')
+    async def details(self, ctx: Context) -> None:
+        ctx.logger.info(f'!details ran for {ctx.nick}')
+        await ctx.reply(f'event={ctx.event} kind={ctx.kind} command={ctx.command} '
+                        f'text={ctx.text} user={ctx.user} host={ctx.host} bot={ctx.is_bot} '
+                        f'msgid={ctx.msgid} tags={",".join(sorted(ctx.tags))} '
+                        f'utc={ctx.time.utcoffset() is not None} '
+                        f'channels={",".join(ctx.bot.channels)}')
 
     @command('members')
     async def members(self, ctx: Context) -> None:
