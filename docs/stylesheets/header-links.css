@@ -1,0 +1,23 @@
+.md-header__links {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-inline: auto 1rem;
+  white-space: nowrap;
+}
+
+.md-header__links a {
+  color: var(--md-primary-bg-color);
+  font-size: 0.75rem;
+}
+
+.md-header__links a:hover,
+.md-header__links a:focus-visible {
+  color: var(--md-accent-fg-color);
+}
+
+@media screen and (max-width: 59.984375em) {
+  .md-header__links {
+    display: none;
+  }
+}

@@ -31,6 +31,7 @@ nav:
 
 theme:
   name: material
+  custom_dir: docs/overrides
   features:
     - navigation.sections
     - navigation.top
@@ -54,6 +55,13 @@ theme:
 extra:
   version:
     provider: mike
+  # Optional public URL for the vermilion project. When unset, the link stays hidden.
+  vermilion_url: ""
+  docs_url: https://archangelic.github.io/pinhook/
+  recipes_url: https://github.com/archangelic/pinhook/tree/master/examples
+
+extra_css:
+  - stylesheets/header-links.css
 
 plugins:
   # listed here because adding any plugin turns off the default search
