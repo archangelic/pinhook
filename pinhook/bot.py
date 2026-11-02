@@ -275,7 +275,7 @@ class Bot:
             self.logger.info('loaded {} recipes from {}'.format(
                 len(self.recipes), self.recipe_dir))
 
-    def recipe_command(self, nick, arg):
+    def recipe_command(self, nick, arg, channel=None):
         # !recipe add <name> <reply template>, and !recipe del <name>
         action, _, rest = arg.strip().partition(' ')
         name, _, template = rest.strip().partition(' ')
@@ -793,82 +793,97 @@ class Bot:
         return None
 
     def call_internal_commands(self, channel, nick, cmd, arg, op=None, source=None):
-        # cmd is the command's name, without the prefix. source is who sent it, if known
-        output = None
+        """Run a built-in command, and return its reply as a message() for the channel, or
+        None. cmd is its name without the prefix. source is who sent it, if known."""
         if op is None:
             op = self.nick_in(nick, self.ops)
-        if cmd == 'join' and op:
-            try:
-                self.transport.join(*arg.split())
-                self.logger.info('joining {} per request of {}'.format(arg, nick))
-                output = plugin.message('{}: joined {}'.format(nick, arg.split()[0]))
-            except Exception:
-                self.logger.exception('issue with join command: {}join #channel <channel key>'
-                                      .format(self.cmd_prefix))
-        elif cmd == 'quit' and op:
-            self.logger.info('quitting per request of {}'.format(nick))
-            if not arg:
-                arg = "See y'all later!"
-            self.quit(arg)
-        elif cmd == 'help' and not self.disable_help:
-            self.call_help(nick, op, arg, source, channel)
-        elif cmd == 'reload' and op:
-            self.logger.info('reloading plugins per request of {}'.format(nick))
-            output = plugin.message('Plugins reloaded' + self.reload())
-        elif cmd in ('enable', 'disable') and op:
-            output = self.switch(cmd == 'enable', channel, nick, arg)
-        elif cmd in ('op', 'deop', 'ban', 'unban') and op and not arg.split():
-            output = plugin.message('{}: usage: {}{} <nick>'.format(nick, self.cmd_prefix, cmd))
-        elif cmd == 'op' and op:
-            for o in arg.split():
-                if not self.nick_in(o, self.ops):
-                    self.ops.append(o)
-            output = plugin.message('{}: {} added as op'.format(nick, arg))
-        elif cmd == 'deop' and op:
-            for o in arg.split():
-                self.ops = [i for i in self.ops if not self.nick_in(i, [o])]
-            output = plugin.message('{}: {} removed as op'.format(nick, arg))
-        elif cmd == 'ops' and op:
-            output = plugin.message('current ops: {}'.format(', '.join(self.ops)))
-        elif cmd == 'ban' and op:
-            banned, problems = [], []
-            for target in arg.split():
-                problem = access.entry_problem(self.transport, target)
-                if problem:
-                    problems.append(problem)
-                    continue
-                entry, description = self.ban_entry(target)
-                if not self.nick_in(entry, self.banned_users):
-                    self.banned_users.append(entry)
-                banned.append(description)
-            if banned:
-                self.save_bans()
-            said = (['banned ' + ', '.join(banned)] if banned else []) + problems
-            output = plugin.message('{}: {}'.format(nick, '. '.join(said)))
-        elif cmd == 'unban' and op:
-            removed = []
-            for target in arg.split():
-                removed += self.remove_bans(target)
-            self.save_bans()
-            if not removed:
-                output = plugin.message('{}: no ban found for {}'.format(nick, arg))
-            else:
-                reply = '{}: removed ban on {}'.format(nick, ', '.join(removed))
-                from_config = [b for b in removed if self.nick_in(b, self.config_bans)]
-                if from_config:
-                    reply += (" ({} is in the config file, so it'll be back after a restart)"
-                              .format(', '.join(from_config)))
-                output = plugin.message(reply)
-        elif cmd == 'banlist' and op:
-            banned = ', '.join(self.banned_users) or 'nobody'
-            output = plugin.message('currently banned: {}'.format(banned))
-        elif cmd in ('allow', 'deny', 'revoke', 'access') and op:
-            output = plugin.message(self.access_command(cmd, nick, arg))
-        elif cmd == 'recipe' and op:
-            output = plugin.message(self.recipe_command(nick, arg))
-        if cmd in self.audited and op and output is not None:
+        if cmd == 'help':
+            if not self.disable_help:
+                self.call_help(nick, op, arg, source, channel)
+            return None
+        if cmd not in self.internal_commands or not op:
+            return None
+        if cmd in ('allow', 'deny', 'revoke', 'access'):
+            reply = self.access_command(cmd, nick, arg)
+        elif cmd in ('op', 'deop', 'ban', 'unban') and not arg.split():
+            reply = '{}: usage: {}{} <nick>'.format(nick, self.cmd_prefix, cmd)
+        else:
+            reply = getattr(self, cmd + '_command')(nick, arg, channel)
+        output = plugin.message(reply) if reply else None
+        if cmd in self.audited and output is not None:
             self.audit(nick, source, cmd, arg, output)
         return output
+
+    # the built-in commands for ops, run by name as <name>_command, each taking who ran it,
+    # what they said after it and where, and returning the reply
+
+    def join_command(self, nick, arg, channel):
+        if not arg.split():
+            return '{}: usage: {}join #channel [key]'.format(nick, self.cmd_prefix)
+        self.transport.join(*arg.split())
+        self.logger.info('joining {} per request of {}'.format(arg, nick))
+        return '{}: joined {}'.format(nick, arg.split()[0])
+
+    def quit_command(self, nick, arg, channel):
+        self.logger.info('quitting per request of {}'.format(nick))
+        self.quit(arg or "See y'all later!")
+
+    def reload_command(self, nick, arg, channel):
+        self.logger.info('reloading plugins per request of {}'.format(nick))
+        return 'Plugins reloaded' + self.reload()
+
+    def enable_command(self, nick, arg, channel):
+        return self.switch(True, channel, nick, arg)
+
+    def disable_command(self, nick, arg, channel):
+        return self.switch(False, channel, nick, arg)
+
+    def op_command(self, nick, arg, channel):
+        for who in arg.split():
+            if not self.nick_in(who, self.ops):
+                self.ops.append(who)
+        return '{}: {} added as op'.format(nick, arg)
+
+    def deop_command(self, nick, arg, channel):
+        for who in arg.split():
+            self.ops = [entry for entry in self.ops if not self.nick_in(entry, [who])]
+        return '{}: {} removed as op'.format(nick, arg)
+
+    def ops_command(self, nick, arg, channel):
+        return 'current ops: {}'.format(', '.join(self.ops))
+
+    def ban_command(self, nick, arg, channel):
+        banned, problems = [], []
+        for target in arg.split():
+            problem = access.entry_problem(self.transport, target)
+            if problem:
+                problems.append(problem)
+                continue
+            entry, description = self.ban_entry(target)
+            if not self.nick_in(entry, self.banned_users):
+                self.banned_users.append(entry)
+            banned.append(description)
+        if banned:
+            self.save_bans()
+        said = (['banned ' + ', '.join(banned)] if banned else []) + problems
+        return '{}: {}'.format(nick, '. '.join(said))
+
+    def unban_command(self, nick, arg, channel):
+        removed = []
+        for target in arg.split():
+            removed += self.remove_bans(target)
+        self.save_bans()
+        if not removed:
+            return '{}: no ban found for {}'.format(nick, arg)
+        reply = '{}: removed ban on {}'.format(nick, ', '.join(removed))
+        from_config = [b for b in removed if self.nick_in(b, self.config_bans)]
+        if from_config:
+            reply += (" ({} is in the config file, so it'll be back after a restart)"
+                      .format(', '.join(from_config)))
+        return reply
+
+    def banlist_command(self, nick, arg, channel):
+        return 'currently banned: {}'.format(', '.join(self.banned_users) or 'nobody')
 
     # the commands that change who can do what, logged as audit lines
     audited = {'op', 'deop', 'ban', 'unban', 'allow', 'deny', 'revoke', 'enable', 'disable',
@@ -1139,11 +1154,11 @@ class Bot:
         verb = 'enable' if on else 'disable'
         scope_ok = len(args) < 2 or args[1] == 'all' or is_channel(args[1])
         if not args or len(args) > 2 or not scope_ok:
-            return plugin.message('{}: usage: {}{} <plugin> [all | #channel]'.format(
-                nick, self.cmd_prefix, verb))
+            return '{}: usage: {}{} <plugin> [all | #channel]'.format(
+                nick, self.cmd_prefix, verb)
         name = self.canonical_name(args[0])
         if name is None:
-            return plugin.message("{}: '{}' not found".format(nick, args[0]))
+            return "{}: '{}' not found".format(nick, args[0])
         where = args[1] if len(args) == 2 else channel
         target = where if is_channel(where) else None
         place = 'in ' + target if target else 'everywhere'
@@ -1153,9 +1168,9 @@ class Bot:
         else:
             already = self.switches.name_on(name, target) == on
         if already:
-            return plugin.message("{}: '{}' is already {}d {}".format(nick, args[0], verb, place))
+            return "{}: '{}' is already {}d {}".format(nick, args[0], verb, place)
         self.switches.set(name, on, target)
-        return plugin.message("{}: '{}' {}d {}".format(nick, args[0], verb, place))
+        return "{}: '{}' {}d {}".format(nick, args[0], verb, place)
 
     def enabled_for(self, handler, target):
         channel = target if is_channel(target) else None
