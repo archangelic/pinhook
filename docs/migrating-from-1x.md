@@ -24,7 +24,7 @@ pinhook check config.yaml
 | `@register` and `@ops` are removed | `@command('!x')`, and `@command('!x', ops=True)` |
 | `use_prefix_for_plugins` is retired | commands answer to `cmd_prefix`. A 1.x command written without a prefix, like `@command('roll')`, needs it now: `!roll` |
 | two plugins with the same command is a load error naming both | rename one |
-| built-in command names are reserved | a plugin command called `help`, `ban` or another built-in's name doesn't load |
+| built-in command names are reserved | a plugin command called `ban` or another built-in's name doesn't load. `help` is free once `disable_help` is on |
 | plugins import as `pinhook_plugins.<bot>.<name>` | a plugin that imports another by `pinhook_plugins.<name>` uses the new name |
 | `hide=True` hides a command from ops too | take `hide=True` off commands ops look for in `!help` |
 | each 1.x plugin runs on a thread of its own, one call at a time | a plugin that blocks holds up only its own calls, not the bot. State shared between plugins needs a lock |
@@ -81,7 +81,7 @@ A 1.x bot that subclasses `Bot` reaches into the `irc` library, which 2.0 doesn'
 | 1.x | 2.0 |
 | --- | --- |
 | `def on_join(self, c, e):` and the other `on_*` methods | a plugin with `@on('join')`, and the other [events](events.md) |
-| overriding `call_help` to answer `!help` yourself | `disable_help: true`, then a listener or command answers it |
+| overriding `call_help` to answer `!help` yourself | `disable_help: true`, then a plugin's own `!help` command, or a listener, answers it |
 | `bot.connection.privmsg(target, text)` from another thread, like a web hook | `bot.send_message('privmsg', target, text)`, which is safe from any thread |
 | settings kept on the subclass, like `self.modteam`, read as `msg.bot.modteam` | a [`plugin_config`](configuration.md#give-plugins-their-settings) `shared` section, read as `msg.config.shared['modteam']` |
 

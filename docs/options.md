@@ -54,7 +54,7 @@ A nick that's taken gets `_` added, and the bot takes its own nick back when it 
 | --- | --- | --- |
 | `cmd_prefix` | `!` | the prefix for every command, or a list of them: `['!', '.']` |
 | `address_by_nick` | `true` | commands also work after the bot's nick: `gamebot: roll`, `gamebot, roll` or `@gamebot roll` |
-| `disable_help` | `false` | turn off `!help` |
+| `disable_help` | `false` | turn off the built-in `!help`, so a plugin's own `!help` command answers instead |
 | `plugin_config` | none | settings for plugins: a section per plugin file, and `shared` |
 | `plugin_channels` | none | keep a plugin, command or listener to some channels: `{weather: ['#outside']}` |
 | `history` | off | keep recent messages for `ctx.history()`: `{channels: ['#games'], size: 20, minutes: 10}` |

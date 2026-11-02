@@ -9,7 +9,7 @@ Every bot has these. They use the bot's [`cmd_prefix`](options.md), `!` by defau
 | `!help` | lists the commands this person can run. On IRC it answers in a private message, packed into as few lines as fit |
 | `!help <command>` | the command's help, its usage line and its arguments |
 
-[`disable_help`](options.md) turns `!help` off.
+[`disable_help`](options.md#commands-and-plugins) turns the built-in `!help` off, and frees its name for a plugin's own `!help` command. The other names stay reserved.
 
 ## For ops
 

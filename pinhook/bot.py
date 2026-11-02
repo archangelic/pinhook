@@ -266,7 +266,10 @@ class Bot:
         self.switches = Switches(self.plugin_channels, self.switches_path(),
                                  self.transport.casefold)
         # !help isn't listed with the rest, it's shown to everyone
-        self.registry = Registry(self.bot_nick, self.prefixes, self.builtins, self.logger)
+        # the names no plugin or recipe can take: every built-in, except !help when it's
+        # off, so a plugin can answer !help itself
+        self.reserved = self.builtins - {'help'} if self.disable_help else self.builtins
+        self.registry = Registry(self.bot_nick, self.prefixes, self.reserved, self.logger)
         # who can use what, from the access config and !allow and !deny
         self.access = Access(self, self.access_config, self.access_path())
         # recent messages, in the channels the history option lists
@@ -312,7 +315,7 @@ class Bot:
     def add_recipe(self, nick, name, template):
         if not self.recipe_dir:
             return "{}: this bot has no recipe_dir, so there's nowhere to save it".format(nick)
-        if self.registry.find(name, addressed=True) or name in self.builtins:
+        if self.registry.find(name, addressed=True) or name in self.reserved:
             return '{}: {} is already a command'.format(nick, name)
         data = {'version': recipes.loader.VERSION, 'name': name,
                 'help': 'added by {}'.format(nick), 'steps': [{'reply': template}]}
