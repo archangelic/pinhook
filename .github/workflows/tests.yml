@@ -79,3 +79,16 @@ jobs:
     - name: Show Ergo's log
       if: failure()
       run: cat .ergo/ergo.log
+
+  image:
+
+    runs-on: ubuntu-26.04
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Build the image
+      run: docker build -t pinhook:test .
+    - name: Start an Ergo IRC server
+      run: tests/integration/ergo.sh
+    - name: Run the image against Ergo
+      run: tests/deploy/image.sh pinhook:test
