@@ -13,6 +13,8 @@ import time
 import urllib.error
 import urllib.request
 
+import yaml
+
 from conftest import HOST, TLS_DIR, NickTaken, register
 
 KARMA = ("import pinhook.plugin\n\n\n"
@@ -651,8 +653,10 @@ def test_the_showcase_bot_runs_on_a_real_server(tmp_path, names, users, start_bo
         shutil.copytree(os.path.join(showcase, folder), tmp_path / 'bot' / folder)
     bot, channel = names
     mal = users('mallory', channel=channel)
-    start_bot(mal, ops=['mallory'],
-              plugin_config={'legacy_tour': {'word': 'legacy'}, 'modern_tour': {'word': 'modern'}})
+    with open(os.path.join(showcase, 'config.yaml')) as f:
+        plugin_config = yaml.safe_load(f)['plugin_config']
+    plugin_config['shared']['channel'] = channel
+    start_bot(mal, ops=['mallory'], plugin_config=plugin_config)
     assert messages(mal.say('!legacy', channel, bot)) == ['hello mallory from 1.x']
     assert messages(mal.say('ping legacy', channel, bot)) == ['pong from a 1.x listener']
     assert messages(mal.say('!r 2 20', channel, bot)) == ['mallory rolled 2d20']
