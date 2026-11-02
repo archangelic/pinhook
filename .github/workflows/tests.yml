@@ -86,6 +86,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v7
+    # both platforms the release publishes, without pushing
+    - uses: docker/setup-qemu-action@v4
+    - uses: docker/setup-buildx-action@v4
+    - name: Build the image for amd64 and arm64
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
     - name: Build the image
       run: docker build -t pinhook:test .
     - name: Start an Ergo IRC server
