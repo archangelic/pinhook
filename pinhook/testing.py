@@ -131,6 +131,7 @@ class FakeTransport(IrcIdentity):
     # stands in for the network and records what the bot sends
     name = 'fake'
     limits = Limits()
+    sasl_logged_in = False
 
     def __init__(self, bot, nickname):
         self.bot = bot
@@ -194,6 +195,12 @@ class FakeTransport(IrcIdentity):
 
     def typing(self, target, state):
         pass
+
+    def is_me(self, nick):
+        return self.casefold(nick) == self.casefold(self.nick)
+
+    def exempt(self, target):
+        return False
 
     def casefold(self, name):
         return casefold(name)

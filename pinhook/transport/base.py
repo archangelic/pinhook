@@ -183,6 +183,18 @@ class Transport(Protocol):
 
     def casefold(self, name: str) -> str: ...
 
+    def is_me(self, nick: str) -> bool:
+        """True if nick is the bot's own nick right now."""
+        ...
+
+    def exempt(self, target: str) -> bool:
+        """True if messages to target skip the per-target rate limit, like a Twitch
+        channel where the bot is a moderator."""
+        ...
+
+    # True once the bot has logged in to its account with SASL
+    sasl_logged_in: bool
+
     # who someone is on this platform, for ops, bans and access lists. The core keeps
     # the rules, and asks the transport these
     entry_kinds: frozenset[str]

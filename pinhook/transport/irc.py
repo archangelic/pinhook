@@ -333,6 +333,10 @@ class IrcTransport(IrcIdentity):
     def is_me(self, nick):
         return self.casefold(nick) == self.casefold(self.nick)
 
+    def exempt(self, target):
+        # IRC servers have one rate limit for everything
+        return False
+
     # lines from the server
 
     handlers = {

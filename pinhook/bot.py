@@ -515,7 +515,7 @@ class Bot:
         self.quitting = asyncio.Event()
         self.output = OutputQueue(self.send_out, self.transport.limits, self.logger,
                                   clock=lambda: self.clock(), sleep=lambda s: self.pause(s),
-                                  exempt=getattr(self.transport, 'exempt', None))
+                                  exempt=self.transport.exempt)
 
     def start(self):
         """Connect, and run until the bot quits."""
@@ -586,7 +586,7 @@ class Bot:
     @property
     def sasl_logged_in(self):
         """True once the bot has logged in to its account with SASL."""
-        return getattr(self.transport, 'sasl_logged_in', False)
+        return self.transport.sasl_logged_in
 
     async def read_events(self):
         async for event in self.transport.events():
@@ -1047,12 +1047,12 @@ class Bot:
     def ignores(self, source, log=False):
         """True if the bot ignores this person: they're banned, they're the bot, or
         require_account is on and they aren't logged in."""
-        nick, fold = source.nick, self.transport.casefold
+        nick = source.nick
         if access.matches_any(self.transport, self.banned_users, source):
             if log:
                 self.logger.debug('ignoring banned user {}'.format(nick))
             return True
-        if fold(nick) == fold(self.transport.nick):
+        if self.transport.is_me(nick):
             return True
         if self.require_account and not source.account:
             if log:
@@ -1087,8 +1087,7 @@ class Bot:
                 event.tags.get('msgid'), own))
 
     async def process_event(self, event):
-        if self.transport.casefold(event.source.nick) == self.transport.casefold(
-                self.transport.nick):
+        if self.transport.is_me(event.source.nick):
             # the bot's own message, echoed back by the server
             self.remember_message(event, own=True)
             return
