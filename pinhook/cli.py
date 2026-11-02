@@ -21,9 +21,8 @@ class Pinhook(click.Group):
 
     def parse_args(self, ctx, args):
         if args and args[0] not in self.commands and not args[0].startswith('-'):
-            click.echo("warning: 'pinhook {0}' is shorthand for 'pinhook run {0}', and the "
-                       "shorthand will be deprecated in a future version. Use 'pinhook run {0}'"
-                       .format(args[0]), err=True)
+            warn("'pinhook {0}' is shorthand for 'pinhook run {0}', and the shorthand will "
+                 "be deprecated in a future version. Use 'pinhook run {0}'".format(args[0]))
             args = ['run'] + list(args)
         return super().parse_args(ctx, args)
 
@@ -108,7 +107,7 @@ def check(config, conf_format, strict):
     for text in errors:
         click.echo('error: ' + text, err=True)
     for text in warnings:
-        click.echo('warning: ' + text, err=True)
+        warn(text)
     plugins = [p for p in bot.registry.plugins if p != RECIPES]
     commands = sum(1 for p in plugins for h in bot.registry.plugins[p] if h.kind == 'command')
     loaded = '{} with {}, and {}'.format(

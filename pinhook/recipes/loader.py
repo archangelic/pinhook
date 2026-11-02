@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 import yaml
 
+from ..api import NAME as COMMAND_NAME
 from .steps import NAME, STEPS
 from .templates import Template, TemplateError
 
@@ -25,7 +26,7 @@ VERSION = 1
 LEVELS = ('open', 'restricted', 'ops')
 TOP_LEVEL = {'version', 'name', 'help', 'access', 'steps'}
 # a recipe's name is a command name, written without a prefix
-RECIPE_NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]*$')
+RECIPE_NAME = COMMAND_NAME
 # when: sorted.category is bug, or arg is not ''
 CONDITION = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_.-]*)\s+(is not|is)\s+(.*?)\s*$')
 # what every recipe can read, before any step saves anything

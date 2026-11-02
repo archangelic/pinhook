@@ -1066,9 +1066,10 @@ class Bot:
             return
         await self.run_event_handlers(event)
 
-    async def run_event_handlers(self, event):
+    async def run_event_handlers(self, event, name=None):
+        # the @on handlers for the event, or for name, like 'notice' for a notice message
         await asyncio.gather(*(self.run_handler(h, event, None, '')
-                               for h in self.registry.events.get(event.type, [])))
+                               for h in self.registry.events.get(name or event.type, [])))
 
     async def send_out(self, message):
         # the output queue sends through here. Where the server doesn't echo the bot's
@@ -1097,8 +1098,7 @@ class Bot:
         nick = event.source.nick
         if event.kind == 'notice':
             # notices never run commands or 1.x listeners, a bot shouldn't answer one by itself
-            await asyncio.gather(*(self.run_handler(h, event, None, '')
-                                   for h in self.registry.events.get('notice', [])))
+            await self.run_event_handlers(event, 'notice')
             return
         op = self.is_op(event.source)
         text = event.text
@@ -1107,9 +1107,8 @@ class Bot:
         # actions only reach listeners, a /me is never a command
         word, _, rest = body.partition(' ') if event.kind != 'action' else ('', '', '')
         arg = rest.strip()
-        self.logger.debug(
-            'Message info: channel: {}, nick: {}, cmd: {}, text: {}'.format(chan, nick, word, text)
-        )
+        self.logger.debug('Message info: channel: %s, nick: %s, cmd: %s, text: %s',
+                          chan, nick, word, text)
         name = None
         if word:
             # "pinhook: reload" runs a built-in command without its prefix too
@@ -1238,7 +1237,7 @@ class Bot:
             channel = event.target if is_channel(event.target) else None
             if not self.access.allows(event.source, handler, channel):
                 nick = event.source.nick
-                self.logger.debug('{} has no access to {}'.format(nick, label))
+                self.logger.debug('%s has no access to %s', nick, label)
                 if command and handler.denied_msg:
                     ctx = make_context()
                     ctx.out('privmsg', ctx.channel, handler.denied_msg)
@@ -1258,10 +1257,10 @@ class Bot:
             # one run at a time per person, so spamming a slow command can't pile them up
             key = (self.transport.casefold(ctx.nick), handler.name)
             if key in self.running:
-                self.logger.debug('{} is still running for {}, ignoring'.format(label, ctx.nick))
+                self.logger.debug('%s is still running for %s, ignoring', label, ctx.nick)
                 return 'busy', '{} is still running for {}'.format(label, ctx.nick)
             self.running.add(key)
-        self.logger.debug('running {} {}'.format(handler.kind, label))
+        self.logger.debug('running %s %s', handler.kind, label)
         timeout = handler.timeout or self.handler_timeout
         try:
             async with asyncio.timeout(timeout):
