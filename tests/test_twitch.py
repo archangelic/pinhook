@@ -208,3 +208,14 @@ def test_accounts_are_user_ids_and_survive_a_rename(tmp_path):
     w.receive(':trollagain!trollagain@trollagain.tmi.twitch.tv PART #chan')
     assert say(w, '!roles', 'trollagain', user_id='666') == []
     assert texts(say(w, '!roles', 'viewer', user_id='777')) == ['chanop=False']
+
+
+def test_a_reply_to_someone_names_them_on_every_line(tmp_path):
+    (tmp_path / 'plugins').mkdir(exist_ok=True)
+    (tmp_path / 'plugins' / 'lines.py').write_text(
+        "from pinhook import command\n\n\n"
+        "@command('lines')\n"
+        "async def lines(ctx):\n"
+        "    await ctx.reply(['one', 'two\\nthree'], private=True)\n")
+    w = twitch(tmp_path)
+    assert texts(say(w, '!lines', 'ana')) == ['ana: one', 'ana: two', 'ana: three']

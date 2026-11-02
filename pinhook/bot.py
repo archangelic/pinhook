@@ -686,14 +686,15 @@ class Bot:
             self.logger.info('joining channel {}'.format(channel.split()[0]))
             self.transport.join(*channel.split())
 
-    def send_message(self, kind, target, text, tags=None):
+    def send_message(self, kind, target, text, tags=None, prefix=''):
         """Queue a message to send. Safe to call from a plugin's thread."""
-        self.in_loop(self.output.put, Outgoing(kind, target, text, tags=dict(tags or {})))
+        self.in_loop(self.output.put, Outgoing(kind, target, text, prefix, dict(tags or {})))
 
-    def send_text(self, kind, target, text, tags=None):
-        """Queue text to send, a message per line. text can be a list of lines too."""
+    def send_text(self, kind, target, text, tags=None, prefix=''):
+        """Queue text to send, a message per line, each starting with prefix. text can be a
+        list of lines too."""
         for line in text_lines(text):
-            self.send_message(kind, target, line, tags)
+            self.send_message(kind, target, line, tags, prefix)
 
     def call_help(self, nick, op, arg='', source=None, channel=None):
         # names only, packed into as few messages as fit, and !help <command> for the rest.

@@ -145,7 +145,7 @@ class Context:
                 can show with the channel it's about.
         """
         target = self.where(self.channel)
-        tags = {}
+        tags, prefix = {}, ''
         if not self.supports('private'):
             # a network with no private messages from bots, like Twitch, gets it in the
             # channel, addressed to them
@@ -158,15 +158,16 @@ class Context:
             if self.msgid and self.supports('reply'):
                 tags['+reply'] = self.msgid
             else:
-                text = '{}: {}'.format(self.nick, text)
-        self.out('privmsg', target, text, tags)
+                # every line, split ones included, starts with who it's for
+                prefix = '{}: '.format(self.nick)
+        self.out('privmsg', target, text, tags, prefix)
 
-    def out(self, kind, target, text, tags=None):
+    def out(self, kind, target, text, tags=None, prefix=''):
         # everything a handler says goes through here, so capture catches all of it
         if self._capture is not None:
-            self._capture.extend(text_lines(text))
+            self._capture.extend(prefix + line for line in text_lines(text))
         else:
-            self._bot.send_text(kind, target, text, tags)
+            self._bot.send_text(kind, target, text, tags, prefix)
 
     @contextlib.asynccontextmanager
     async def typing(self):
