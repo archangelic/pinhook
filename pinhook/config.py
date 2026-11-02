@@ -116,11 +116,31 @@ ENV_VAR = re.compile(r'\$\$\{|\$\{(?:file:([^}]+)|([A-Za-z_][A-Za-z0-9_]*))\}')
 ENV_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
 
+def secrets_path(config_name):
+    """Where secrets.env is for a config: beside it."""
+    return os.path.join(os.path.dirname(os.path.abspath(config_name)), 'secrets.env')
+
+
+def parse_secret_line(line):
+    """(NAME, value) from a secrets.env line like NAME=value or export NAME="value", with
+    NAME '' for a blank line or a comment, and None if it isn't one of those."""
+    line = line.strip()
+    if not line or line.startswith('#'):
+        return '', ''
+    key, equals, value = line.removeprefix('export ').partition('=')
+    key, value = key.strip(), value.strip()
+    if not equals or not ENV_NAME.match(key):
+        return None
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
+        value = value[1:-1]
+    return key, value
+
+
 def load_secrets(config_name):
     """Set the variables in secrets.env, beside the config, for ${NAME} to read. One already
     in the environment wins, so a service manager or container can supply it instead.
     Returns warnings about the file, as text."""
-    path = os.path.join(os.path.dirname(config_name), 'secrets.env')
+    path = secrets_path(config_name)
     if not os.path.isfile(path):
         return []
     found = []
@@ -128,19 +148,12 @@ def load_secrets(config_name):
         found.append('other users can read {0}. Make it yours only: chmod 600 {0}'.format(path))
     with open(path) as f:
         for number, line in enumerate(f, 1):
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            if line.startswith('export '):
-                line = line[len('export '):].lstrip()
-            key, equals, value = line.partition('=')
-            key, value = key.strip(), value.strip()
+            parsed = parse_secret_line(line)
             # the line itself isn't shown, since it holds a secret
-            if not equals or not ENV_NAME.match(key):
+            if parsed is None:
                 raise ConfigError('{} line {} should be NAME=value'.format(path, number))
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in '"\'':
-                value = value[1:-1]
-            os.environ.setdefault(key, value)
+            if parsed[0]:
+                os.environ.setdefault(*parsed)
     return found
 
 

@@ -9,6 +9,8 @@ import sys
 import click
 import yaml
 
+from .config import parse_secret_line, secrets_path
+
 # what each platform needs, and the variable it's kept in
 PLATFORMS = {'twitch': 'TWITCH_TOKEN'}
 
@@ -20,7 +22,7 @@ def save_secret(path, name, value):
     if os.path.exists(path):
         with open(path) as f:
             lines = [line for line in f.read().splitlines()
-                     if line.strip().removeprefix('export ').partition('=')[0].strip() != name]
+                     if (parse_secret_line(line) or ('',))[0] != name]
     lines.append('{}={}'.format(name, value))
     # created owner-only, so the secret is never readable by anyone else, even briefly
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -56,7 +58,7 @@ def connect_twitch(config_path):
     token = token.strip().removeprefix('oauth:')
     if not token:
         raise click.ClickException('no token was given, so nothing was saved')
-    path = os.path.join(os.path.dirname(os.path.abspath(config_path)), 'secrets.env')
+    path = secrets_path(config_path)
     save_secret(path, PLATFORMS['twitch'], token)
     click.echo('Saved TWITCH_TOKEN in {}, which only you can read'.format(path))
     missing = config_uses(config_path, PLATFORMS['twitch'])
