@@ -33,6 +33,13 @@ from .transport.identity import entry_kind
 from .transport.irc import IrcTransport, TwitchTransport
 
 
+def did_you_mean(name, names):
+    """", did you mean 'x'?" for the closest of names to a name that's probably a typo,
+    or nothing."""
+    close = difflib.get_close_matches(name, names, n=1)
+    return ", did you mean '{}'?".format(close[0]) if close else ''
+
+
 @dataclass(frozen=True)
 class RunResult:
     """How running a command as someone went, from bot.run_as.
@@ -160,8 +167,7 @@ class Bot:
 
     def warn_unknown_options(self, kwargs):
         for key in sorted(set(kwargs) - self.options):
-            close = difflib.get_close_matches(key, self.options, n=1)
-            hint = ", did you mean '{}'?".format(close[0]) if close else ''
+            hint = did_you_mean(key, self.options)
             self.logger.warning("unknown option '{}' ignored{}".format(key, hint))
 
     def setup_paths(self, nickname, kwargs):
@@ -348,15 +354,13 @@ class Bot:
                     ('access.plugins', set(self.access.rules) - {RECIPES})]
         for setting, names in sections:
             for name in sorted(names - loaded):
-                close = difflib.get_close_matches(name, loaded, n=1)
-                hint = ", did you mean '{}'?".format(close[0]) if close else ''
+                hint = did_you_mean(name, loaded)
                 self.logger.warning("{} has settings for '{}', but there's no plugin called "
                                     "that{}".format(setting, name, hint))
         recipe_rule = self.access.rules.get(RECIPES)
         for name in sorted(set(recipe_rule.commands) if recipe_rule else ()):
             if name not in self.recipes:
-                close = difflib.get_close_matches(name, self.recipes, n=1)
-                hint = ", did you mean '{}'?".format(close[0]) if close else ''
+                hint = did_you_mean(name, self.recipes)
                 self.logger.warning("access.recipes has settings for '{}', but there's no "
                                     "recipe called that{}".format(name, hint))
         for name, rule in sorted(self.access.rules.items()):
@@ -364,8 +368,7 @@ class Bot:
                 continue
             mine = {h.name for h in self.registry.plugins[name] if h.kind == 'command'}
             for command in sorted(set(rule.commands) - mine):
-                close = difflib.get_close_matches(command, mine, n=1)
-                hint = ", did you mean '{}'?".format(close[0]) if close else ''
+                hint = did_you_mean(command, mine)
                 self.logger.warning("access.plugins.{}.commands has settings for '{}', but plugin "
                                     "{} has no command called that{}".format(name, command, name,
                                                                              hint))
