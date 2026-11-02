@@ -1,7 +1,7 @@
 """The bots: Bot for IRC servers and TwitchBot for Twitch chat."""
 import asyncio
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import difflib
 import functools
@@ -107,7 +107,7 @@ class Bot:
         'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
         'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
-        'history', 'recipe_dir', 'log_format', 'health_port', 'health_host',
+        'history', 'recipe_dir', 'log_format', 'health_port', 'health_host', 'rate_limit',
         'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile',
     }
     sasl_mechanisms = ('auto', 'PLAIN', 'SCRAM-SHA-256', 'EXTERNAL')
@@ -206,6 +206,8 @@ class Bot:
         log_file = kwargs.get('log_file') or log_file
         self.log_file = log_file if log_file == '-' else self.path(log_file)
         self.log_format = kwargs.get('log_format') or 'text'
+        # the burst and interval the output queue sends at, over the transport's own
+        self.rate_limit = kwargs.get('rate_limit')
         # the health endpoint, off unless health_port is set
         self.health_port = kwargs.get('health_port')
         self.health_host = kwargs.get('health_host') or '127.0.0.1'
@@ -513,9 +515,23 @@ class Bot:
         self.timer_due = {}
         self.timer_busy = set()
         self.quitting = asyncio.Event()
-        self.output = OutputQueue(self.send_out, self.transport.limits, self.logger,
+        self.output = OutputQueue(self.send_out, self.output_limits(), self.logger,
                                   clock=lambda: self.clock(), sleep=lambda s: self.pause(s),
                                   exempt=self.transport.exempt)
+
+    def output_limits(self):
+        # the transport's rate limits, with the rate_limit option's burst and interval
+        given = self.rate_limit or {}
+        if not isinstance(given, dict) or set(given) - {'burst', 'interval'}:
+            raise ValueError('rate_limit should be settings like {burst: 4, interval: 2}')
+        burst, interval = given.get('burst'), given.get('interval')
+        if burst is not None and (isinstance(burst, bool) or not isinstance(burst, int)
+                                  or burst < 1):
+            raise ValueError('rate_limit.burst should be a whole number of lines, 1 or more')
+        if interval is not None and (isinstance(interval, bool) or
+                                     not isinstance(interval, (int, float)) or interval <= 0):
+            raise ValueError('rate_limit.interval should be a number of seconds, more than 0')
+        return replace(self.transport.limits, **given)
 
     def start(self):
         """Connect, and run until the bot quits."""

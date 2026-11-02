@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from pinhook import bot as pinhook_bot
+from pinhook.testing import TestBot
 
 
 PING_PLUGIN = (
@@ -103,3 +104,20 @@ def test_twitch_bot_warns_about_irc_only_options(tmp_path, caplog):
     pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'),
                           log_file=str(tmp_path / 't.log'), ns_pass='x')
     assert "unknown option 'ns_pass' ignored" in caplog.text
+
+
+def test_rate_limit_changes_the_burst_and_interval(tmp_path):
+    bot = TestBot(plugin_dir=str(tmp_path), rate_limit={'burst': 8, 'interval': 1})
+    assert (bot.output.limits.burst, bot.output.limits.interval) == (8, 1)
+    assert bot.output.limits.backlog == 50
+    assert TestBot(plugin_dir=str(tmp_path)).output.limits.burst == 4
+
+
+@pytest.mark.parametrize('rate_limit, problem', [
+    ({'burst': 0}, 'rate_limit.burst should be a whole number'),
+    ({'interval': 'fast'}, 'rate_limit.interval should be a number of seconds'),
+    ({'lines': 4}, 'rate_limit should be settings like'),
+])
+def test_a_bad_rate_limit_stops_the_bot_starting(tmp_path, rate_limit, problem):
+    with pytest.raises(ValueError, match=problem):
+        TestBot(plugin_dir=str(tmp_path), rate_limit=rate_limit)

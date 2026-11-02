@@ -20,6 +20,7 @@ unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?
 | `ssl_certfile`, `ssl_keyfile` | none | a client certificate, for [SASL EXTERNAL](ircv3-support.md#log-in-with-a-certificate) |
 | `server_pass` | none | the server's password, not the bot's account password |
 | `token` | none | a Twitch bot's OAuth token |
+| `rate_limit` | `{burst: 4, interval: 2}`, Twitch `{burst: 20, interval: 1.5}` | how fast the bot sends: `burst` lines at once, then one every `interval` seconds |
 
 ### ssl_verify
 
