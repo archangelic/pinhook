@@ -74,6 +74,29 @@ async def roll(ctx, sides: int = 6):
 
 [The context](the-context.md) lists everything `ctx` has.
 
+## Move a Bot subclass
+
+A 1.x bot that subclasses `Bot` reaches into the `irc` library, which 2.0 doesn't use. Each of those has a 2.0 replacement:
+
+| 1.x | 2.0 |
+| --- | --- |
+| `def on_join(self, c, e):` and the other `on_*` methods | a plugin with `@on('join')`, and the other [events](events.md) |
+| overriding `call_help` to answer `!help` yourself | `disable_help: true`, then a listener or command answers it |
+| `bot.connection.privmsg(target, text)` from another thread, like a web hook | `bot.send_message('privmsg', target, text)`, which is safe from any thread |
+| settings kept on the subclass, like `self.modteam`, read as `msg.bot.modteam` | a [`plugin_config`](configuration.md#give-plugins-their-settings) `shared` section, read as `msg.config.shared['modteam']` |
+
+For example, a welcome on join:
+
+```python
+from pinhook import on
+
+
+@on('join')
+async def welcome(ctx):
+    if ctx.channel == '#tildetown' and ctx.nick != ctx.bot.nick:
+        await ctx.send(ctx.nick, f'Welcome, {ctx.nick}!')
+```
+
 ## Move a TOML config to YAML
 
 `config.toml`:

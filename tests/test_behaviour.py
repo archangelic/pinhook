@@ -7,6 +7,7 @@ import json
 import pytest
 
 from pinhook import bot as pinhook_bot
+from pinhook.testing import TestBot
 
 from wire import Wire, lines
 
@@ -312,3 +313,28 @@ def test_reload_reads_plugin_config_from_the_config_file(tmp_path, new_config, r
     path.write_text(config(json.loads(new_config)) if new_config else '{"nickname": ')
     assert w.say('!reload', nick='mal') == [reply]
     assert w.say('!units') == [units]
+
+
+def test_with_help_off_a_listener_can_answer_help_addressed_to_the_bot(tmp_path):
+    # how adminbot answers its own !help on 2.0, without overriding call_help
+    (tmp_path / 'helpplugin.py').write_text(
+        "import pinhook.plugin as plugin\n\n\n"
+        "@plugin.listener('help')\n"
+        "def help_plugin(msg):\n"
+        "    if msg.text.startswith('{}: !help'.format(msg.botnick)):\n"
+        "        msg.privmsg(msg.nick, 'ask an admin')\n")
+    bot = TestBot(plugin_dir=str(tmp_path), disable_help=True)
+    bot.say('testbot: !help', nick='ana')
+    assert bot.sent_to('ana') == ['ask an admin']
+
+
+def test_send_message_is_safe_from_another_thread(tmp_path):
+    # how a script, like adminbot's web hook, sends from its own thread
+    import threading
+    bot = TestBot(plugin_dir=str(tmp_path))
+    sender = threading.Thread(target=bot.send_message, args=('privmsg', '#test', 'from a hook'))
+    bot.driver.loop.call_soon(sender.start)
+    bot.driver.run()
+    sender.join()
+    bot.driver.run()
+    assert bot.sent_to('#test') == ['from a hook']
