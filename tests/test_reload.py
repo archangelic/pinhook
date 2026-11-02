@@ -59,7 +59,7 @@ def test_other_files_are_ignored(tmp_path, caplog):
 def test_run_reload_turns_the_watcher_on(tmp_path):
     path = tmp_path / 'config.yaml'
     path.write_text("nickname: 'pinbot'\nserver: 'localhost'\nchannels: ['#test']\n")
-    with mock.patch('pinhook.cli.Bot') as bot:
+    with mock.patch('pinhook.config.Bot') as bot:
         assert CliRunner().invoke(cli, ['run', '--reload', str(path)]).exit_code == 0
         assert bot.return_value.reload_on_change is True
         CliRunner().invoke(cli, ['run', str(path)])

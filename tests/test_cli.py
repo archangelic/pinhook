@@ -15,7 +15,7 @@ from pinhook.cli import Config, cli
 def run_cli(tmp_path, config, name='config.json'):
     path = tmp_path / name
     path.write_text(config if isinstance(config, str) else json.dumps(config))
-    with mock.patch('pinhook.cli.Bot') as bot:
+    with mock.patch('pinhook.config.Bot') as bot:
         result = CliRunner().invoke(cli, ['run', str(path)])
     return result, bot
 
@@ -69,7 +69,7 @@ def test_yaml_that_would_run_code_is_refused(tmp_path):
 def test_a_config_with_no_command_runs_the_bot_with_a_warning(tmp_path):
     path = tmp_path / 'config.json'
     path.write_text(json.dumps(BASE))
-    with mock.patch('pinhook.cli.Bot') as bot:
+    with mock.patch('pinhook.config.Bot') as bot:
         result = CliRunner().invoke(cli, [str(path)])
     assert result.exit_code == 0, result.output
     assert bot.call_args.kwargs['nickname'] == 'pinbot'
@@ -96,7 +96,7 @@ def test_bot_startup_errors_are_shown_plainly(tmp_path):
     path = tmp_path / 'config.json'
     path.write_text(json.dumps(BASE))
     error = ValueError("couldn't read ban file bans.json: oops")
-    with mock.patch('pinhook.cli.Bot', side_effect=error):
+    with mock.patch('pinhook.config.Bot', side_effect=error):
         result = CliRunner().invoke(cli, ['run', str(path)])
     assert result.exit_code != 0
     assert "Error: couldn't read ban file bans.json: oops" in result.output
@@ -354,7 +354,7 @@ TWITCH = {'platform': 'twitch', 'nickname': 'gamebot', 'channels': ['#mychannel'
 def run_twitch(tmp_path, config):
     path = tmp_path / 'config.json'
     path.write_text(json.dumps(config))
-    with mock.patch('pinhook.cli.TwitchBot') as bot:
+    with mock.patch('pinhook.config.TwitchBot') as bot:
         result = CliRunner().invoke(cli, ['run', str(path)])
     return result, bot
 

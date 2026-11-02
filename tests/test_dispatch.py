@@ -87,12 +87,12 @@ def test_config_takes_a_list_of_prefixes(tmp_path):
     path = tmp_path / 'config.json'
     path.write_text(json.dumps({'nickname': 'pinbot', 'server': 'localhost',
                                 'channels': ['#test'], 'cmd_prefix': ['!', '.']}))
-    with mock.patch('pinhook.cli.Bot') as bot:
+    with mock.patch('pinhook.config.Bot') as bot:
         assert CliRunner().invoke(cli, [str(path)]).exit_code == 0
     assert bot.call_args.kwargs['cmd_prefix'] == ['!', '.']
     path.write_text(json.dumps({'nickname': 'pinbot', 'server': 'localhost',
                                 'channels': ['#test'], 'cmd_prefix': ['']}))
-    with mock.patch('pinhook.cli.Bot'):
+    with mock.patch('pinhook.config.Bot'):
         result = CliRunner().invoke(cli, [str(path)])
     assert result.exit_code != 0
     assert 'should be a prefix' in result.output
