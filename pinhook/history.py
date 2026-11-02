@@ -60,6 +60,10 @@ class History:
         self.wanted = list(channels)
         self.channels = {}
 
+    def clear(self):
+        """Forget every channel's messages, like after a disconnect."""
+        self.channels = {}
+
     def records(self, channel):
         """True if channel has history turned on."""
         return any(self.fold(c) == self.fold(channel) for c in self.wanted)

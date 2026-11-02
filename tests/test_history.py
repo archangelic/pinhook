@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from pinhook.testing import TestBot
+from pinhook.transport.base import Event
 
 from wire import Wire
 
@@ -114,3 +115,16 @@ def test_without_echo_message_the_bot_records_what_it_sends(tmp_path):
     w.say('!echo hi')
     assert [(e.text, e.own) for e in w.bot.history.recent('#test')] == [
         ('!echo hi', False), ('hi', True)]
+
+
+def test_channels_in_the_option_match_whatever_their_case(tmp_path):
+    bot = make(tmp_path, channels=['#TEST'])
+    bot.say('hello', nick='ana')
+    assert recent(bot).startswith('ana:hello')
+
+
+def test_a_disconnect_starts_history_again(tmp_path):
+    bot = make(tmp_path, channels=['#test'])
+    bot.say('hello', nick='ana')
+    bot.driver.run(Event('disconnected'))
+    assert recent(bot) == 'tester:!recent'

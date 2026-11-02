@@ -601,6 +601,8 @@ class Bot:
             self.online = False
             # answers to what was asked before the drop would be out of date
             dropped = self.output.clear()
+            # what was said before the drop starts again, like member tracking
+            self.history.clear()
             if dropped:
                 self.logger.warning('disconnected, dropping {} messages that were waiting to be '
                                     'sent'.format(dropped))
