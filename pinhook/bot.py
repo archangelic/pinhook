@@ -967,7 +967,7 @@ class Bot:
                 problems.append(problem)
                 continue
             if self.access.is_group(target):
-                entry, description = access.GROUP + target, target
+                entry, description = self.access.group_entry(target), target
             else:
                 entry, description = self.ban_entry(target)
             added = self.access.add(cmd, plugin_name, command, entry)
@@ -984,7 +984,7 @@ class Bot:
 
             def wanted(entry):
                 # the entry itself, or one that matches the person last seen as target
-                return (fold(entry.removeprefix(access.GROUP)) == fold(target) or
+                return (fold(self.access.shown(entry)) == fold(target) or
                         bool(seen) and not self.access.is_group(entry) and
                         self.transport.matches(entry, seen))
             removed += self.access.remove(plugin_name, command, wanted)
@@ -992,7 +992,7 @@ class Bot:
         reply = '{}: '.format(nick)
         if removed:
             reply += 'took back {} on {}'.format(
-                ', '.join(entry.removeprefix(access.GROUP) for entry in removed), label)
+                ', '.join(self.access.shown(entry) for entry in removed), label)
         else:
             reply += 'nothing to take back for {} on {}'.format(' '.join(targets), label)
         if in_config:
@@ -1024,8 +1024,8 @@ class Bot:
         parts = [level]
         allowed = self.access.entries(handler, 'allow')
         denied = self.access.entries(handler, 'deny')
-        allowed = [entry.removeprefix(access.GROUP) for entry in allowed]
-        denied = [entry.removeprefix(access.GROUP) for entry in denied]
+        allowed = [self.access.shown(entry) for entry in allowed]
+        denied = [self.access.shown(entry) for entry in denied]
         if level == 'restricted':
             parts.append('allowed: ' + (', '.join(['ops'] + allowed)))
         if denied:

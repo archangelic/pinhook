@@ -327,6 +327,16 @@ class Access:
             self.save()
         return removed
 
+    @staticmethod
+    def group_entry(name):
+        """How !allow and !deny save the group called name."""
+        return GROUP + name
+
+    @staticmethod
+    def shown(entry):
+        """An entry as people read and type it: a saved group by its name."""
+        return entry.removeprefix(GROUP)
+
     def missing_groups(self):
         """Groups saved by !allow and !deny that the config no longer has, as (plugin,
         command, group), with command None for a whole plugin."""
