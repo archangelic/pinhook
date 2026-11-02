@@ -1,5 +1,6 @@
 """Every 2.0 plugin feature, in one plugin."""
 import asyncio
+from collections import deque
 from typing import Annotated, Literal, Optional
 
 from pinhook import Context, Plugin, command, every, on
@@ -10,7 +11,8 @@ class Tour(Plugin):
 
     def setup(self, previous: 'Tour | None') -> None:
         self.reloads: int = previous.reloads + 1 if previous else 0
-        self.events: list[str] = previous.events if previous else []
+        # only the last few, for !events, so a busy channel never grows it
+        self.events: deque[str] = previous.events if previous else deque(maxlen=5)
 
     def teardown(self) -> None:
         self.events.append('teardown')
@@ -114,7 +116,7 @@ class Tour(Plugin):
 
     @command('events')
     async def show_events(self, ctx: Context) -> None:
-        await ctx.reply(', '.join(self.events[-5:]) or 'none')
+        await ctx.reply(', '.join(self.events) or 'none')
 
     # events, recorded so !events shows them
 

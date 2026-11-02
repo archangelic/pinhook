@@ -146,6 +146,10 @@ def test_events_and_the_timer(bot):
     bot.event('kick', nick='mal', kicked='newbie_', text='bye')
     assert bot.say('!events') == [
         'join newbie, topic game night, nick newbie>newbie_, mode +o newbie_, kick newbie_']
+    # it keeps the last five
+    bot.event('part', nick='mal')
+    assert bot.say('!events') == [
+        'topic game night, nick newbie>newbie_, mode +o newbie_, kick newbie_, part mal']
     assert bot.say('testbot: hello', nick='ana') == ['hello ana, you addressed me']
     assert [(s.target, s.text) for s in bot.tick(1800)] == [('#showcase-test', 'the timer fired')]
 
