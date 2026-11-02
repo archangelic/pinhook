@@ -14,6 +14,11 @@ def matches(entry, nick, user=None, host=None, account=None):
     return Irc().matches(entry, Source(nick, user, host, account))
 
 
+class Ascii(IrcIdentity):
+    def casefold(self, name):
+        return casefold(name, 'ascii')
+
+
 PING_PLUGIN = (
     "import pinhook.plugin as p\n"
     "@p.command('!ping')\n"
@@ -36,6 +41,13 @@ def test_mask_entry_matches_any_nick_from_that_host():
 def test_mask_entry_works_with_brackets_in_nicks():
     assert matches('nick[m]!*@*', 'Nick[M]', 'user', 'host')
     assert not matches('nick[m]!*@*', 'nickm', 'user', 'host')
+
+
+def test_brackets_in_masks_are_themselves_with_ascii_case_mapping():
+    who = Source('x[ab]', 'u', 'trusted.host')
+    assert Ascii().matches('x[ab]!*@trusted.host', who)
+    assert not Ascii().matches('x[ab]!*@trusted.host', Source('xa', 'u', 'trusted.host'))
+    assert Ascii().matches('X?ab]!*@*.HOST', who)
 
 
 def test_account_entry_matches_account_not_nick():

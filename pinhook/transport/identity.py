@@ -9,9 +9,15 @@ An entry is one of:
     a hostmask              *!*@203.0.113.7  (* and ? are wildcards)
     a services account      $a:troll
 """
-import fnmatch
+import re
 
 from .base import CHANOP_MODES, VOICED_MODES
+
+
+def mask_pattern(mask):
+    """A hostmask as a regex, where only * and ? are wildcards, so brackets in nicks like
+    nick[m] are themselves, whatever the server's case mapping."""
+    return re.compile(re.escape(mask).replace(r'\*', '.*').replace(r'\?', '.'), re.DOTALL)
 
 
 def entry_kind(entry):
@@ -31,8 +37,7 @@ class IrcIdentity:
 
     def matches(self, entry, who):
         """True if entry names who."""
-        # casefold is the server's lowercasing. Its rfc1459 one turns [ ] into { }, so
-        # nicks can't break the wildcard match
+        # casefold is the server's lowercasing, applied to both sides
         fold = self.casefold
         entry = fold(entry)
         kind = entry_kind(entry)
@@ -40,7 +45,7 @@ class IrcIdentity:
             return bool(who.account) and fold(who.account) == entry[len('$a:'):]
         if kind == 'mask':
             mask = fold('{}!{}@{}'.format(who.nick, who.user or '', who.host or ''))
-            return fnmatch.fnmatchcase(mask, entry)
+            return mask_pattern(entry).fullmatch(mask) is not None
         return fold(who.nick) == entry
 
     def in_group(self, group, who, channel):
