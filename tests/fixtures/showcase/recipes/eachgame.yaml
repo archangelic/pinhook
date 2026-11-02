@@ -1,0 +1,7 @@
+version: 1
+name: eachgame
+help: list each game on its own line
+steps:
+  - for_each: store.games
+    steps:
+      - reply: '* {item|upper}'

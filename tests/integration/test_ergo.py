@@ -642,3 +642,24 @@ def test_a_1_12_bot_folder_runs_on_2_0(tmp_path, names, users, start_bot):
     assert messages(mal.say('!karma ana', channel, bot)) == ['ana has 4 points']
     saved = json.loads((tmp_path / 'bot' / 'data' / 'karma.json').read_text())
     assert saved == {'scores': {'ana': 4, 'bob': 1}}
+
+
+def test_the_showcase_bot_runs_on_a_real_server(tmp_path, names, users, start_bot):
+    # tests/fixtures/showcase: every plugin feature, 1.x and 2.0, and recipes
+    showcase = os.path.join(os.path.dirname(__file__), '..', 'fixtures', 'showcase')
+    for folder in ('plugins', 'recipes'):
+        shutil.copytree(os.path.join(showcase, folder), tmp_path / 'bot' / folder)
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, ops=['mallory'],
+              plugin_config={'legacy_tour': {'word': 'legacy'}, 'modern_tour': {'word': 'modern'}})
+    assert messages(mal.say('!legacy', channel, bot)) == ['hello mallory from 1.x']
+    assert messages(mal.say('ping legacy', channel, bot)) == ['pong from a 1.x listener']
+    assert messages(mal.say('!r 2 20', channel, bot)) == ['mallory rolled 2d20']
+    assert messages(mal.say('!types hi 3 1.5 yes b 7 the rest', channel, bot)) == [
+        'hi 3 1.5 True b 7 the rest']
+    assert messages(mal.say('!count', channel, bot)) == ['counted 1 with modern']
+    assert messages(mal.say('!gamenight', channel, bot))[0].startswith(
+        'Tonight: mallory rolled 2d6. ')
+    assert messages(mal.say('!reload', channel, bot))[0].startswith('Plugins reloaded')
+    assert messages(mal.say('!reloads', channel, bot)) == ['reloaded 1 times']

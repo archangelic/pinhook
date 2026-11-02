@@ -1,0 +1,26 @@
+# Point this at a network to try everything. The tests use the same plugins and recipes.
+nickname: 'showcase'
+server: 'irc.libera.chat'
+port: 6697
+ssl_required: true
+channels:
+  - '#showcase-test'
+ops:
+  - '$a:youraccount'
+bot_dir: '.'
+history:
+  channels:
+    - '#showcase-test'
+plugin_config:
+  legacy_tour:
+    word: 'legacy'
+  modern_tour:
+    word: 'modern'
+access:
+  groups:
+    trusted: ['$a:youraccount']
+  plugins:
+    modern_tour:
+      commands:
+        secret:
+          allow: [trusted]

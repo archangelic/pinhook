@@ -1,0 +1,6 @@
+version: 1
+name: vip
+help: only for people given access
+access: restricted
+steps:
+  - reply: 'welcome to the vip list, {nick}'
