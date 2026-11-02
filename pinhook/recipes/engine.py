@@ -46,12 +46,14 @@ class Run:
         self.who = Source(ctx.nick, ctx.user, ctx.host, ctx.account)
         self.channel = ctx.channel if is_channel(ctx.channel or '') else None
         self.store = bot.store(STORE)
-        self.vars = {'nick': ctx.nick, 'channel': ctx.channel or '', 'arg': arg,
-                     'members': [m.nick for m in ctx.members()]}
+        self.vars = {'nick': ctx.nick, 'channel': ctx.channel or '', 'arg': arg}
         self.steps_run = 0
 
     def lookup(self, path):
         name, *keys = path.split('.')
+        if name == 'members' and name not in self.vars:
+            # filled in the first time a recipe reads it, since a channel can be big
+            self.vars['members'] = [m.nick for m in self.ctx.members()]
         value = self.store if name == 'store' else self.vars.get(name)
         for key in keys:
             value = value.get(key) if isinstance(value, dict) else None
