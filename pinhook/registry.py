@@ -6,7 +6,6 @@ pinhook.command and pinhook.on, and Plugin classes whose methods are handlers.
 """
 import importlib.util
 import inspect
-import json
 import os
 import re
 import sys
@@ -15,7 +14,7 @@ import types
 from . import commands
 from . import plugin
 from .api import Plugin
-from .store import write_json
+from .store import read_json_object, write_json
 
 
 class LoadError(Exception):
@@ -345,16 +344,7 @@ class Switches:
         self.saved = self.load()
 
     def load(self):
-        if not self.path or not os.path.exists(self.path):
-            return {}
-        with open(self.path) as f:
-            try:
-                saved = json.load(f)
-            except ValueError as e:
-                raise ValueError("couldn't read {}: {}".format(self.path, e))
-        if not isinstance(saved, dict):
-            raise ValueError('{} should hold a JSON object'.format(self.path))
-        return saved
+        return read_json_object(self.path)
 
     def save(self):
         if self.path:

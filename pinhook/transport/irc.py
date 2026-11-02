@@ -8,8 +8,6 @@ import asyncio
 import base64
 from collections import OrderedDict
 import contextlib
-import json
-import os
 import socket
 import ssl
 import time
@@ -19,7 +17,7 @@ import irctokens
 from ..__version__ import __version__
 from .base import Event, Limits, Source, Whois, casefold, is_channel
 from .identity import IrcIdentity, TwitchIdentity
-from ..store import write_json
+from ..store import read_json, write_json
 from . import sasl
 from .members import Tracker
 
@@ -632,11 +630,8 @@ class IrcTransport(IrcIdentity):
     # STS, a server's request to only be reached over TLS
 
     def load_sts(self):
-        if not self.sts_path or not os.path.exists(self.sts_path):
-            return {}
         try:
-            with open(self.sts_path) as f:
-                policies = json.load(f)
+            policies = read_json(self.sts_path, {})
         except ValueError:
             self.logger.warning("couldn't read {}, so STS policies start afresh".format(
                 self.sts_path))

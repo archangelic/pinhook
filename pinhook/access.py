@@ -6,11 +6,9 @@ group: one from the access config's groups, ops, or one of the transport's built
 groups, like IRC's chanops (+o in the channel), voiced (+v or more) and logged-in.
 The rules are here, and who matches an entry or is in a group is the transport's to say.
 """
-import json
-import os
 
 from .recipes.engine import RECIPES
-from .store import write_json
+from .store import read_json, read_json_object, write_json
 from .transport.identity import entry_kind
 
 # least strict first
@@ -48,13 +46,7 @@ def matches_any(transport, entries, who):
 
 
 def load_bans(path):
-    if not path or not os.path.exists(path):
-        return []
-    with open(path) as f:
-        try:
-            entries = json.load(f)
-        except ValueError as e:
-            raise ValueError("couldn't read ban file {}: {}".format(path, e))
+    entries = read_json(path, [], 'ban file ' + str(path))
     if not isinstance(entries, list) or not all(isinstance(e, str) for e in entries):
         raise ValueError('ban file {} should be a list of ban entries'.format(path))
     return entries
@@ -216,16 +208,7 @@ class Access:
         return {'ops'} | set(self.bot.transport.groups)
 
     def load(self):
-        if not self.path or not os.path.exists(self.path):
-            return {}
-        with open(self.path) as f:
-            try:
-                saved = json.load(f)
-            except ValueError as e:
-                raise ValueError("couldn't read {}: {}".format(self.path, e))
-        if not isinstance(saved, dict):
-            raise ValueError('{} should hold a JSON object'.format(self.path))
-        return saved
+        return read_json_object(self.path)
 
     def save(self):
         if self.path:

@@ -17,6 +17,26 @@ def write_json(path, data):
     os.replace(tmp, path)
 
 
+def read_json(path, default, what=None):
+    """The JSON in path, or default when there's no file. A file that isn't JSON raises
+    ValueError, saying "couldn't read" what, the path unless given, and the problem."""
+    if not path or not os.path.exists(path):
+        return default
+    with open(path) as f:
+        try:
+            return json.load(f)
+        except ValueError as e:
+            raise ValueError("couldn't read {}: {}".format(what or path, e))
+
+
+def read_json_object(path):
+    """The JSON object in path, as a dict, or {} when there's no file."""
+    data = read_json(path, {})
+    if not isinstance(data, dict):
+        raise ValueError('{} should hold a JSON object'.format(path))
+    return data
+
+
 class PluginConfig(Mapping):
     """A plugin's settings from plugin_config in the bot's config. Read only.
 
@@ -62,17 +82,11 @@ class Store(dict):
         self.path = path
         # plugins run in worker threads, so two can save the same store at once
         self._lock = threading.Lock()
-        if path and os.path.exists(path):
-            with open(path) as f:
-                try:
-                    data = json.load(f)
-                except ValueError as e:
-                    raise ValueError("couldn't read the store for {} from {}: {}".format(
-                        name, path, e))
-            if not isinstance(data, dict):
-                raise ValueError('the store for {} in {} should hold a JSON object'.format(
-                    name, path))
-            self.update(data)
+        data = read_json(path, {}, 'the store for {} from {}'.format(name, path))
+        if not isinstance(data, dict):
+            raise ValueError('the store for {} in {} should hold a JSON object'.format(
+                name, path))
+        self.update(data)
         self._saved = self._snapshot()
 
     def _snapshot(self):
