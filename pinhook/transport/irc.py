@@ -218,10 +218,6 @@ class IrcTransport(IrcIdentity):
             writer.close()
         self.queue.put_nowait(None)
 
-    @property
-    def account_tag(self):
-        return 'account-tag' in self.caps
-
     # connecting
 
     async def open(self):
