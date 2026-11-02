@@ -7,9 +7,12 @@ import click
 import yaml
 from . import log
 from . import scaffold
-from .bot import Bot
+from .bot import Bot, TwitchBot
 from .recipes.engine import RECIPES
-from marshmallow import Schema, fields, validate, INCLUDE, ValidationError
+from marshmallow import (Schema, fields, validate, validates_schema, INCLUDE,
+                         ValidationError)
+
+PLATFORMS = ('irc', 'twitch')
 
 
 class PrefixField(fields.Field):
@@ -23,9 +26,12 @@ class PrefixField(fields.Field):
 
 
 class Config(Schema):
+    # irc unless set. A Twitch bot needs its token, and no server
+    platform = fields.Str(validate=validate.OneOf(PLATFORMS))
+    token = fields.Str()
     nickname = fields.Str(required=True)
     channels = fields.List(fields.Str(), required=True)
-    server = fields.Str(required=True)
+    server = fields.Str()
     port = fields.Int()
     ops = fields.List(fields.Str())
     ssl_required = fields.Bool()
@@ -64,6 +70,29 @@ class Config(Schema):
 
     class Meta:
         unknown = INCLUDE
+
+    @validates_schema
+    def platform_needs(self, data, **kwargs):
+        if data.get('platform', 'irc') == 'irc' and not data.get('server'):
+            raise ValidationError('Missing data for required field.', 'server')
+        if data.get('platform') == 'twitch':
+            if not data.get('token'):
+                raise ValidationError("a Twitch bot needs the bot account's oauth token, "
+                                      "like token: '${TWITCH_TOKEN}'", 'token')
+            if len(data.get('channels') or []) != 1:
+                raise ValidationError('a Twitch bot joins one channel in pinhook 2.0',
+                                      'channels')
+
+
+def make_bot(config):
+    """The bot a checked config describes: a Bot, or a TwitchBot for platform: twitch."""
+    config = dict(config)
+    if config.pop('platform', 'irc') == 'twitch':
+        # Twitch's own tools give the token with oauth: in front, which TwitchBot adds
+        token = config.pop('token').removeprefix('oauth:')
+        channel = config.pop('channels')[0]
+        return TwitchBot(config.pop('nickname'), channel, token, **config)
+    return Bot(**config)
 
 
 # ${NAME} is read from the environment and ${file:PATH} from a file, like a Docker or
@@ -271,7 +300,7 @@ def run(config, conf_format, reload):
     load_secrets(config_file)
     config = read_conf(config, conf_format)
     try:
-        bot = Bot(**config)
+        bot = make_bot(config)
     except ValueError as e:
         # a bad log_level or ban file, say what's wrong without a traceback
         raise click.ClickException(str(e))
@@ -321,7 +350,7 @@ def check(config, conf_format):
     log.logger.addHandler(found)
     log.logger.removeHandler(log.streamhandler)
     try:
-        bot = Bot(**dict(settings, log_level='warning', log_file=os.devnull))
+        bot = make_bot(dict(settings, log_level='warning', log_file=os.devnull))
         bot.registry.teardown()
     except (ValueError, OSError) as e:
         raise click.ClickException(str(e))

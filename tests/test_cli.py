@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from pinhook import log
-from pinhook.bot import Bot
+from pinhook.bot import Bot, TwitchBot
 from pinhook.cli import Config, cli
 
 
@@ -30,7 +30,12 @@ def no_secrets(monkeypatch):
 
 
 def test_config_schema_knows_every_bot_option():
-    assert set(Config().fields) - {'nickname', 'channels', 'server'} == Bot.options
+    assert set(Config().fields) - {'nickname', 'channels', 'server', 'platform', 'token'} \
+        == Bot.options
+
+
+def test_every_twitch_bot_option_is_in_the_schema():
+    assert TwitchBot.options <= set(Config().fields)
 
 
 def test_quoted_booleans_in_config_become_real_booleans(tmp_path):
@@ -337,3 +342,52 @@ def test_masking_covers_tracebacks():
                                    sys.exc_info())
     assert 'hunter2' not in log.formatter.format(record)
     assert 'ValueError: bad password ***' in log.formatter.format(record)
+
+
+TWITCH = {'platform': 'twitch', 'nickname': 'gamebot', 'channels': ['#mychannel']}
+
+
+def run_twitch(tmp_path, config):
+    path = tmp_path / 'config.json'
+    path.write_text(json.dumps(config))
+    with mock.patch('pinhook.cli.TwitchBot') as bot:
+        result = CliRunner().invoke(cli, ['run', str(path)])
+    return result, bot
+
+
+def test_platform_twitch_runs_a_twitch_bot(tmp_path, monkeypatch):
+    monkeypatch.setenv('PH_TWITCH_TOKEN', 'oauth:abc123def')
+    result, bot = run_twitch(tmp_path, dict(TWITCH, token='${PH_TWITCH_TOKEN}', ops=['mal']))
+    assert result.exit_code == 0, result.output
+    assert bot.call_args.args == ('gamebot', '#mychannel', 'abc123def')
+    assert bot.call_args.kwargs == {'ops': ['mal']}
+    bot.return_value.start.assert_called_once()
+
+
+def test_a_twitch_bot_needs_a_token_and_one_channel(tmp_path):
+    result, bot = run_twitch(tmp_path, dict(TWITCH, channels=['#a', '#b']))
+    assert result.exit_code == 1
+    assert "token: a Twitch bot needs the bot account's oauth token" in result.output
+    bot.assert_not_called()
+    result, bot = run_twitch(tmp_path, dict(TWITCH, token='abc', channels=['#a', '#b']))
+    assert 'channels: a Twitch bot joins one channel in pinhook 2.0' in result.output
+
+
+def test_an_irc_bot_still_needs_a_server(tmp_path):
+    result, bot = run_cli(tmp_path, {'nickname': 'pinbot', 'channels': ['#test']})
+    assert result.exit_code == 1
+    assert 'server: Missing data for required field.' in result.output
+
+
+def test_an_unknown_platform_is_refused(tmp_path):
+    result, bot = run_cli(tmp_path, dict(BASE, platform='slack'))
+    assert 'platform: Must be one of: irc, twitch.' in result.output
+
+
+def test_check_works_on_a_twitch_config(tmp_path):
+    path = tmp_path / 'config.yaml'
+    path.write_text("platform: twitch\nnickname: 'gamebot'\nchannels: ['#mychannel']\n"
+                    "token: 'abc'\nbot_dir: '{}'\nssl_required: true\n".format(tmp_path))
+    result = CliRunner().invoke(cli, ['check', str(path)])
+    assert result.exit_code == 0, result.output
+    assert "warning: unknown option 'ssl_required' ignored" in result.output
