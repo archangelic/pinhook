@@ -29,6 +29,7 @@ from .recipes.engine import RECIPES, run_recipe
 from .registry import Handler, Registry, Switches
 from .store import PluginConfig, Store
 from .transport.base import Event, Outgoing, Source, Transport, is_channel
+from .transport.identity import entry_kind
 from .transport.irc import IrcTransport, TwitchTransport
 
 
@@ -386,27 +387,30 @@ class Bot:
         while len(self.seen) > 1000:
             self.seen.popitem(last=False)
 
+    def last_seen(self, nick):
+        """Who was last seen using nick, as a Source, or None."""
+        seen = self.seen.get(self.transport.casefold(nick))
+        return Source(*seen) if seen else None
+
     def ban_entry(self, target):
-        # a nick on its own is easy to change, so ban their account if they're
-        # logged in, or their user and host if not. !allow and !deny use it too
-        if access.is_account(target) or access.is_mask(target):
+        # a nick on its own is easy to change, so the transport says what's harder to
+        # dodge, like an account or a user and host. !allow and !deny use it too
+        if entry_kind(target) != 'nick':
             return target, target
-        seen = self.seen.get(self.transport.casefold(target))
+        seen = self.last_seen(target)
         if not seen:
             description = "{} (nick only, they haven't spoken since the bot started)"
             return target, description.format(target)
-        nick, user, host, account = seen
-        if account:
-            return '$a:' + account, '{} (account {})'.format(target, account)
-        entry = '*!*{}@{}'.format((user or '').lstrip('~'), host)
+        entry = self.transport.strongest_entry(seen)
+        if entry_kind(entry) == 'account':
+            return entry, '{} (account {})'.format(target, entry[len('$a:'):])
         return entry, '{} ({})'.format(target, entry)
 
     def remove_bans(self, target):
         # the entry itself, plus anything banning the person last seen as target
-        fold = self.transport.casefold
-        seen = self.seen.get(fold(target))
+        seen = self.last_seen(target)
         removed = [b for b in self.banned_users
-                   if self.nick_in(b, [target]) or (seen and access.matches(b, *seen, fold=fold))]
+                   if self.nick_in(b, [target]) or (seen and self.transport.matches(b, seen))]
         self.banned_users = [b for b in self.banned_users if b not in removed]
         return removed
 
@@ -423,8 +427,7 @@ class Bot:
 
     def is_op(self, source):
         """True if the sender of a message is one of the bot's ops."""
-        return access.matches_any(self.ops, source.nick, source.user, source.host, source.account,
-                                  fold=self.transport.casefold)
+        return access.matches_any(self.transport, self.ops, source)
 
     def nick_in(self, nick, nicks):
         # irc nicks are case insensitive, so Troll and troll are the same person
@@ -908,13 +911,13 @@ class Bot:
         fold = self.transport.casefold
         removed, in_config = [], []
         for target in targets:
-            seen = self.seen.get(fold(target))
+            seen = self.last_seen(target)
 
             def wanted(entry):
                 # the entry itself, or one that matches the person last seen as target
                 return (fold(entry) == fold(target) or
                         bool(seen) and not self.access.is_group(entry) and
-                        access.matches(entry, *seen, fold=fold))
+                        self.transport.matches(entry, seen))
             removed += self.access.remove(plugin_name, command, wanted)
             in_config += self.access.in_config(plugin_name, command, wanted)
         reply = '{}: '.format(nick)
@@ -966,8 +969,7 @@ class Bot:
         """True if the bot ignores this person: they're banned, they're the bot, or
         require_account is on and they aren't logged in."""
         nick, fold = source.nick, self.transport.casefold
-        if access.matches_any(self.banned_users, nick, source.user, source.host, source.account,
-                              fold=fold):
+        if access.matches_any(self.transport, self.banned_users, source):
             if log:
                 self.logger.debug('ignoring banned user {}'.format(nick))
             return True

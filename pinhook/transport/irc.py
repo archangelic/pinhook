@@ -17,6 +17,7 @@ import irctokens
 
 from ..__version__ import __version__
 from .base import Event, Limits, Source, Whois, casefold, is_channel
+from .identity import IrcIdentity
 from ..store import write_json
 from . import sasl
 from .members import Tracker
@@ -36,7 +37,7 @@ WHOIS_REPLIES = {'311', '312', '313', '317', '319', '330', '301', '335', '671', 
 WHOX_TOKEN = '152'
 
 
-class IrcTransport:
+class IrcTransport(IrcIdentity):
     """A connection to an IRC server.
 
     Args:

@@ -1,6 +1,17 @@
 import pytest
 
 from pinhook import access
+from pinhook.transport.base import Source, casefold
+from pinhook.transport.identity import IrcIdentity
+
+
+class Irc(IrcIdentity):
+    def casefold(self, name):
+        return casefold(name)
+
+
+def matches(entry, nick, user=None, host=None, account=None):
+    return Irc().matches(entry, Source(nick, user, host, account))
 
 
 PING_PLUGIN = (
@@ -13,23 +24,23 @@ PING_PLUGIN = (
 # matching
 
 def test_nick_entry_ignores_case():
-    assert access.matches('troll', 'TroLL')
-    assert not access.matches('troll', 'troll2')
+    assert matches('troll', 'TroLL')
+    assert not matches('troll', 'troll2')
 
 
 def test_mask_entry_matches_any_nick_from_that_host():
-    assert access.matches('*!*@203.0.113.7', 'anything', 'user', '203.0.113.7')
-    assert not access.matches('*!*@203.0.113.7', 'anything', 'user', '203.0.113.8')
+    assert matches('*!*@203.0.113.7', 'anything', 'user', '203.0.113.7')
+    assert not matches('*!*@203.0.113.7', 'anything', 'user', '203.0.113.8')
 
 
 def test_mask_entry_works_with_brackets_in_nicks():
-    assert access.matches('nick[m]!*@*', 'Nick[M]', 'user', 'host')
-    assert not access.matches('nick[m]!*@*', 'nickm', 'user', 'host')
+    assert matches('nick[m]!*@*', 'Nick[M]', 'user', 'host')
+    assert not matches('nick[m]!*@*', 'nickm', 'user', 'host')
 
 
 def test_account_entry_matches_account_not_nick():
-    assert access.matches('$a:Troll', 'newnick', account='troll')
-    assert not access.matches('$a:troll', 'troll')
+    assert matches('$a:Troll', 'newnick', account='troll')
+    assert not matches('$a:troll', 'troll')
 
 
 # ban file

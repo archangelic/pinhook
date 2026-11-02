@@ -1,47 +1,25 @@
 """Who can trigger what: access levels, grants and denies, and the entries ops and bans use.
 
-An entry names people, as one of:
-    a nick                  troll
-    a hostmask              *!*@203.0.113.7  (* and ? are wildcards)
-    a services account      $a:troll
-Grants and denies can also name a group: one from the access config's groups, or
-a built-in one: ops, chanops (+o in the channel), voiced (+v or more) and logged-in.
+An entry names people: a nick, a hostmask or a $a:account, as the transport
+understands them (see transport/identity.py). Grants and denies can also name a
+group: one from the access config's groups, ops, or one of the transport's built-in
+groups, like IRC's chanops (+o in the channel), voiced (+v or more) and logged-in.
+The rules are here, and who matches an entry or is in a group is the transport's to say.
 """
-import fnmatch
 import json
 import os
 
 from .recipes.engine import RECIPES
 from .store import write_json
-from .transport.base import CHANOP_MODES, VOICED_MODES, casefold
+from .transport.identity import entry_kind
 
 # least strict first
 LEVELS = ('open', 'restricted', 'ops')
-BUILTIN_GROUPS = {'ops', 'chanops', 'voiced', 'logged-in'}
 
 
-def is_account(entry):
-    return entry.startswith('$a:')
-
-
-def is_mask(entry):
-    return '!' in entry or '@' in entry
-
-
-def matches(entry, nick, user=None, host=None, account=None, fold=casefold):
-    # fold is the server's lowercasing. Its rfc1459 one turns [ ] into { }, so nicks
-    # can't break the wildcard match
-    entry = fold(entry)
-    if is_account(entry):
-        return bool(account) and fold(account) == entry[len('$a:'):]
-    if is_mask(entry):
-        mask = fold('{}!{}@{}'.format(nick, user or '', host or ''))
-        return fnmatch.fnmatchcase(mask, entry)
-    return fold(nick) == entry
-
-
-def matches_any(entries, nick, user=None, host=None, account=None, fold=casefold):
-    return any(matches(e, nick, user, host, account, fold) for e in entries)
+def matches_any(transport, entries, who):
+    """True if any of entries, which aren't groups, names who."""
+    return any(transport.matches(entry, who) for entry in entries)
 
 
 def load_bans(path):
@@ -118,8 +96,9 @@ def parse_rule(value, where, commands=True):
     return rule
 
 
-def parse_config(config):
-    """The access section of the config, checked: (default level, groups, {plugin: Rule})."""
+def parse_config(config, builtin_groups):
+    """The access section of the config, checked: (default level, groups, {plugin: Rule}).
+    builtin_groups are the names config groups can't have."""
     config = config or {}
     if not isinstance(config, dict):
         raise ValueError('access should be settings like {default: open, plugins: {...}}')
@@ -135,10 +114,10 @@ def parse_config(config):
     if not isinstance(groups, dict):
         raise ValueError('access.groups should map group names to lists of entries')
     for name in groups:
-        if name in BUILTIN_GROUPS:
+        if name in builtin_groups:
             raise ValueError("access.groups can't have a group called {}, pinhook has a "
                              "built-in one".format(name))
-        if is_account(name) or is_mask(name):
+        if entry_kind(name) != 'nick':
             raise ValueError("access.groups: {} looks like an entry, not a group name".format(
                 name))
     groups = {name: entry_list(entries, 'access.groups.' + name)
@@ -179,13 +158,17 @@ class Access:
     def __init__(self, bot, config, path):
         self.bot = bot
         self.path = path
-        self.default, self.groups, self.rules = parse_config(config)
+        self.default, self.groups, self.rules = parse_config(config, self.builtin_groups())
         self.saved = self.load()
 
     def configure(self, config):
         """Use a new access section, like on !reload. Raises ValueError, keeping the old one,
         if it has a problem."""
-        self.default, self.groups, self.rules = parse_config(config)
+        self.default, self.groups, self.rules = parse_config(config, self.builtin_groups())
+
+    def builtin_groups(self):
+        # ops, which the core knows, and the transport's own
+        return {'ops'} | set(self.bot.transport.groups)
 
     def load(self):
         if not self.path or not os.path.exists(self.path):
@@ -235,32 +218,25 @@ class Access:
         return found
 
     def is_group(self, entry):
-        return entry in self.groups or entry in BUILTIN_GROUPS
+        return entry in self.groups or entry in self.builtin_groups()
 
     def matches(self, who, entries, channel, groups_seen=()):
-        """True if who is one of entries. channel is where they are, for chanops and voiced."""
-        fold = self.bot.transport.casefold
+        """True if who is one of entries. channel is where they are, for groups like chanops."""
+        transport = self.bot.transport
         for entry in entries:
             if entry in self.groups:
                 if entry not in groups_seen and self.matches(who, self.groups[entry], channel,
                                                              groups_seen + (entry,)):
                     return True
-            elif entry in BUILTIN_GROUPS:
-                if self.in_builtin_group(entry, who, channel):
+            elif entry == 'ops':
+                if self.bot.is_op(who):
                     return True
-            elif matches(entry, who.nick, who.user, who.host, who.account, fold=fold):
+            elif entry in transport.groups:
+                if transport.in_group(entry, who, channel):
+                    return True
+            elif transport.matches(entry, who):
                 return True
         return False
-
-    def in_builtin_group(self, group, who, channel):
-        if group == 'ops':
-            return self.bot.is_op(who)
-        if group == 'logged-in':
-            return bool(who.account)
-        if not channel:
-            return False
-        modes = self.bot.transport.member_modes(channel, who.nick)
-        return bool(modes & (CHANOP_MODES if group == 'chanops' else VOICED_MODES))
 
     # checks
 

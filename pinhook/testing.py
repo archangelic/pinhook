@@ -15,6 +15,7 @@ import weakref
 from .bot import Bot
 from .store import Store
 from .transport.base import Event, Limits, Member, Source, Whois, casefold
+from .transport.identity import IrcIdentity
 from .transport.irc import text_room
 
 # one thing the bot sent, kind is 'message', 'action' or 'notice'
@@ -126,7 +127,7 @@ class Driver:
                     return
 
 
-class FakeTransport:
+class FakeTransport(IrcIdentity):
     # stands in for the network and records what the bot sends
     name = 'fake'
     limits = Limits()

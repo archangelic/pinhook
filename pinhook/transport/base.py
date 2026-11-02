@@ -179,6 +179,23 @@ class Transport(Protocol):
 
     def casefold(self, name: str) -> str: ...
 
+    # who someone is on this platform, for ops, bans and access lists. The core keeps
+    # the rules, and asks the transport these
+    entry_kinds: frozenset[str]
+    groups: frozenset[str]
+
+    def matches(self, entry: str, who: Source) -> bool:
+        """True if entry, a nick, hostmask or $a:account, names who."""
+        ...
+
+    def in_group(self, group: str, who: Source, channel: str | None) -> bool:
+        """True if who is in one of this platform's built-in groups, in channel."""
+        ...
+
+    def strongest_entry(self, who: Source) -> str:
+        """What !ban and !allow save for who: the entry hardest to dodge."""
+        ...
+
     async def close(self, reason: str = '') -> None: ...
 
 
