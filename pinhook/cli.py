@@ -140,27 +140,42 @@ def read_secret_file(path, name):
             name, path, e.strerror))
 
 
-def expand_env(value, name):
+# options that can't come from a PINHOOK_ variable, since they hold secrets, which come
+# from ${NAME} or ${file:PATH} so they're masked in the log
+SECRET_OPTIONS = {'token', 'server_pass', 'ns_pass', 'sasl_password'}
+MASKED_OPTIONS = SECRET_OPTIONS | {'plugin_config'}
+
+
+def expand_config(data, name):
+    """The config with ${NAME} and ${file:PATH} filled in. What fills in a secret setting,
+    or anything in plugin_config, where API keys go, is masked in the log."""
+    if not isinstance(data, dict):
+        return expand_env(data, name)
+    return {key: expand_env(value, name, secret=key in MASKED_OPTIONS)
+            for key, value in data.items()}
+
+
+def expand_env(value, name, secret=False):
     if isinstance(value, dict):
-        return {k: expand_env(v, name) for k, v in value.items()}
+        return {k: expand_env(v, name, secret) for k, v in value.items()}
     if isinstance(value, list):
-        return [expand_env(v, name) for v in value]
+        return [expand_env(v, name, secret) for v in value]
     if not isinstance(value, str):
         return value
 
     def replace(match):
         if match.group(1):
-            secret = read_secret_file(match.group(1), name)
+            found = read_secret_file(match.group(1), name)
         elif match.group(2) is None:
             return '${'
         elif match.group(2) not in os.environ:
             raise click.ClickException("{} uses ${{{}}}, but that environment variable isn't set"
                                        .format(name, match.group(2)))
         else:
-            secret = os.environ[match.group(2)]
-        # whatever came from ${...} is masked in the log
-        log.hide(secret)
-        return secret
+            found = os.environ[match.group(2)]
+        if secret:
+            log.hide(found)
+        return found
     return ENV_VAR.sub(replace, value)
 
 
@@ -218,11 +233,6 @@ def flatten_problems(messages, path=''):
             yield name, ' '.join(msgs) if isinstance(msgs, list) else str(msgs)
 
 
-# options that can't come from a PINHOOK_ variable, since they hold secrets, which come
-# from ${NAME} or ${file:PATH} so they're masked in the log
-SECRET_OPTIONS = {'token', 'server_pass', 'ns_pass', 'sasl_password'}
-
-
 def env_defaults(schema, data):
     """data, with options it doesn't set taken from PINHOOK_ variables, like
     PINHOOK_LOG_FILE=- for log_file. The image sets its defaults this way, and the config
@@ -239,7 +249,7 @@ def env_defaults(schema, data):
 
 
 def check_conf(schema, data, name):
-    data = env_defaults(schema, expand_env(data, name))
+    data = env_defaults(schema, expand_config(data, name))
     try:
         return schema.load(data)
     except ValidationError as e:

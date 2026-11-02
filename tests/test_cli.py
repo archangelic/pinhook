@@ -321,16 +321,20 @@ def test_a_bad_secrets_env_line_is_named_without_showing_it(tmp_path, monkeypatc
     bot.assert_not_called()
 
 
-def test_values_from_the_environment_and_files_are_masked_in_the_log(tmp_path, monkeypatch):
+def test_secret_settings_and_plugin_config_are_masked_in_the_log(tmp_path, monkeypatch):
     monkeypatch.setenv('PH_NS_PASS', 'hunter2')
-    monkeypatch.setenv('PH_SHORT', 'ab')
+    monkeypatch.setenv('PH_WEATHER_KEY', 'weather-key-123')
+    monkeypatch.setenv('PH_CHAN', 'games')
     (tmp_path / 'token').write_text('oauth-abc123\n')
     run_cli(tmp_path, dict(BASE, ns_pass='${PH_NS_PASS}', server_pass='${file:token}',
-                           nickserv='${PH_SHORT}'))
+                           channels=['#${PH_CHAN}'],
+                           plugin_config={'weather': {'key': '${PH_WEATHER_KEY}'}}))
     record = logging.LogRecord('bot.pinbot', logging.ERROR, __file__, 1,
-                               'login failed for hunter2 with %s, ab', ('oauth-abc123',), None)
+                               'login failed for hunter2 with %s, %s, in #games',
+                               ('oauth-abc123', 'weather-key-123'), None)
     line = log.formatter.format(record)
-    assert line.endswith('login failed for *** with ***, ab')
+    # a channel from the environment isn't a secret, so it stays readable
+    assert line.endswith('login failed for *** with ***, ***, in #games')
 
 
 def test_masking_covers_tracebacks():
