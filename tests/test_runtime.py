@@ -47,6 +47,44 @@ def test_a_plugin_past_its_timeout_is_given_up_on(tmp_path, caplog):
     assert '!slow took longer than 0.05 seconds' in caplog.text
 
 
+PEAK = ("running = []\n"
+        "peak = [0]\n"
+        "@p.command('!count')\n"
+        "def count(msg):\n"
+        "    running.append(1)\n"
+        "    peak[0] = max(peak[0], len(running))\n"
+        "    time.sleep(0.05)\n"
+        "    running.pop()\n"
+        "    return p.message('peak {}'.format(peak[0]))\n")
+
+
+def test_a_1x_plugin_runs_one_call_at_a_time_as_in_1x(tmp_path):
+    bot = TestBot(plugin_dir=plugins(tmp_path, peak=PEAK))
+    bot.driver.run(*[message(nick, '!count') for nick in ('mal', 'kim', 'ana')])
+    assert bot.sent_to('#test') == ['peak 1'] * 3
+
+
+def test_a_hung_1x_plugin_holds_up_only_itself(tmp_path, caplog):
+    import threading
+    release = threading.Event()
+    hang = ("import builtins\n"
+            "@p.command('!hang')\n"
+            "def hang(msg):\n"
+            "    builtins.pinhook_release.wait()\n")
+    import builtins
+    builtins.pinhook_release = release
+    try:
+        bot = TestBot(plugin_dir=plugins(tmp_path, hang=hang, ping=PING))
+        bot.handler_timeout = 0.05
+        # more hung calls than the default executor has threads
+        bot.driver.run(*[message('user{}'.format(i), '!hang') for i in range(40)])
+        assert bot.say('!ping') == ['pong']
+        assert '!hang took longer than 0.05 seconds' in caplog.text
+    finally:
+        release.set()
+        del builtins.pinhook_release
+
+
 def test_a_crashing_command_says_nothing_and_the_bot_carries_on(tmp_path, caplog):
     w = Wire(tmp_path, plugins={'crash': (
         "import pinhook.plugin as p\n"

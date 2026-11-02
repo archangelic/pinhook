@@ -1,5 +1,39 @@
 """1.x plugins on top of the context: the msg they get, and running them."""
+import concurrent.futures
+import queue
+import threading
+
 from . import plugin
+
+
+class Worker:
+    """One thread for one 1.x plugin, running its calls one at a time, in order.
+
+    1.x ran plugins one at a time, so their stores and globals were never touched by
+    two calls at once, and that holds here. A plugin that hangs holds up only its own
+    calls. The thread is a daemon, so one that never returns doesn't keep the bot from
+    quitting.
+    """
+
+    def __init__(self, name):
+        self.jobs = queue.SimpleQueue()
+        threading.Thread(target=self.work, name='pinhook-' + name, daemon=True).start()
+
+    def submit(self, func, *args):
+        future = concurrent.futures.Future()
+        self.jobs.put((future, func, args))
+        return future
+
+    def work(self):
+        while True:
+            future, func, args = self.jobs.get()
+            # a call given up on before it started is skipped
+            if not future.set_running_or_notify_cancel():
+                continue
+            try:
+                future.set_result(func(*args))
+            except BaseException as e:
+                future.set_exception(e)
 
 
 class LegacyBot:
@@ -115,7 +149,7 @@ class Message:
 def run(handler, ctx, trigger=None, nick_list=None, ops=()):
     """Run a 1.x command or listener with its msg, and return what it returned.
 
-    Runs in a worker thread, since 1.x plugins are plain functions.
+    Runs on the plugin's Worker thread, since 1.x plugins are plain functions.
     """
     msg = Message(ctx, cmd=trigger if handler.kind == 'command' else None, nick_list=nick_list,
                   ops=ops)

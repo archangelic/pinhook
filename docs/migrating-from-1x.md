@@ -27,7 +27,7 @@ pinhook check config.yaml
 | built-in command names are reserved | a plugin command called `help`, `ban` or another built-in's name doesn't load |
 | plugins import as `pinhook_plugins.<bot>.<name>` | a plugin that imports another by `pinhook_plugins.<name>` uses the new name |
 | `hide=True` hides a command from ops too | take `hide=True` off commands ops look for in `!help` |
-| 1.x plugins run in worker threads | a plugin that blocks no longer freezes the bot. Shared state between plugins needs a lock |
+| each 1.x plugin runs on a thread of its own, one call at a time | a plugin that blocks holds up only its own calls, not the bot. State shared between plugins needs a lock |
 
 `pytest -W error::DeprecationWarning` turns each warning into a failing test that points at the line to change.
 

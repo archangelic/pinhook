@@ -483,6 +483,8 @@ class Bot:
         # messages being handled, and the (nick, command) pairs still running
         self.handlers = set()
         self.running = set()
+        # each 1.x plugin's thread, by plugin name
+        self.workers = {}
         self.stopping = False
         self.quit_reason = ''
         # set while connected, timers only run then
@@ -1222,9 +1224,12 @@ class Bot:
                     output = await handler.func(ctx, **kwargs)
                     ctx.store.save_if_changed()
                 else:
-                    # 1.x plugins are plain functions, so they run in a worker thread
-                    output = await asyncio.to_thread(compat.run, handler, ctx, trigger, nick_list,
-                                                     self.ops)
+                    # 1.x plugins are plain functions, so each runs on a thread of its own
+                    worker = self.workers.get(handler.plugin)
+                    if worker is None:
+                        worker = self.workers[handler.plugin] = compat.Worker(handler.plugin)
+                    output = await asyncio.wrap_future(worker.submit(
+                        compat.run, handler, ctx, trigger, nick_list, self.ops))
         except TimeoutError:
             self.logger.error('{} took longer than {} seconds, giving up waiting for it'.format(
                 label if command else handler.kind + ' ' + label, timeout))

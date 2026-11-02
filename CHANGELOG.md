@@ -30,7 +30,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 ### Changed
 
 * Commands are written without their prefix, and answer to `cmd_prefix` or the bot's nick
-* 1.x plugins run in worker threads, through the compatibility layer, with deprecation warnings
+* 1.x plugins run through the compatibility layer, with deprecation warnings, each on a thread of its own, one call at a time
 * Two plugins with the same command is a load error naming both
 * `pinhook config.yaml` is `pinhook run config.yaml`. The old form still works, with a warning
 
