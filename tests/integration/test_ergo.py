@@ -6,6 +6,7 @@ how to run them.
 import hashlib
 import json
 import os
+import shutil
 import socket
 import ssl
 import time
@@ -626,3 +627,18 @@ def test_text_the_server_would_refuse_arrives_as_valid_utf8(names, users, start_
     mal = users('mallory', channel=channel)
     start_bot(mal, plugins={'private': PRIVATE})
     assert messages(mal.say('!broken', channel, bot)) == ['café ?']
+
+
+def test_a_1_12_bot_folder_runs_on_2_0(tmp_path, names, users, start_bot):
+    # data written by 1.12's own code: a karma store and a ban file
+    fixture = os.path.join(os.path.dirname(__file__), '..', 'fixtures', 'bot-1.12')
+    shutil.copytree(os.path.join(fixture, 'data'), tmp_path / 'bot' / 'data')
+    (tmp_path / 'bot' / 'plugins').mkdir(parents=True)
+    shutil.copy(os.path.join(fixture, 'plugins', 'karma.py'), tmp_path / 'bot' / 'plugins')
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, ban_file='data/oldbot.bans.json',
+              plugin_config={'karma': {'label': 'points'}})
+    assert messages(mal.say('!karma ana', channel, bot)) == ['ana has 4 points']
+    saved = json.loads((tmp_path / 'bot' / 'data' / 'karma.json').read_text())
+    assert saved == {'scores': {'ana': 4, 'bob': 1}}
