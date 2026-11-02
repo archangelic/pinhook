@@ -9,6 +9,7 @@ for IRC, and the bot it describes.
 That's what pinhook run does. A mistake raises ConfigError, saying what's wrong.
 """
 import functools
+import json
 import os
 import re
 
@@ -53,7 +54,7 @@ class Config(Schema):
     nickserv = fields.Str()
     log_level = fields.Str(validate=validate.OneOf(['off'] + list(Bot.log_levels)))
     log_file = fields.Str()
-    log_format = fields.Str(validate=validate.OneOf(['text', 'json']))
+    log_format = fields.Str(validate=validate.OneOf(list(log.FORMATS)))
     health_port = fields.Int(allow_none=True, validate=validate.Range(1, 65535))
     health_host = fields.Str()
     server_pass = fields.Str()
@@ -68,8 +69,9 @@ class Config(Schema):
     bot_dir = fields.Str()
     sasl_account = fields.Str()
     sasl_password = fields.Str()
+    # in either case, as the bot takes them
     sasl_mechanism = fields.Str(validate=validate.OneOf(
-        ['auto', 'PLAIN', 'SCRAM-SHA-256', 'EXTERNAL', 'plain', 'scram-sha-256', 'external']))
+        list(Bot.sasl_mechanisms) + [m.lower() for m in Bot.sasl_mechanisms if m != 'auto']))
     ssl_certfile = fields.Str()
     ssl_keyfile = fields.Str()
     data_dir = fields.Str()
@@ -292,7 +294,6 @@ def load_conf_file(path, conf_format):
 
 
 def read_conf(config, conf_format):
-    schema = Config()
     if not conf_format:
         if config.name.endswith('.json'):
             conf_format = 'json'
@@ -306,10 +307,11 @@ def read_conf(config, conf_format):
             raise ConfigError(
                 'Could not detect file format, please supply using --format option')
     if conf_format == 'json':
-        import json
-        to_json = json.loads(config.read())
-        output = check_conf(schema, to_json, config.name)
-    elif conf_format == 'yaml':
+        try:
+            data = json.loads(config.read())
+        except ValueError as e:
+            raise ConfigError("{} isn't valid JSON: {}".format(config.name, e))
+    else:
         # safe_load, since the full loader can run code from the file
         text = config.read().decode('utf-8', 'replace')
         try:
@@ -322,8 +324,8 @@ def read_conf(config, conf_format):
         if traps:
             raise ConfigError('{} has problems:\n{}'.format(
                 config.name, '\n'.join('  {}: {}'.format(*trap) for trap in traps)))
-        output = check_conf(schema, to_yaml, config.name)
-    return output
+        data = to_yaml
+    return check_conf(Config(), data, config.name)
 
 
 def load_bot(path, conf_format=None, warn=None, **overrides):
@@ -340,8 +342,7 @@ def load_bot(path, conf_format=None, warn=None, **overrides):
     """
     for warning in load_secrets(path):
         (warn or log.logger.warning)(warning)
-    with open(path, 'rb') as f:
-        settings = read_conf(f, conf_format)
+    settings = load_conf_file(path, conf_format)
     bot = make_bot(dict(settings, **overrides), path)
     bot.config_file = path
     bot.config_loader = functools.partial(load_conf_file, path, conf_format)

@@ -97,6 +97,7 @@ class Bot:
         'history', 'recipe_dir', 'log_format', 'health_port', 'health_host',
         'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile',
     }
+    sasl_mechanisms = ('auto', 'PLAIN', 'SCRAM-SHA-256', 'EXTERNAL')
     log_levels = {
         'critical': logging.CRITICAL,
         'error': logging.ERROR,
@@ -138,7 +139,7 @@ class Bot:
         self.sasl_account = kwargs.get('sasl_account') or nickname
         mechanism = str(kwargs.get('sasl_mechanism') or 'auto')
         self.sasl_mechanism = 'auto' if mechanism.lower() == 'auto' else mechanism.upper()
-        if self.sasl_mechanism not in ('auto', 'PLAIN', 'SCRAM-SHA-256', 'EXTERNAL'):
+        if self.sasl_mechanism not in self.sasl_mechanisms:
             raise ValueError('sasl_mechanism must be auto, PLAIN, SCRAM-SHA-256 or EXTERNAL')
         # a client certificate, for SASL EXTERNAL or a server that wants one
         self.ssl_certfile = kwargs.get('ssl_certfile') or None

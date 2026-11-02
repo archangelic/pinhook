@@ -468,3 +468,10 @@ def test_run_and_check_use_config_yaml_unless_given(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli, ['check'])
     assert result.exit_code == 0, result.output
     assert 'config.yaml is fine' in result.output
+
+
+def test_a_json_config_with_a_mistake_says_so_without_a_traceback(tmp_path):
+    result, bot = run_cli(tmp_path, '{"nickname": "pinbot",}')
+    assert result.exit_code == 1
+    assert "config.json isn't valid JSON" in result.output
+    assert 'Traceback' not in result.output
