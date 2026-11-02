@@ -138,8 +138,8 @@ def test_access_failures_and_limits(bot):
 
 
 def test_events_and_the_timer(bot):
-    bot.event('join', nick='newbie')
-    assert bot.sent[-1].text == 'welcome, newbie'
+    assert [s.text for s in bot.event('join', nick='newbie')] == ['welcome, newbie']
+    assert bot.event('join', nick='TestBot') == []
     bot.event('topic', nick='mal', text='game night')
     bot.event('nick', nick='newbie', new_nick='newbie_')
     bot.event('mode', nick='mal', modes=['+o', 'newbie_'])

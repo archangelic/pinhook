@@ -123,8 +123,8 @@ class Tour(Plugin):
     @on('join')
     async def joined(self, ctx: Context) -> None:
         self.events.append(f'join {ctx.nick}')
-        if ctx.nick != ctx.bot.nick:
-            await ctx.reply(f'welcome, {ctx.nick}')
+        # handlers never see the bot's own joins, so this never welcomes the bot
+        await ctx.reply(f'welcome, {ctx.nick}')
 
     @on('part')
     async def parted(self, ctx: Context) -> None:
