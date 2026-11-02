@@ -218,8 +218,28 @@ def flatten_problems(messages, path=''):
             yield name, ' '.join(msgs) if isinstance(msgs, list) else str(msgs)
 
 
+# options that can't come from a PINHOOK_ variable, since they hold secrets, which come
+# from ${NAME} or ${file:PATH} so they're masked in the log
+SECRET_OPTIONS = {'token', 'server_pass', 'ns_pass', 'sasl_password'}
+
+
+def env_defaults(schema, data):
+    """data, with options it doesn't set taken from PINHOOK_ variables, like
+    PINHOOK_LOG_FILE=- for log_file. The image sets its defaults this way, and the config
+    wins. Only options that are a single value can be set like this."""
+    if not isinstance(data, dict):
+        return data
+    data = dict(data)
+    for key, field in schema.fields.items():
+        variable = 'PINHOOK_' + key.upper()
+        single = isinstance(field, (fields.Str, fields.Int, fields.Bool))
+        if single and key not in SECRET_OPTIONS and key not in data and variable in os.environ:
+            data[key] = os.environ[variable]
+    return data
+
+
 def check_conf(schema, data, name):
-    data = expand_env(data, name)
+    data = env_defaults(schema, expand_env(data, name))
     try:
         return schema.load(data)
     except ValidationError as e:

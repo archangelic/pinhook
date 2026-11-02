@@ -391,3 +391,29 @@ def test_check_works_on_a_twitch_config(tmp_path):
     result = CliRunner().invoke(cli, ['check', str(path)])
     assert result.exit_code == 0, result.output
     assert "warning: unknown option 'ssl_required' ignored" in result.output
+
+
+def test_pinhook_variables_set_options_the_config_leaves_out(tmp_path, monkeypatch):
+    monkeypatch.setenv('PINHOOK_LOG_FILE', '-')
+    monkeypatch.setenv('PINHOOK_HEALTH_PORT', '8080')
+    monkeypatch.setenv('PINHOOK_SSL_REQUIRED', 'true')
+    monkeypatch.setenv('PINHOOK_BOT_DIR', '/bot')
+    monkeypatch.setenv('PINHOOK_SASL_PASSWORD', 'hunter2')
+    monkeypatch.setenv('PINHOOK_CHANNELS', '#nope')
+    result, bot = run_cli(tmp_path, dict(BASE, bot_dir='/srv/bot'))
+    assert result.exit_code == 0, result.output
+    options = bot.call_args.kwargs
+    assert options['log_file'] == '-'
+    assert options['health_port'] == 8080
+    assert options['ssl_required'] is True
+    # the config wins, secrets only come from ${...}, and lists can't be set this way
+    assert options['bot_dir'] == '/srv/bot'
+    assert 'sasl_password' not in options
+    assert options['channels'] == ['#test']
+
+
+def test_a_bad_pinhook_variable_is_named_like_a_config_problem(tmp_path, monkeypatch):
+    monkeypatch.setenv('PINHOOK_HEALTH_PORT', 'eighty')
+    result, bot = run_cli(tmp_path, BASE)
+    assert result.exit_code == 1
+    assert 'health_port: Not a valid integer.' in result.output
