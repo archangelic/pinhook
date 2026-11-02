@@ -68,11 +68,13 @@ class Recipe:
 def load_recipe(path):
     """Read and check one recipe file. Raises RecipeError saying what's wrong and where."""
     try:
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             data = yaml.safe_load(f)
-    except yaml.YAMLError as e:
+    except (yaml.YAMLError, UnicodeDecodeError) as e:
         raise RecipeError("{} isn't valid YAML, or holds something recipes don't allow: {}"
                           .format(path, e))
+    except OSError as e:
+        raise RecipeError("{} can't be read: {}".format(path, e.strerror))
     default_name = os.path.splitext(os.path.basename(path))[0]
     return parse_recipe(data, default_name, path)
 

@@ -644,8 +644,12 @@ class Bot:
                 continue
             for name in os.listdir(folder):
                 path = os.path.join(folder, name)
-                if name.endswith(ends) and os.path.isfile(path):
-                    found[path] = os.stat(path).st_mtime_ns
+                if name.endswith(ends):
+                    try:
+                        found[path] = os.stat(path).st_mtime_ns
+                    except OSError:
+                        # gone between listing and looking, which the next check sees
+                        pass
         return found
 
     async def watch_files(self):
@@ -654,13 +658,18 @@ class Bot:
         seen = self.watched_files()
         while True:
             await asyncio.sleep(self.watch_interval)
-            now = self.watched_files()
-            if now != seen:
-                changed = sorted(set(now) ^ set(seen) | {p for p in now if now[p] != seen.get(p)})
-                self.logger.info('reloading plugins, since {} changed'.format(
-                    ', '.join(os.path.basename(p) for p in changed)))
-                self.reload()
-                seen = now
+            # the watcher runs beside the connection, so nothing in it can stop the bot
+            try:
+                now = self.watched_files()
+                if now != seen:
+                    changed = sorted(set(now) ^ set(seen) |
+                                     {p for p in now if now[p] != seen.get(p)})
+                    self.logger.info('reloading plugins, since {} changed'.format(
+                        ', '.join(os.path.basename(p) for p in changed)))
+                    seen = now
+                    self.reload()
+            except Exception:
+                self.logger.exception('reloading after a file change failed')
 
     async def run_timers(self):
         # checks at least once a second, so timers from a !reload start on time

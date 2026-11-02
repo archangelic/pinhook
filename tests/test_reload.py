@@ -64,3 +64,27 @@ def test_run_reload_turns_the_watcher_on(tmp_path):
         assert bot.return_value.reload_on_change is True
         CliRunner().invoke(cli, ['run', str(path)])
         assert bot.return_value.reload_on_change is False
+
+
+def test_a_reload_that_fails_is_logged_and_the_watcher_carries_on(tmp_path, caplog):
+    bot = make(tmp_path)
+    calls = []
+
+    def broken():
+        calls.append(1)
+        raise RuntimeError('oops')
+    bot.reload = broken
+
+    def change():
+        (tmp_path / 'plugins' / 'hello.py').write_text(HELLO.format('one'))
+    watch_while(bot, change)
+    assert calls == [1]
+    assert 'reloading after a file change failed' in caplog.text
+
+
+def test_a_recipe_that_isnt_utf8_is_left_out(tmp_path, caplog):
+    bot = make(tmp_path)
+    (tmp_path / 'recipes' / 'bad.yaml').write_bytes(b'version: 1\nsteps:\n  - reply: \xff\n')
+    bot.reload()
+    assert "bad.yaml isn't valid YAML" in caplog.text
+    assert bot.say('!hello') == ['hi']
