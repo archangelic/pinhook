@@ -17,6 +17,28 @@ from .transport.identity import entry_kind
 LEVELS = ('open', 'restricted', 'ops')
 
 
+KINDS = {'nick': ('a nick', 'nicks'), 'mask': ('a hostmask', 'hostmasks'),
+         'account': ('an account', '$a:accounts')}
+
+
+def entry_problem(transport, entry):
+    """Why transport can't use entry, which isn't a group, or None if it can."""
+    kind = entry_kind(entry)
+    if kind in transport.entry_kinds:
+        return None
+    takes = [KINDS[k][1] for k in KINDS if k in transport.entry_kinds]
+    return "{} is {}, which {} doesn't use. It takes {}".format(
+        entry, KINDS[kind][0], transport.name, ' and '.join(takes))
+
+
+def check_entries(transport, entries, where):
+    """Raise ValueError naming where, for the first entry transport can't use."""
+    for entry in entries:
+        problem = entry_problem(transport, entry)
+        if problem:
+            raise ValueError('{}: {}'.format(where, problem))
+
+
 def matches_any(transport, entries, who):
     """True if any of entries, which aren't groups, names who."""
     return any(transport.matches(entry, who) for entry in entries)
@@ -158,13 +180,33 @@ class Access:
     def __init__(self, bot, config, path):
         self.bot = bot
         self.path = path
-        self.default, self.groups, self.rules = parse_config(config, self.builtin_groups())
+        self.default, self.groups, self.rules = self.parse(config)
         self.saved = self.load()
 
     def configure(self, config):
         """Use a new access section, like on !reload. Raises ValueError, keeping the old one,
         if it has a problem."""
-        self.default, self.groups, self.rules = parse_config(config, self.builtin_groups())
+        self.default, self.groups, self.rules = self.parse(config)
+
+    def parse(self, config):
+        # the config, checked, with every entry one the transport can use
+        default, groups, rules = parse_config(config, self.builtin_groups())
+        names = set(groups) | self.builtin_groups()
+        transport = self.bot.transport
+
+        def check(entries, where):
+            check_entries(transport, [e for e in entries if e not in names], where)
+        for name, entries in groups.items():
+            check(entries, 'access.groups.' + name)
+        for plugin, rule in rules.items():
+            where = 'access.recipes' if plugin == RECIPES else 'access.plugins.' + plugin
+            for command, own in [(None, rule)] + list(rule.commands.items()):
+                place = where if command is None else (
+                    where + '.' + command if plugin == RECIPES else
+                    '{}.commands.{}'.format(where, command))
+                check(own.allow, place + '.allow')
+                check(own.deny, place + '.deny')
+        return default, groups, rules
 
     def builtin_groups(self):
         # ops, which the core knows, and the transport's own

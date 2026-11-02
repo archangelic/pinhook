@@ -141,6 +141,7 @@ class Bot:
         self.setup_core()
         self.warn_unknown_options(kwargs)
         self.setup_bans(nickname, kwargs)
+        self.check_entries()
         if self.sasl_password and not self.ssl_required:
             self.logger.warning('sasl_password will be sent without ssl, '
                                 'turn on ssl_required to keep it private')
@@ -375,6 +376,11 @@ class Bot:
         # recent nicks and who they are, so !ban troll can ban their account or host
         self.seen = OrderedDict()
 
+    def check_entries(self):
+        # ops and bans from the config, which have to be entries this platform uses
+        access.check_entries(self.transport, self.ops, 'ops')
+        access.check_entries(self.transport, self.config_bans, 'banned_users')
+
     def save_bans(self):
         # bans from the config stay in the config, the file keeps the ones made with !ban
         saved = [b for b in self.banned_users if not self.nick_in(b, self.config_bans)]
@@ -399,6 +405,9 @@ class Bot:
             return target, target
         seen = self.last_seen(target)
         if not seen:
+            if self.transport.strongest_entry(Source(target)) == target:
+                # on a platform where the nick is as good as it gets
+                return target, target
             description = "{} (nick only, they haven't spoken since the bot started)"
             return target, description.format(target)
         entry = self.transport.strongest_entry(seen)
@@ -801,14 +810,20 @@ class Bot:
         elif cmd == 'ops' and op:
             output = plugin.message('current ops: {}'.format(', '.join(self.ops)))
         elif cmd == 'ban' and op:
-            banned = []
+            banned, problems = [], []
             for target in arg.split():
+                problem = access.entry_problem(self.transport, target)
+                if problem:
+                    problems.append(problem)
+                    continue
                 entry, description = self.ban_entry(target)
                 if not self.nick_in(entry, self.banned_users):
                     self.banned_users.append(entry)
                 banned.append(description)
-            self.save_bans()
-            output = plugin.message('{}: banned {}'.format(nick, ', '.join(banned)))
+            if banned:
+                self.save_bans()
+            said = (['banned ' + ', '.join(banned)] if banned else []) + problems
+            output = plugin.message('{}: {}'.format(nick, '. '.join(said)))
         elif cmd == 'unban' and op:
             removed = []
             for target in arg.split():
@@ -898,8 +913,13 @@ class Bot:
         if cmd == 'allow' and 'restricted' not in levels:
             return ("{}: {} is open to everyone, so access to it can't be given out. To make it "
                     "restricted, set that in the config file".format(nick, label))
-        done = []
+        done, problems = [], []
         for target in args[1:]:
+            problem = None if self.access.is_group(target) else access.entry_problem(
+                self.transport, target)
+            if problem:
+                problems.append(problem)
+                continue
             if self.access.is_group(target):
                 entry, description = target, target
             else:
@@ -907,7 +927,8 @@ class Bot:
             added = self.access.add(cmd, plugin_name, command, entry)
             done.append(description + ('' if added else ' (already)'))
         verb = 'gave access to {} to' if cmd == 'allow' else 'kept off {}:'
-        return '{}: {} {}'.format(nick, verb.format(label), ', '.join(done))
+        said = (['{} {}'.format(verb.format(label), ', '.join(done))] if done else []) + problems
+        return '{}: {}'.format(nick, '. '.join(said))
 
     def revoke(self, nick, plugin_name, command, label, targets):
         fold = self.transport.casefold
@@ -1284,4 +1305,5 @@ class TwitchBot(Bot):
         self.setup_core()
         self.warn_unknown_options(kwargs)
         self.setup_bans(nickname, kwargs)
+        self.check_entries()
         self.setup_plugins()

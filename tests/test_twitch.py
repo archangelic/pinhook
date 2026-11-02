@@ -1,6 +1,8 @@
 """Twitch: its rate limits, message length, repeats, badges, and no notices or whispers."""
 import logging
 
+import pytest
+
 from pinhook import bot as pinhook_bot
 from pinhook.transport.base import Outgoing
 from pinhook.transport.irc import TwitchTransport
@@ -175,4 +177,22 @@ def test_ban_saves_the_nick_on_twitch(tmp_path):
     say(w, 'hello', 'troll')
     assert texts(say(w, '!ban troll', 'streamer', 'broadcaster/1')) == [
         'streamer: banned troll']
+    assert w.bot.banned_users == ['troll']
+
+
+def test_entries_twitch_doesnt_use_stop_the_bot(tmp_path):
+    with pytest.raises(ValueError, match="ops: \\*!\\*@host is a hostmask, which twitch doesn't "
+                                         "use. It takes nicks and \\$a:accounts"):
+        twitch(tmp_path, ops=['*!*@host'])
+    with pytest.raises(ValueError, match='access.plugins.plugin.commands.mod.allow: '
+                                         'a!b@c is a hostmask'):
+        twitch(tmp_path, access={'groups': {'regulars': ['ana']}, 'plugins': {'plugin': {
+            'commands': {'mod': {'allow': ['regulars', 'subscriber', 'a!b@c']}}}}})
+
+
+def test_chat_commands_refuse_entries_twitch_doesnt_use(tmp_path):
+    w = twitch(tmp_path, ops=['streamer'])
+    assert texts(say(w, '!ban *!*@host troll', 'streamer')) == [
+        "streamer: banned troll. *!*@host is a hostmask, which twitch doesn't use. It takes "
+        "nicks and $a:accounts"]
     assert w.bot.banned_users == ['troll']
