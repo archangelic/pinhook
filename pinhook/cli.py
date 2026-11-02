@@ -368,10 +368,12 @@ def plural(count, word):
 @cli.command()
 @click.argument('config', type=click.File('rb'))
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml']))
-def check(config, conf_format):
+@click.option('--strict', is_flag=True, help='Fail on warnings too, for CI.')
+def check(config, conf_format, strict):
     """Check CONFIG, and the plugins and recipes it uses, without connecting.
 
     Plugins are loaded to check them, so their setup runs, then their teardown.
+    Errors fail the check, and with --strict, so do warnings.
     """
     name = config.name
     load_secrets(name)
@@ -402,6 +404,9 @@ def check(config, conf_format):
     if errors:
         raise click.ClickException('{} has {} and {}. Loaded {}'.format(
             name, plural(len(errors), 'error'), plural(len(warnings), 'warning'), loaded))
+    if warnings and strict:
+        raise click.ClickException('{} has {}, and --strict fails on warnings. Loaded {}'.format(
+            name, plural(len(warnings), 'warning'), loaded))
     if warnings:
         click.echo('{} has {}. Loaded {}'.format(name, plural(len(warnings), 'warning'), loaded))
     else:

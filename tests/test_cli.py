@@ -443,3 +443,16 @@ def test_without_bot_dir_paths_start_from_the_config_file_too(tmp_path):
                config_dir=str(tmp_path))
     assert real.plugin_dir == str(tmp_path / 'my_plugins')
     assert real.data_dir == str(tmp_path / 'data')
+
+
+def test_check_strict_fails_on_warnings(tmp_path):
+    path = bot_folder(tmp_path, 'ssl_requred: true\n')
+    result = CliRunner().invoke(cli, ['check', '--strict', str(path)])
+    assert result.exit_code == 1
+    assert "warning: unknown option 'ssl_requred' ignored" in result.output
+    assert 'has 1 warning, and --strict fails on warnings' in result.output
+
+
+def test_check_strict_passes_a_clean_config(tmp_path):
+    path = bot_folder(tmp_path, '')
+    assert CliRunner().invoke(cli, ['check', '--strict', str(path)]).exit_code == 0
