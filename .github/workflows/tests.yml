@@ -52,6 +52,8 @@ jobs:
       run: uv pip install -e . mypy==2.4.1 types-PyYAML==6.0.12.20260906
     - name: Check types (settings in setup.cfg)
       run: uv run --no-project mypy
+    - name: Check the type hints catch mistakes in a plugin
+      run: uv run --no-project python tools/check_plugin_types.py
 
   integration:
 
