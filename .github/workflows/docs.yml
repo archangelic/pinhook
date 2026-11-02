@@ -1,5 +1,5 @@
 # Checks the docs build on every push and pull request, and publishes them
-# to the gh-pages branch when a release is published
+# to the gh-pages branch when a release is published, under its version
 
 name: Docs
 
@@ -37,5 +37,6 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         version=$(python -c "import re; print(re.search(r\"'(\d+\.\d+)\", open('pinhook/__version__.py').read()).group(1))")
-        mike deploy --push --update-aliases "$version" latest
-        mike set-default --push latest
+        # 1.x releases are fixes, so their docs go up under their version and latest stays
+        # on the newest release, from master
+        mike deploy --push "$version"
