@@ -4,6 +4,7 @@ secrets.env sits beside the config, readable only by its owner, and pinhook run
 loads it before reading the config, which refers to each secret as ${NAME}.
 """
 import os
+import sys
 
 import click
 import yaml
@@ -45,9 +46,14 @@ def config_uses(config_path, name):
 
 def connect_twitch(config_path):
     """Ask for the bot account's token and keep it in secrets.env beside the config."""
-    click.echo("Paste the bot account's OAuth token. It needs the chat:read and chat:edit "
-               'scopes. It is saved, not shown.')
-    token = click.prompt('Token', hide_input=True).strip().removeprefix('oauth:')
+    if sys.stdin.isatty():
+        click.echo("Paste the bot account's OAuth token. It needs the chat:read and chat:edit "
+                   'scopes. It is saved, not shown.')
+        token = click.prompt('Token', hide_input=True)
+    else:
+        # piped in, like pinhook connect twitch < token.txt, so there's nothing to hide
+        token = sys.stdin.readline()
+    token = token.strip().removeprefix('oauth:')
     if not token:
         raise click.ClickException('no token was given, so nothing was saved')
     path = os.path.join(os.path.dirname(os.path.abspath(config_path)), 'secrets.env')

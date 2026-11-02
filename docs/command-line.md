@@ -46,7 +46,7 @@ pinhook run --reload config.yaml
 pinhook connect twitch config.yaml
 ```
 
-Asks for the bot account's token without showing it, saves it as `TWITCH_TOKEN` in `secrets.env` beside the config, readable only by you, and says what the config still needs. The config is `config.yaml` in the current folder unless given.
+Asks for the bot account's token without showing it, saves it as `TWITCH_TOKEN` in `secrets.env` beside the config, readable only by you, and says what the config still needs. The config is `config.yaml` in the current folder unless given. A script pipes the token in instead: `pinhook connect twitch < token.txt`.
 
 ## Config formats
 
