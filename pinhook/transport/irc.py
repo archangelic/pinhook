@@ -154,15 +154,20 @@ class IrcTransport(IrcIdentity):
         if not self.writer:
             self.logger.debug('not connected, dropping a message to {}'.format(message.target))
             return
+        # a plugin's broken text, like a lone surrogate, goes out as ? instead of failing
+        text = message.text.encode('utf-8', 'replace').decode('utf-8')
+        for command, params, tags in self.lines(message, text):
+            self.write(command, params, tags=tags)
+        await self.writer.drain()
+
+    def lines(self, message, text):
+        """What a message is sent as: (command, params, tags) for each line, split to fit."""
         command = 'NOTICE' if message.kind == 'notice' else 'PRIVMSG'
         start, end = ('\x01ACTION ', '\x01') if message.kind == 'action' else ('', '')
         room = self.text_room(message.kind, message.target, message.prefix)
-        # a plugin's broken text, like a lone surrogate, goes out as ? instead of failing
-        text = message.text.encode('utf-8', 'replace').decode('utf-8')
-        for piece in split_text(text, room):
-            self.write(command, [message.target, start + message.prefix + piece + end],
-                       tags=self.allowed_tags(message.tags))
-        await self.writer.drain()
+        tags = self.allowed_tags(message.tags)
+        return [(command, [message.target, start + message.prefix + piece + end], tags)
+                for piece in split_text(text, room)]
 
     def join(self, channel, key=''):
         self.write('JOIN', [channel, key] if key else [channel])
@@ -1085,21 +1090,17 @@ class TwitchTransport(TwitchIdentity, IrcTransport):
         start = '/me ' if kind == 'action' else ''
         return max(self.max_length - len(start + prefix), 64)
 
-    async def send(self, message):
-        if not self.writer:
-            self.logger.debug('not connected, dropping a message to {}'.format(message.target))
-            return
+    def lines(self, message, text):
         if message.kind == 'notice' and not is_channel(message.target):
             self.logger.debug("twitch doesn't deliver notices to people, dropping one to "
                               "{}".format(message.target))
-            return
+            return []
+        # everything is a message on Twitch, an action as /me
         start = '/me ' if message.kind == 'action' else ''
-        text = message.text.encode('utf-8', 'replace').decode('utf-8')
         room = self.text_room(message.kind, message.target, message.prefix)
-        for piece in split_text(text, room, chars=True):
-            line = self.unrepeat(message.target, start + message.prefix + piece)
-            self.write('PRIVMSG', [message.target, line])
-        await self.writer.drain()
+        return [('PRIVMSG', [message.target,
+                             self.unrepeat(message.target, start + message.prefix + piece)], None)
+                for piece in split_text(text, room, chars=True)]
 
     def unrepeat(self, target, line):
         key = self.casefold(target)
