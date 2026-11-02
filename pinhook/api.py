@@ -47,7 +47,7 @@ def _mark(func, **spec):
 
 
 def command(name, help=None, ops=False, restricted=False, denied_msg='', error_msg='',
-            timeout=None, hide=False):
+            timeout=None, hide=False, aliases=()):
     """Make an async function a command. Its arguments after ctx come from the message, typed.
 
     Args:
@@ -59,10 +59,15 @@ def command(name, help=None, ops=False, restricted=False, denied_msg='', error_m
         error_msg: said in chat if the command fails. Empty means the failure is only logged.
         timeout: seconds before the bot stops waiting for it, instead of the bot's default.
         hide: if True, leave it out of !help.
+        aliases: other names that run it, like ['r', 'dice'] for roll.
     """
-    if not NAME.match(name):
-        raise ValueError("command names are letters, digits, - and _, without a prefix: "
-                         "'{}'".format(name))
+    aliases = (aliases,) if isinstance(aliases, str) else tuple(aliases)
+    for word in (name,) + aliases:
+        if not isinstance(word, str) or not NAME.match(word):
+            raise ValueError("command names are letters, digits, - and _, without a prefix: "
+                             "'{}'".format(word))
+    if name in aliases or len(set(aliases)) != len(aliases):
+        raise ValueError("{}'s aliases repeat a name: {}".format(name, ', '.join(aliases)))
     if ops and restricted:
         raise ValueError("{} can be ops=True or restricted=True, not both".format(name))
 
@@ -70,7 +75,7 @@ def command(name, help=None, ops=False, restricted=False, denied_msg='', error_m
         doc = (inspect.getdoc(func) or '').strip().splitlines()
         return _mark(func, kind='command', name=name, help_text=help or (doc[0] if doc else 'N/A'),
                      ops=ops, restricted=restricted, denied_msg=denied_msg, error_msg=error_msg,
-                     timeout=timeout, hide=hide)
+                     timeout=timeout, hide=hide, aliases=aliases)
     return mark
 
 

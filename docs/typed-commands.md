@@ -21,6 +21,14 @@ async def roll(ctx, count: int = 1, sides: int = 6):
 
 `@command('roll')` answers to `!roll`. Names are letters, digits, `-` and `_`, written without a prefix. The bot's [`cmd_prefix`](options.md#commands-and-plugins) is the prefix, `!` by default. A message that starts with the bot's nick works too: `gamebot: roll 2 20`.
 
+## Give it other names
+
+```python
+@command('roll', aliases=['r', 'dice'])
+```
+
+`!r` and `!dice` run `roll`. `!help` lists it once, as `!roll`, and `!help r` shows its other names. Access, `!enable` and `!disable` go by the command, whichever name is used. An alias another command already has stops the plugin loading, the same as a name.
+
 ## Use the types
 
 | Annotation | Takes |

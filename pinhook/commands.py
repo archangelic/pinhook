@@ -238,6 +238,7 @@ class CommandInfo:
         level: its access level, 'open', 'restricted' or 'ops'.
         hidden: True if it's left out of !help.
         typed: False for a 1.x command, whose arguments aren't typed.
+        aliases: its other names, without a prefix.
     """
     name: str
     label: str
@@ -248,6 +249,7 @@ class CommandInfo:
     level: str
     hidden: bool
     typed: bool
+    aliases: tuple[str, ...] = ()
 
 
 # what a 1.x command's text is listed as
@@ -264,7 +266,7 @@ def command_info(handler, prefix, level):
         args = (LEGACY_ARG,)
         line = '{} [arg]'.format(handler.name)
     return CommandInfo(handler.name, handler.label(prefix), handler.help_text, line, args,
-                       handler.plugin, level, handler.hide, handler.native)
+                       handler.plugin, level, handler.hide, handler.native, handler.aliases)
 
 
 def arg_info(param, last):

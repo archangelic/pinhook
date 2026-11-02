@@ -798,6 +798,8 @@ class Bot:
             return None
         lines = ['{}{} -- {}'.format(handler.label(prefix), self.access_note(handler, who, channel),
                                      handler.help_text)]
+        if handler.aliases:
+            lines.append('also ' + ', '.join(prefix + alias for alias in handler.aliases))
         if handler.native:
             lines.append('usage: ' + commands.usage(handler.name, handler.params))
             described = [(None, [line]) for line in commands.describe(handler.params)]
@@ -1152,6 +1154,9 @@ class Bot:
         # a command written with its prefix, like !roll, means the command roll
         if name in self.registry.plugins:
             return name
+        command = self.registry.find(name, addressed=True)
+        if command is not None:
+            return command.name
         for handler in self.registry.handlers():
             if name in (handler.name, handler.label(self.cmd_prefix)):
                 return handler.name

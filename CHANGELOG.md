@@ -14,7 +14,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 ### New
 
 * Plugins get `ctx`: who spoke, where, how to answer, and the plugin's store and settings. Handlers are `async def`
-* Typed commands: arguments come from the handler's signature, bad input gets a usage line, and `!help <command>` shows it
+* Typed commands: arguments come from the handler's signature, bad input gets a usage line, and `!help <command>` shows it. `aliases=` gives a command other names
 * Class plugins with `setup(previous)` and `teardown()`, so state carries across `!reload`
 * `@on` for joins, parts, kicks, nick changes, topics, invites, modes, netsplits and more, and `@every` for timers
 * An async core with an output queue, which keeps to each network's rate limits, so a slow plugin or a long reply never freezes the bot

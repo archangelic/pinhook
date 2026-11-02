@@ -41,11 +41,12 @@ class Handler:
         denied_msg: what someone who can't run a command is told when they try.
         error_msg: said in chat when a 2.0 command fails.
         timeout: seconds to wait for it, or None for the bot's default.
+        aliases: a 2.0 command's other names, which run it too.
     """
 
     def __init__(self, kind, name, plugin_name, func, trigger=None, help_text='N/A', ops=False,
                  restricted=False, denied_msg='', hide=False, native=False, params=(), event=None,
-                 error_msg='', timeout=None, interval=None):
+                 error_msg='', timeout=None, interval=None, aliases=()):
         self.kind = kind
         self.name = name
         self.trigger = trigger
@@ -62,6 +63,7 @@ class Handler:
         self.error_msg = error_msg
         self.timeout = timeout
         self.interval = interval
+        self.aliases = tuple(aliases)
 
     def label(self, prefix):
         """How the bot writes it in logs and !help: the word that runs a command."""
@@ -173,15 +175,18 @@ class Registry:
         for owner, handler in found:
             if handler.kind in ('event', 'timer'):
                 continue
-            key = (handler.kind, handler.trigger or handler.name)
-            if key in taken:
-                raise LoadError('plugin {} registers {} {} twice'.format(
-                    plugin_name, handler.kind, handler.label(self.prefixes[0])))
-            taken[key] = handler
-            other = self.owner(handler)
-            if other:
-                raise LoadError('plugin {} registers {} {}, which {} already has'.format(
-                    plugin_name, handler.kind, handler.label(self.prefixes[0]), other))
+            for word in (handler.trigger or handler.name,) + handler.aliases:
+                key = (handler.kind, word)
+                label = handler.label(self.prefixes[0]) if word == handler.name else \
+                    self.prefixes[0] + word
+                if key in taken:
+                    raise LoadError('plugin {} registers {} {} twice'.format(
+                        plugin_name, handler.kind, label))
+                taken[key] = handler
+                other = self.owner(handler, word)
+                if other:
+                    raise LoadError('plugin {} registers {} {}, which {} already has'.format(
+                        plugin_name, handler.kind, label, other))
         for owner, handler in found:
             if handler.kind == 'command' and handler.native:
                 try:
@@ -206,7 +211,8 @@ class Registry:
             elif handler.trigger:
                 self.literals[handler.trigger] = handler
             else:
-                self.commands[handler.name] = handler
+                for word in (handler.name,) + handler.aliases:
+                    self.commands[word] = handler
         self.plugins[plugin_name] = handlers
         for cls, instance in instances.items():
             self.instances[(plugin_name, cls.__qualname__)] = instance
@@ -288,16 +294,17 @@ class Registry:
             return word, None
         return word, word
 
-    def owner(self, handler):
-        # who already has this name, if anyone
+    def owner(self, handler, word=None):
+        # who already has this name, or word, one of a command's aliases, if anyone
         if handler.kind == 'listener':
             other = self.listeners.get(handler.name)
         elif handler.trigger:
             other = self.literals.get(handler.trigger)
         else:
-            if handler.name in self.reserved:
+            word = word or handler.name
+            if word in self.reserved:
                 return 'the bot itself'
-            other = self.commands.get(handler.name)
+            other = self.commands.get(word)
         return 'plugin ' + other.plugin if other else None
 
     def handlers(self):
