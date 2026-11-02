@@ -139,3 +139,40 @@ def test_help_answers_in_the_channel(tmp_path):
 def test_actions_are_sent_with_me(tmp_path):
     w = twitch(tmp_path)
     assert lines(say(w, '!me')) == ['PRIVMSG #chan /me waves']
+
+
+def texts(sent):
+    return [s.text.removesuffix(TwitchTransport.repeat_mark) for s in sent]
+
+
+def test_badges_are_access_groups(tmp_path):
+    w = twitch(tmp_path, access={'plugins': {'plugin': {'commands': {
+        'mod': {'allow': ['subscriber', 'vip']}}}}})
+    assert say(w, '!mod', 'viewer') == []
+    assert texts(say(w, '!mod', 'fan', 'subscriber/12')) == ['mods only']
+    assert texts(say(w, '!mod', 'friend', 'vip/1')) == ['mods only']
+    # a sub who's lapsed isn't one any more
+    assert say(w, '!mod', 'fan', '') == []
+
+
+def test_the_broadcaster_and_moderator_groups(tmp_path):
+    w = twitch(tmp_path, access={'plugins': {'plugin': {'commands': {
+        'mod': {'allow': ['broadcaster']}}}}})
+    assert say(w, '!mod', 'amod', 'moderator/1') == []
+    assert texts(say(w, '!mod', 'streamer', 'broadcaster/1')) == ['mods only']
+
+
+def test_vips_are_voiced_and_everyone_is_logged_in(tmp_path):
+    w = twitch(tmp_path, access={'plugins': {'plugin': {'commands': {
+        'mod': {'allow': ['voiced']}, 'me': {'deny': ['logged-in']}}}}})
+    assert texts(say(w, '!mod', 'friend', 'vip/1')) == ['mods only']
+    assert say(w, '!mod', 'viewer') == []
+    assert say(w, '!me', 'viewer') == []
+
+
+def test_ban_saves_the_nick_on_twitch(tmp_path):
+    w = twitch(tmp_path, ops=['streamer'])
+    say(w, 'hello', 'troll')
+    assert texts(say(w, '!ban troll', 'streamer', 'broadcaster/1')) == [
+        'streamer: banned troll']
+    assert w.bot.banned_users == ['troll']

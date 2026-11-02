@@ -58,3 +58,26 @@ class IrcIdentity:
         if who.account:
             return '$a:' + who.account
         return '*!*{}@{}'.format((who.user or '').lstrip('~'), who.host)
+
+
+class TwitchIdentity(IrcIdentity):
+    """Twitch's identities: nicks, which are logins and unique, and accounts, with badges
+    as groups. Everyone on Twitch is logged in. chanops are the broadcaster and
+    moderators, and voiced adds VIPs, from the member modes their badges become."""
+    entry_kinds = frozenset({'nick', 'account'})
+    badge_groups = frozenset({'broadcaster', 'moderator', 'vip', 'subscriber'})
+    groups = IrcIdentity.groups | badge_groups
+
+    def in_group(self, group, who, channel):
+        if group == 'logged-in':
+            return True
+        if group in self.badge_groups:
+            return bool(channel) and group in self.member_badges(channel, who.nick)
+        return super().in_group(group, who, channel)
+
+    def member_badges(self, channel, nick):
+        """The badges nick showed in channel with their last message."""
+        return frozenset()
+
+    def strongest_entry(self, who):
+        return '$a:' + who.account if who.account else who.nick

@@ -6,6 +6,7 @@ split to fit IRC's 512 byte lines.
 """
 import asyncio
 import base64
+from collections import OrderedDict
 import contextlib
 import json
 import os
@@ -17,7 +18,7 @@ import irctokens
 
 from ..__version__ import __version__
 from .base import Event, Limits, Source, Whois, casefold, is_channel
-from .identity import IrcIdentity
+from .identity import IrcIdentity, TwitchIdentity
 from ..store import write_json
 from . import sasl
 from .members import Tracker
@@ -979,7 +980,7 @@ class IrcTransport(IrcIdentity):
             self.write('NOTICE', [nick, '\x01PING {}\x01'.format(rest)])
 
 
-class TwitchTransport(IrcTransport):
+class TwitchTransport(TwitchIdentity, IrcTransport):
     """Twitch chat, which is IRC with its own capabilities and rules.
 
     Twitch takes 20 lines in any 30 seconds, and one a second in each channel where
@@ -1003,6 +1004,9 @@ class TwitchTransport(IrcTransport):
         self.privileged = set()
         # the last line sent to each target, and when
         self.recent = {}
+        # each chatter's badges in each channel, from their last message, for the
+        # broadcaster, moderator, vip and subscriber access groups
+        self.badges_seen = OrderedDict()
 
     def welcomed(self):
         self.logger.info('requesting permissions')
@@ -1048,7 +1052,18 @@ class TwitchTransport(IrcTransport):
             nick, channel = line.hostmask.nickname, line.params[0]
             self.tracker.set_mode(channel, nick, 'o', bool(badges & {'broadcaster', 'moderator'}))
             self.tracker.set_mode(channel, nick, 'v', 'vip' in badges)
+            key = (self.casefold(channel), self.casefold(nick))
+            self.badges_seen[key] = frozenset(badges)
+            self.badges_seen.move_to_end(key)
+            while len(self.badges_seen) > self.badges_kept:
+                self.badges_seen.popitem(last=False)
         super().on_privmsg(line)
+
+    # how many chatters' badges are kept, the most recent ones
+    badges_kept = 10000
+
+    def member_badges(self, channel, nick):
+        return self.badges_seen.get((self.casefold(channel), self.casefold(nick)), frozenset())
 
     def text_room(self, kind, target, prefix=''):
         start = '/me ' if kind == 'action' else ''

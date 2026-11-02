@@ -404,6 +404,8 @@ class Bot:
         entry = self.transport.strongest_entry(seen)
         if entry_kind(entry) == 'account':
             return entry, '{} (account {})'.format(target, entry[len('$a:'):])
+        if entry_kind(entry) == 'nick':
+            return entry, entry
         return entry, '{} ({})'.format(target, entry)
 
     def remove_bans(self, target):
