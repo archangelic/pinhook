@@ -5,6 +5,7 @@ import re
 
 import click
 import yaml
+from . import connect as connecting
 from . import log
 from . import scaffold
 from .bot import Bot, TwitchBot
@@ -450,3 +451,15 @@ def new_recipe(name, edit):
     path = scaffold.new_recipe(name)
     click.echo('Made {}'.format(path))
     scaffold.offer_editor(path, edit)
+
+
+@cli.command()
+@click.argument('platform', type=click.Choice(sorted(connecting.PLATFORMS)))
+@click.argument('config', default='config.yaml')
+def connect(platform, config):
+    """Set up PLATFORM for the bot CONFIG describes, keeping its token in secrets.env.
+
+    CONFIG is config.yaml in this folder unless given. secrets.env goes beside it,
+    readable only by you, and pinhook run reads it.
+    """
+    connecting.connect_twitch(config)
