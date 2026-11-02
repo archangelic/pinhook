@@ -10,43 +10,24 @@ hide:
 
 ```bash
 pip install pinhook
+pinhook new bot gamebot
 ```
 
-Make a `plugins` folder and save this in it as `hello.py`:
+Edit `gamebot/config.yaml` with your server and channel, then run the bot:
 
-```python
-import pinhook.plugin
-
-@pinhook.plugin.command('!hello')
-def hello(msg):
-    return pinhook.plugin.message('hi {}!'.format(msg.nick))
+```bash
+pinhook run gamebot/config.yaml
 ```
 
-Then start a bot:
-
-```python
-from pinhook.bot import Bot
-
-bot = Bot(
-    channels=['#foo'],
-    nickname='ph-bot',
-    server='irc.libera.chat',
-    port=6697,
-    ssl_required=True,
-)
-bot.start()
-```
-
-Say `!hello` in `#foo` and the bot answers.
+Say `!hello` in the channel and the bot answers.
 
 ## Where to next
 
-* [Getting started](getting-started.md): config files, the command line tool and your first plugin
-* [Options](options.md): everything you can set on a bot
-* [Writing plugins](plugins.md): commands, listeners and what a plugin gets to work with
-* [Testing plugins](testing.md): check your plugins with pytest, no server needed
-* [Bans and ops](bans-and-ops.md): who can run what, and bans that are hard to dodge
-* [Troubleshooting](troubleshooting.md): what the log messages mean
-* Coming from an older version? See [Upgrading to 1.11](upgrading.md), and [Preparing for 2.0](preparing-for-2.md) to get your plugins ready for what's next
+* [Your first bot](your-first-bot.md): a dice command, its test, and running it
+* [The context](the-context.md): everything a plugin gets with `ctx`
+* [Writing recipes](writing-recipes.md): commands written as YAML
+* [Access levels](access-levels.md): who runs what
+* [Deployment](deployment.md): the image, and compose, systemd and Kubernetes examples
+* Coming from 1.x? [Migrating from 1.x](migrating-from-1x.md) lists what changed
 
-pinhook is made with love on [tilde.town](https://tilde.town). Live bots using it include [pinhook-tilde](https://github.com/archangelic/pinhook-tilde) and [adminbot](https://github.com/tildetown/adminbot).
+pinhook is made with love on [tilde.town](https://tilde.town). Bots using it include [pinhook-tilde](https://github.com/archangelic/pinhook-tilde) and [adminbot](https://github.com/tildetown/adminbot).

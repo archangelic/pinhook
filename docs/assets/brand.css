@@ -510,6 +510,23 @@
 .ph-n {
   color: #FFFFFF;
 }
+.ph-c {
+  color: #8796A3;
+}
+
+/* the vermilion band, the same in both modes: white on Vermilion passes 4.7:1 */
+.ph-band--vermilion {
+  background: #DD2C1A;
+  color: #FFFFFF;
+}
+.ph-home .ph-band--vermilion h2,
+.ph-home .ph-band--vermilion p {
+  color: #FFFFFF;
+}
+.ph-button--light {
+  background: #FFFFFF;
+  color: #9E1C0E;
+}
 
 @media screen and (max-width: 600px) {
   .ph-hero {

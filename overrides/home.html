@@ -6,23 +6,22 @@
   <section class="ph-hero">
     <div class="ph-wrap ph-split">
       <div class="ph-hero__text">
-        <span class="ph-badge">pinhook 1.12</span>
+        <span class="ph-badge">pinhook 2.0</span>
         <h1>IRC bots in plain Python.</h1>
-        <p class="ph-lead">Write a plugin as a Python function, and pinhook handles connecting, joining channels, ops, bans and getting your replies back to the right place. Works on any IRC network, and on Twitch.</p>
+        <p class="ph-lead">Write a plugin as a function or a class, type its arguments, and pinhook handles the network, the rate limits and the permissions. Works on any IRC network, and on Twitch.</p>
         <div class="ph-actions">
-          <a class="ph-button" href="{{ 'getting-started/' | url }}">Get started</a>
+          <a class="ph-button" href="{{ 'your-first-bot/' | url }}">Read the docs</a>
           <code class="ph-install">$ pip install pinhook</code>
         </div>
       </div>
       <div class="ph-chat" aria-label="A chat with a pinhook bot">
         <div class="ph-chat__title">#games</div>
         <div class="ph-chat__lines">
-          <span><span class="ph-time">22:40</span> &lt;ana&gt; !hello</span>
-          <span><span class="ph-time">22:40</span> <span class="ph-bot">&lt;pinhook&gt;</span> hi ana!</span>
-          <span><span class="ph-time">22:41</span> &lt;mal&gt; !roll 2d20</span>
-          <span><span class="ph-time">22:41</span> <span class="ph-bot">&lt;pinhook&gt;</span> 14, 17 = 31</span>
-          <span><span class="ph-time">22:41</span> &lt;mal&gt; !roll lots</span>
-          <span><span class="ph-time">22:41</span> <span class="ph-bot">&lt;pinhook&gt;</span> mal: improper format, should be NdN+N</span>
+          <span><span class="ph-time">22:40</span> &lt;ana&gt; who's in for friday</span>
+          <span><span class="ph-time">22:41</span> &lt;mal&gt; !roll 2 20</span>
+          <span><span class="ph-time">22:41</span> <span class="ph-bot">&lt;pinhook&gt;</span> mal rolled 31 [14, 17]</span>
+          <span><span class="ph-time">22:41</span> &lt;mal&gt; !gamenight</span>
+          <span><span class="ph-time">22:41</span> <span class="ph-bot">&lt;pinhook&gt;</span> Tonight: Blades in the Dark. ana goes first</span>
         </div>
       </div>
     </div>
@@ -30,18 +29,15 @@
 
   <section class="ph-band">
     <div class="ph-wrap">
-      <p class="ph-label">What it does</p>
-      <h2>What pinhook handles for your bot</h2>
-      <p class="ph-intro">You write the plugins. These are the parts pinhook takes care of, each with the page that covers it.</p>
+      <p class="ph-label">What's in 2.0</p>
+      <h2>Everything a bot needs, nothing it doesn't.</h2>
       <div class="ph-cards">
-        <div class="ph-card"><h3>Commands and listeners</h3><p><code>@command('!roll')</code> runs when a message starts with <code>!roll</code>. A <code>@listener</code> sees every other message, <code>/me</code> actions too. Reply by returning <code>message()</code> or <code>action()</code>, or call <code>msg.reply()</code> as you go.</p><a class="ph-card__link" href="{{ 'plugins/' | url }}">Writing plugins →</a></div>
-        <div class="ph-card"><h3>Who can run what</h3><p>List <code>ops</code> by nick, hostmask like <code>*!*@203.0.113.7</code>, or services account like <code>$a:mal</code>. <code>ops=True</code> keeps a command to them. Bans made with <code>!ban</code> are saved to <code>ban_file</code> and last through restarts.</p><a class="ph-card__link" href="{{ 'bans-and-ops/' | url }}">Bans and ops →</a></div>
-        <div class="ph-card"><h3>Data that survives restarts</h3><p><code>msg.store</code> is a dict pinhook saves as JSON after each plugin call. <code>msg.config</code> is the plugin's section of <code>plugin_config</code>, with a <code>shared</code> section for settings several plugins use.</p><a class="ph-card__link" href="{{ 'plugins/' | url }}">Writing plugins →</a></div>
-        <div class="ph-card"><h3>Config files and secrets</h3><p><code>pinhook config.yaml</code> starts a bot from a JSON, YAML or TOML file. <code>${NAME}</code> fills in an environment variable, so passwords stay out of the file. <code>bot_dir</code> keeps plugins, data and logs in one folder.</p><a class="ph-card__link" href="{{ 'getting-started/' | url }}">Getting started →</a></div>
-        <div class="ph-card"><h3>Logging in and TLS</h3><p><code>sasl_password</code> logs in with SASL, with <code>ns_pass</code> for NickServ as the fallback. <code>ssl_required</code> connects over TLS and <code>ssl_verify</code> checks the certificate. Connection errors are logged with what to fix.</p><a class="ph-card__link" href="{{ 'options/' | url }}">Options →</a></div>
-        <div class="ph-card"><h3>Built-in commands</h3><p><code>!help</code>, <code>!reload</code> for new plugin code without a restart, <code>!enable</code> and <code>!disable</code>, <code>!join</code> and <code>!quit</code>, plus <code>!op</code>, <code>!ban</code> and <code>!banlist</code> for ops. <code>cmd_prefix</code> changes their <code>!</code>.</p><a class="ph-card__link" href="{{ 'commands/' | url }}">Built-in commands →</a></div>
-        <div class="ph-card"><h3>Testing</h3><p><code>TestBot</code> runs your plugins folder without a server. <code>bot.say('!roll 1d1')</code> returns the replies, and a plugin that raises fails the test with a <code>PluginError</code>.</p><a class="ph-card__link" href="{{ 'testing/' | url }}">Testing plugins →</a></div>
-        <div class="ph-card"><h3>Twitch</h3><p><code>TwitchBot</code> connects to Twitch chat with a bot account's oauth token, always over TLS. Plugins, ops and bans work the same as on IRC.</p><a class="ph-card__link" href="{{ 'twitch/' | url }}">Twitch bots →</a></div>
+        <div class="ph-card"><h3>Typed commands</h3><p>Arguments come from the handler's signature. Bad input gets a usage line built from it, and <code>!help</code> writes itself.</p><a class="ph-card__link" href="{{ 'typed-commands/' | url }}">Typed commands →</a></div>
+        <div class="ph-card"><h3>An async core</h3><p>An output queue sends within each network's rate limits, so a slow plugin or a long reply never freezes the bot.</p><a class="ph-card__link" href="{{ 'the-context/' | url }}">The context →</a></div>
+        <div class="ph-card"><h3>Recipes</h3><p>Custom commands written as YAML, combining existing commands, replies, loops and conditions. No Python needed.</p><a class="ph-card__link" href="{{ 'writing-recipes/' | url }}">Writing recipes →</a></div>
+        <div class="ph-card"><h3>Access levels</h3><p>Open, restricted or ops-only, per plugin or per command. Grant and deny from chat with <code>!allow</code> and <code>!deny</code>.</p><a class="ph-card__link" href="{{ 'access-levels/' | url }}">Access levels →</a></div>
+        <div class="ph-card"><h3>IRCv3 and Twitch</h3><p>SASL, account tags, server time, threaded replies and more, each with a fallback. Twitch runs from the same config, with badges as access groups.</p><a class="ph-card__link" href="{{ 'ircv3-support/' | url }}">IRCv3 support →</a></div>
+        <div class="ph-card"><h3>TestBot</h3><p>Run plugins in pytest without a server. Stores live in memory, and a plugin error fails the test.</p><a class="ph-card__link" href="{{ 'testbot/' | url }}">TestBot →</a></div>
       </div>
     </div>
   </section>
@@ -50,33 +46,53 @@
     <div class="ph-wrap ph-split">
       <div class="ph-split__text">
         <p class="ph-label">A plugin</p>
-        <h2>A function, a decorator, a reply.</h2>
-        <p>A plugin gets the message: who sent it, where, a way to reply, a store that survives restarts and its own settings.</p>
-        <a class="ph-more" href="{{ 'plugins/' | url }}">Writing plugins →</a>
+        <h2>A class, a decorator, a reply.</h2>
+        <p>Plugins get a <code>ctx</code> with everything they need: who spoke, where, how to reply, a store that survives restarts, and their own settings.</p>
+        <a class="ph-more" href="{{ 'typed-commands/' | url }}">Typed commands in the docs →</a>
       </div>
-<pre class="ph-code"><code><span class="ph-k">import</span> pinhook.plugin
+<pre class="ph-code"><code><span class="ph-k">import</span> random
 
-<span class="ph-d">@pinhook.plugin.command</span>(<span class="ph-s">'!hello'</span>)
-<span class="ph-k">def</span> <span class="ph-n">hello</span>(msg):
-    <span class="ph-k">return</span> pinhook.plugin.message(<span class="ph-s">'hi {}!'</span>.format(msg.nick))</code></pre>
+<span class="ph-k">from</span> pinhook <span class="ph-k">import</span> Plugin, command
+
+
+<span class="ph-k">class</span> <span class="ph-n">Dice</span>(Plugin):
+    <span class="ph-d">@command</span>(<span class="ph-s">'roll'</span>, help=<span class="ph-s">'roll dice, like roll 2 20'</span>)
+    <span class="ph-k">async def</span> <span class="ph-n">roll</span>(self, ctx, count: int = 1, sides: int = 6):
+        rolls = [random.randint(1, sides) <span class="ph-k">for</span> _ <span class="ph-k">in</span> range(count)]
+        <span class="ph-k">await</span> ctx.reply(<span class="ph-s">f'{ctx.nick} rolled {sum(rolls)} {rolls}'</span>)</code></pre>
     </div>
   </section>
 
   <section class="ph-band">
     <div class="ph-wrap ph-split">
-<pre class="ph-code"><code><span class="ph-k">from</span> pinhook.testing <span class="ph-k">import</span> TestBot
-
-<span class="ph-k">def</span> <span class="ph-n">test_hello</span>():
-    bot = TestBot(plugin_dir=<span class="ph-s">'plugins'</span>)
-    <span class="ph-k">assert</span> bot.say(<span class="ph-s">'!hello'</span>, nick=<span class="ph-s">'ana'</span>) == [<span class="ph-s">'hi ana!'</span>]</code></pre>
+<pre class="ph-code"><code><span class="ph-c"># recipes/gamenight.yaml</span>
+<span class="ph-k">version</span>: 1
+<span class="ph-k">name</span>: gamenight
+<span class="ph-k">help</span>: pick tonight's game and who goes first
+<span class="ph-k">steps</span>:
+  - <span class="ph-k">command</span>: <span class="ph-s">'quote random games'</span>
+    <span class="ph-k">save</span>: game
+  - <span class="ph-k">reply</span>: <span class="ph-s">'Tonight: {game}. {members|random} goes first'</span></code></pre>
       <div class="ph-split__text">
-        <p class="ph-label">Testing</p>
-        <h2>Test it without a server.</h2>
-        <p><code>TestBot</code> runs your plugins the way a real bot does and hands back what it would have said, so a plugin's tests run in pytest like any other code.</p>
-        <a class="ph-more" href="{{ 'testing/' | url }}">Testing plugins →</a>
+        <p class="ph-label">A recipe</p>
+        <h2>Custom commands, no code.</h2>
+        <p>Recipes run existing commands as the person who asked, so a recipe can never do more than its user could. Ops add one-line recipes from chat with <code>!recipe add</code>.</p>
+        <a class="ph-more" href="{{ 'writing-recipes/' | url }}">Writing recipes →</a>
       </div>
     </div>
   </section>
+
+  {%- if config.extra.vermilion_url %}
+  <section class="ph-band ph-band--vermilion">
+    <div class="ph-wrap ph-split">
+      <h2>Need an LLM agent? Add vermilion.</h2>
+      <div class="ph-split__text">
+        <p>vermilion is a separate package that turns a pinhook bot into one, with your plugins as its tools.</p>
+        <a class="ph-button ph-button--light" href="{{ config.extra.vermilion_url }}">Meet vermilion</a>
+      </div>
+    </div>
+  </section>
+  {%- endif %}
 </div>
 {% endblock %}
 
