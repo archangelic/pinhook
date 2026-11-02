@@ -74,7 +74,23 @@ def legacy_bot(msg):
     return p.message('bot is {}'.format(msg.bot.nick))
 
 
+# listeners: run for every message that isn't a command, /me actions and private
+# messages included, each one on its own
+
 @p.listener('legacy_listener')
 def legacy_listener(msg):
     if msg.text == 'ping legacy':
         return p.message('pong from a 1.x listener')
+    if msg.msg_type == 'action' and 'waves' in msg.text:
+        return p.action('waves back the 1.x way')
+
+
+@p.listener('legacy_counter')
+def legacy_counter(msg):
+    # a listener that never answers, counting what it hears
+    msg.store['heard'] = msg.store.get('heard', 0) + 1
+
+
+@p.command('!legacyheard')
+def legacy_heard(msg):
+    return p.message('heard {} messages'.format(msg.store.get('heard', 0)))

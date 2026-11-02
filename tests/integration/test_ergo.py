@@ -659,6 +659,9 @@ def test_the_showcase_bot_runs_on_a_real_server(tmp_path, names, users, start_bo
     start_bot(mal, ops=['mallory'], plugin_config=plugin_config)
     assert messages(mal.say('!legacy', channel, bot)) == ['hello mallory from 1.x']
     assert messages(mal.say('ping legacy', channel, bot)) == ['pong from a 1.x listener']
+    assert messages(mal.say('ping modern', bot, bot)) == ['pong from a 2.0 listener']
+    assert sorted(mal.say('\x01ACTION waves\x01', channel, bot)) == [
+        ('ACTION', channel, 'waves back'), ('ACTION', channel, 'waves back the 1.x way')]
     assert messages(mal.say('!r 2 20', channel, bot)) == ['mallory rolled 2d20']
     assert messages(mal.say('!types hi 3 1.5 yes b 7 the rest', channel, bot)) == [
         'hi 3 1.5 True b 7 the rest']

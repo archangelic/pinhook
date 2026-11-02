@@ -177,10 +177,20 @@ class Tour(Plugin):
     async def notice(self, ctx: Context) -> None:
         self.events.append(f'notice {ctx.text}')
 
+    # listeners: @on('message') runs for every message that isn't a command, /me
+    # actions and private messages included, and a plugin can have several
+
     @on('message')
     async def message(self, ctx: Context) -> None:
         if ctx.addressed and ctx.text.endswith('hello'):
             await ctx.reply(f'hello {ctx.nick}, you addressed me')
+        elif ctx.text == 'ping modern':
+            await ctx.reply('pong from a 2.0 listener')
+
+    @on('message', timeout=5)
+    async def waved(self, ctx: Context) -> None:
+        if ctx.kind == 'action' and 'waves' in ctx.text:
+            await ctx.action('waves back')
 
     @on('connected')
     async def connected(self, ctx: Context) -> None:

@@ -71,10 +71,9 @@ def test_1x_store_config_ops_hidden_and_details(bot):
         'account=mal user=mal ops=$a:mal type=message time=True']
 
 
-def test_1x_msg_bot_and_listeners(bot):
+def test_1x_msg_bot(bot):
     with pytest.warns(DeprecationWarning):
         assert bot.say('!legacybot') == ['bot is testbot']
-    assert bot.say('ping legacy') == ['pong from a 1.x listener']
 
 
 # 2.0
@@ -159,6 +158,35 @@ def test_events_and_the_timer(bot):
         'topic game night, nick newbie>newbie_, mode +o newbie_, kick newbie_, part mal']
     assert bot.say('testbot: hello', nick='ana') == ['hello ana, you addressed me']
     assert [(s.target, s.text) for s in bot.tick(1800)] == [('#showcase-test', 'the timer fired')]
+
+
+# listeners
+
+def test_listeners_answer_messages_actions_and_private_messages(bot):
+    assert bot.say('ping legacy') == ['pong from a 1.x listener']
+    assert bot.say('ping modern') == ['pong from a 2.0 listener']
+    assert bot.private('ping legacy', nick='ana') == ['pong from a 1.x listener']
+    assert bot.private('ping modern', nick='ana') == ['pong from a 2.0 listener']
+    # each listener answers on its own, so the order between them isn't fixed
+    assert sorted(bot.action('waves', nick='ana')) == ['waves back', 'waves back the 1.x way']
+    assert bot.say('nothing to answer') == []
+
+
+def test_listeners_hear_everything_but_commands(bot):
+    bot.say('one')
+    bot.action('two')
+    bot.private('three')
+    bot.say('!legacy')
+    bot.say('!roll')
+    assert bot.say('!legacyheard') == ['heard 3 messages']
+
+
+def test_listeners_in_help_and_turned_off(bot):
+    assert 'listeners: legacy_counter, legacy_listener' in ' '.join(bot.private('!help'))
+    mal(bot, '!disable legacy_listener')
+    assert bot.say('ping legacy') == []
+    mal(bot, '!enable legacy_listener')
+    assert bot.say('ping legacy') == ['pong from a 1.x listener']
 
 
 # recipes

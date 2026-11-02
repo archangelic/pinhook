@@ -8,6 +8,8 @@ and for the tests in `tests/test_showcase.py`.
 - `plugins/modern_tour.py` uses every 2.0 feature: a class plugin, typed commands, aliases,
   access levels, everything the context docs list, an `@on` handler for each event, and
   a timer
+- both plugins have listeners, which hear every message that isn't a command, `/me`
+  actions and private messages included
 - `recipes/` has a recipe for each step type
 
 Run it against a network:
@@ -19,4 +21,5 @@ pinhook check --strict /tmp/showcase/config.yaml
 pinhook run /tmp/showcase/config.yaml
 ```
 
-Then say `!help` in the channel, and try each command it lists.
+Then say `!help` in the channel, and try each command it lists. For the listeners, say
+`ping legacy` and `ping modern`, and `/me waves`.
