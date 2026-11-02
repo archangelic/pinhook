@@ -93,7 +93,7 @@ from pinhook import on
 
 @on('join')
 async def welcome(ctx):
-    if ctx.channel == '#tildetown' and ctx.nick != ctx.bot.nick:
+    if ctx.channel == '#tildetown':
         await ctx.send(ctx.nick, f'Welcome, {ctx.nick}!')
 ```
 

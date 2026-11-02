@@ -8,9 +8,10 @@ from pinhook import on
 
 @on('join')
 async def greet(ctx):
-    if ctx.nick != ctx.bot.nick:
-        await ctx.reply(f'welcome, {ctx.nick}')
+    await ctx.reply(f'welcome, {ctx.nick}')
 ```
+
+Handlers never see the bot's own joins or messages, so the bot never welcomes itself.
 
 ## The events
 
