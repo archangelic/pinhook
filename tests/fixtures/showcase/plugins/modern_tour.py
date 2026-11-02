@@ -103,7 +103,9 @@ class Tour(Plugin):
 
     @command('sleepy', timeout=0.05)
     async def sleepy(self, ctx: Context) -> None:
+        # the timeout stops it first, so this is never said
         await asyncio.sleep(1)
+        await ctx.reply('woke up')
 
     @command('hidden', hide=True)
     async def hidden(self, ctx: Context) -> None:
