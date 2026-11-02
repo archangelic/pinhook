@@ -232,7 +232,7 @@ class CommandInfo:
         name: the name, without a prefix, like 'roll'.
         label: how it's typed, like '!roll'.
         help: its one-line help.
-        usage: its usage line, like 'roll [dice=1d6] [times=1]'.
+        usage: its usage line, like `roll [dice=1d6] [times=1]`.
         args: its arguments. A 1.x command has one, arg, the text after the command.
         plugin: the plugin file it comes from.
         level: its access level, 'open', 'restricted' or 'ops'.

@@ -82,7 +82,9 @@ def every(seconds=0, minutes=0, hours=0, timeout=None):
     due is left to finish instead of starting another.
 
     Args:
-        seconds, minutes, hours: how often, added together, like every(minutes=30).
+        seconds: how often, in seconds, added to minutes and hours.
+        minutes: how often, in minutes, like every(minutes=30).
+        hours: how often, in hours.
         timeout: seconds before the bot stops waiting for it, instead of the bot's default.
     """
     interval = seconds + minutes * 60 + hours * 3600
