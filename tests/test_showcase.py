@@ -44,6 +44,8 @@ def test_1x_commands_and_replies(bot):
     bot.say('!legacyaction')
     assert bot.sent[-1].kind == 'action' and bot.sent[-1].text == 'waves the 1.x way'
     assert bot.say('!legacylines') == ['first line', 'second line']
+    bot.say('!legacyoutput')
+    assert bot.sent[-1].kind == 'action' and bot.sent[-1].text == 'built an Output by hand'
 
 
 def test_1x_sending_as_it_goes(bot):
@@ -65,6 +67,8 @@ def test_1x_store_config_ops_hidden_and_details(bot):
     assert 'legacyhidden' not in ' '.join(bot.private('!help', nick='ana'))
     assert bot.say('!legacywho a b', nick='ana') == [
         'nick=ana op=False private=False botnick=testbot people=4 cmd=!legacywho arg=a b']
+    assert mal(bot, '!legacymsg') == [
+        'account=mal user=mal ops=$a:mal type=message time=True']
 
 
 def test_1x_msg_bot_and_listeners(bot):

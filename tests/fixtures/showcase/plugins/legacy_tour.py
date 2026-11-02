@@ -1,4 +1,8 @@
-"""Every 1.x plugin feature that 2.0 runs, through its compatibility layer."""
+"""Every 1.x plugin feature that 2.0 runs, through its compatibility layer.
+
+2.0 removed @register and @ops, so they aren't here: loading either one stops with an
+error naming the @command that replaces it.
+"""
 import pinhook.plugin as p
 
 
@@ -10,6 +14,12 @@ def legacy(msg):
 @p.command('!legacyaction')
 def legacy_action(msg):
     return p.action('waves the 1.x way')
+
+
+@p.command('!legacyoutput')
+def legacy_output(msg):
+    # what p.message and p.action make, built by hand
+    return p.Output(p.OutputType.Action, 'built an Output by hand')
 
 
 @p.command('!legacylines')
@@ -48,6 +58,14 @@ def legacy_who(msg):
     return p.message('nick={} op={} private={} botnick={} people={} cmd={} arg={}'.format(
         msg.nick, msg.is_op, msg.is_private, msg.botnick, len(msg.nick_list), msg.cmd,
         msg.arg))
+
+
+@p.command('!legacymsg')
+def legacy_msg(msg):
+    msg.logger.info('!legacymsg ran for {}'.format(msg.nick))
+    return p.message('account={} user={} ops={} type={} time={}'.format(
+        msg.account, msg.user, ','.join(msg.ops), msg.msg_type,
+        msg.datetime.timestamp() == msg.timestamp and msg.datetime.tzinfo is not None))
 
 
 @p.command('!legacybot')
