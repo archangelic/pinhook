@@ -374,3 +374,14 @@ def test_a_broken_access_file_stops_the_bot_starting(make_bot, tmp_path):
     (tmp_path / 'data' / 'pinbot.access.json').write_text('[')
     with pytest.raises(ValueError, match="couldn't read .*pinbot.access.json"):
         make_bot(data_dir=str(tmp_path / 'data'))
+
+
+def test_access_commands_work_on_a_1x_command_with_its_own_trigger(tmp_path):
+    (tmp_path / 'plugins').mkdir()
+    (tmp_path / 'plugins' / 'old.py').write_text(
+        "import pinhook.plugin as p\n"
+        "@p.command('.weather')\n"
+        "def weather(msg): return p.message('sunny')\n")
+    bot = TestBot(plugin_dir=str(tmp_path / 'plugins'), ops=['mal'])
+    assert bot.say('!access .weather', nick='mal') == ['.weather: open']
+    assert bot.say('!deny .weather troll', nick='mal')[0].startswith('mal: kept off .weather:')

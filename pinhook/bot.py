@@ -885,12 +885,12 @@ class Bot:
     def target_label(self, plugin, command):
         if command is None:
             return 'plugin ' + plugin
-        return self.registry.commands[command].label(self.cmd_prefix)
+        return self.target_handlers(plugin, command)[0].label(self.cmd_prefix)
 
     def target_handlers(self, plugin, command):
-        if command is not None:
-            return [self.registry.commands[command]]
-        return [h for h in self.registry.plugins[plugin] if h.kind in ('command', 'listener')]
+        # from the plugin's own list, which has 1.x commands with their own trigger word too
+        return [h for h in self.registry.plugins[plugin] if h.kind in ('command', 'listener')
+                and (command is None or (h.kind == 'command' and h.name == command))]
 
     def access_command(self, cmd, nick, arg):
         try:
