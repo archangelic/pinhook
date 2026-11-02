@@ -1300,38 +1300,23 @@ class TwitchBot(Bot):
             https://archangelic.github.io/pinhook/latest/twitch/
     """
     server = 'irc.chat.twitch.tv'
-    options = {
-        'port', 'ops', 'plugin_dir', 'log_level', 'log_file', 'cmd_prefix',
-        'use_prefix_for_plugins', 'disable_help', 'banned_users', 'bot_mode',
-        'ban_file', 'bot_dir', 'data_dir', 'plugin_config', 'address_by_nick',
-        'plugin_channels', 'access', 'history', 'recipe_dir', 'log_format', 'health_port',
-        'health_host',
+    # Bot's options, less the ones for an IRC server's TLS and logging in
+    options = Bot.options - {
+        'ssl_required', 'ssl_verify', 'ssl_certfile', 'ssl_keyfile', 'server_pass',
+        'ns_pass', 'nickserv', 'sasl_account', 'sasl_password', 'sasl_mechanism',
+        'require_account',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):
-        self.port = kwargs.get('port', 6697)
-        self.ssl_verify = True
-        self.ops = kwargs.get('ops', [])
-        self.setup_paths(nickname, kwargs)
-        self.log_level = kwargs.get('log_level', 'info')
-        self.server_pass = kwargs.get('server_pass', None)
-        self.cmd_prefix = kwargs.get('cmd_prefix', '!')
-        self.use_prefix_for_plugins = kwargs.get('use_prefix_for_plugins')
-        self.address_by_nick = kwargs.get('address_by_nick', True)
-        self.disable_help = kwargs.get('disable_help', False)
-        self.bot_mode = kwargs.get('bot_mode', True)
-        self.require_account = False
-        self.bot_nick = nickname
-        self.start_logging()
+        self.token = token
         self.channel = channel
-        self.chanlist = [channel]
-        self.logger.info('Joining Twitch Server')
-        # always use tls, the oauth token is a password
-        self.transport = TwitchTransport(
-            self.logger, self.server, self.port, nickname, password='oauth:' + token,
-            ssl_context=self.ssl_context(), bot_mode=self.bot_mode)
-        self.setup_core()
-        self.warn_unknown_options(kwargs)
-        self.setup_bans(nickname, kwargs)
-        self.check_entries()
-        self.setup_plugins()
+        kwargs.setdefault('port', 6697)
+        super().__init__([channel], nickname, self.server, **kwargs)
+        # everyone on Twitch is logged in
+        self.require_account = False
+
+    def make_transport(self, server, nickname):
+        # always over TLS, checking the certificate, since the token is a password
+        return TwitchTransport(
+            self.logger, server, self.port, nickname, password='oauth:' + self.token,
+            ssl_context=ssl.create_default_context(), bot_mode=self.bot_mode)
