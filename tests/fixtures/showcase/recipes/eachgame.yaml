@@ -2,6 +2,8 @@ version: 1
 name: eachgame
 help: list each game on its own line
 steps:
+  - reply: 'no games yet, add one with addgame'
+    when: store.games is ''
   - for_each: store.games
     steps:
       - reply: '* {item|upper}'

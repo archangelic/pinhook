@@ -158,6 +158,8 @@ def test_events_and_the_timer(bot):
 
 def test_recipes(bot):
     assert bot.say('!gamenight', nick='ana')[0].startswith('Tonight: ana rolled 2d6. ')
+    assert bot.say('!eachgame') == ['no games yet, add one with addgame']
+    assert bot.say('!addgame') == ['usage: addgame <game>']
     bot.say('!addgame wingspan')
     assert bot.say('!addgame Azul') == ['games: Azul, wingspan']
     assert bot.say('!eachgame') == ['* WINGSPAN', '* AZUL']

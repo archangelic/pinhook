@@ -2,7 +2,10 @@ version: 1
 name: addgame
 help: add a game to the list, like addgame azul
 steps:
+  - reply: 'usage: addgame <game>'
+    when: arg is ''
   - store: games
     add: '{arg}'
     when: arg is not ''
   - reply: 'games: {store.games|sorted|join}'
+    when: arg is not ''
