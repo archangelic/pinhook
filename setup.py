@@ -13,7 +13,7 @@ from setuptools import find_packages, setup, Command
 
 # Package meta-data.
 NAME = 'pinhook'
-DESCRIPTION = 'a pluggable irc bot framework in python'
+DESCRIPTION = 'python irc bot framework'
 URL = 'https://github.com/archangelic/pinhook'
 EMAIL = 'mhancock@archangelic.space'
 AUTHOR = 'M. Hancock'
@@ -120,7 +120,15 @@ setup(
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: 3.14',
+        'Framework :: AsyncIO',
+        'Topic :: Communications :: Chat :: Internet Relay Chat',
+        'Typing :: Typed',
     ],
+    project_urls={
+        'Documentation': 'https://archangelic.github.io/pinhook/',
+        'Changelog': 'https://github.com/archangelic/pinhook/blob/master/CHANGELOG.md',
+        'Source': 'https://github.com/archangelic/pinhook',
+    },
     # $ setup.py publish support.
     cmdclass={
         'upload': UploadCommand,
