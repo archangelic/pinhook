@@ -7,10 +7,12 @@
 | `pinhook new bot NAME` | makes the folder `NAME/`: a config, an example plugin and its test, and `recipes/`, `data/` and `logs/` |
 | `pinhook new plugin NAME` | makes `plugins/NAME.py`, a class plugin, and `tests/test_NAME.py` |
 | `pinhook new recipe NAME` | makes `recipes/NAME.yaml` |
-| `pinhook check CONFIG` | checks the config, plugins and recipes without connecting |
-| `pinhook run CONFIG` | connects and runs the bot |
+| `pinhook check [CONFIG]` | checks the config, plugins and recipes without connecting |
+| `pinhook run [CONFIG]` | connects and runs the bot |
 | `pinhook connect twitch [CONFIG]` | saves a Twitch token in `secrets.env` |
 | `pinhook --version` | the installed version |
+
+CONFIG is `config.yaml` in the current folder unless given.
 
 ## pinhook new
 

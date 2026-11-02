@@ -35,12 +35,13 @@ def cli():
 
 
 @cli.command()
-@click.argument('config', type=click.Path(exists=True, dir_okay=False))
+@click.argument('config', default='config.yaml',
+                type=click.Path(exists=True, dir_okay=False))
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml']))
 @click.option('--reload', is_flag=True,
               help='Reload plugins and recipes when their files change, for development.')
 def run(config, conf_format, reload):
-    """Connect and run the bot that CONFIG describes.
+    """Connect and run the bot that CONFIG describes, config.yaml unless given.
 
     Variables in secrets.env, beside CONFIG, are set first, for ${NAME} to read.
     """
@@ -78,11 +79,12 @@ def plural(count, word):
 
 
 @cli.command()
-@click.argument('config', type=click.Path(exists=True, dir_okay=False))
+@click.argument('config', default='config.yaml',
+                type=click.Path(exists=True, dir_okay=False))
 @click.option('--format', '-f', 'conf_format', type=click.Choice(['json', 'yaml']))
 @click.option('--strict', is_flag=True, help='Fail on warnings too, for CI.')
 def check(config, conf_format, strict):
-    """Check CONFIG, and the plugins and recipes it uses, without connecting.
+    """Check CONFIG, config.yaml unless given, and its plugins and recipes, without connecting.
 
     Plugins are loaded to check them, so their setup runs, then their teardown.
     Errors fail the check, and with --strict, so do warnings.

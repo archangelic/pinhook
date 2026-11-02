@@ -456,3 +456,15 @@ def test_check_strict_fails_on_warnings(tmp_path):
 def test_check_strict_passes_a_clean_config(tmp_path):
     path = bot_folder(tmp_path, '')
     assert CliRunner().invoke(cli, ['check', '--strict', str(path)]).exit_code == 0
+
+
+def test_run_and_check_use_config_yaml_unless_given(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'config.yaml').write_text(
+        "nickname: 'pinbot'\nserver: 'localhost'\nchannels: ['#test']\nbot_dir: '.'\n")
+    with mock.patch('pinhook.config.Bot') as bot:
+        assert CliRunner().invoke(cli, ['run']).exit_code == 0
+    assert bot.call_args.kwargs['nickname'] == 'pinbot'
+    result = CliRunner().invoke(cli, ['check'])
+    assert result.exit_code == 0, result.output
+    assert 'config.yaml is fine' in result.output
