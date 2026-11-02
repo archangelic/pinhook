@@ -1,0 +1,41 @@
+# A pinhook bot from a plain pip install, as the pinhook user:
+#
+#   sudo useradd --system --home-dir /srv/pinhook --shell /usr/sbin/nologin pinhook
+#   sudo python3 -m venv /srv/pinhook/venv
+#   sudo /srv/pinhook/venv/bin/pip install pinhook
+#
+# Put config.yaml, plugins/ and recipes/ in /srv/pinhook, and secrets in
+# /srv/pinhook/secrets.env, owned by pinhook with mode 600. Then:
+#
+#   sudo mkdir -p /srv/pinhook/data /srv/pinhook/recipes
+#   sudo chown -R pinhook: /srv/pinhook
+#   sudo cp pinhook.service /etc/systemd/system/
+#   sudo systemctl enable --now pinhook
+#   journalctl -u pinhook -f
+
+[Unit]
+Description=pinhook bot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+User=pinhook
+WorkingDirectory=/srv/pinhook
+ExecStart=/srv/pinhook/venv/bin/pinhook run /srv/pinhook/config.yaml
+# logs to the journal, and the health endpoint for a monitor to check
+Environment=PINHOOK_BOT_DIR=/srv/pinhook PINHOOK_LOG_FILE=- PINHOOK_HEALTH_PORT=8080
+Restart=on-failure
+RestartSec=10
+# longer than the bot's shutdown_wait, so it quits cleanly
+TimeoutStopSec=30
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/srv/pinhook/data /srv/pinhook/recipes
+
+[Install]
+WantedBy=multi-user.target

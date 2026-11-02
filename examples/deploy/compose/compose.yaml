@@ -1,0 +1,33 @@
+# One pinhook bot. Beside this file: config.yaml, plugins/, recipes/ and
+# sasl_password.txt holding the bot account's password. The bot runs as uid 10001,
+# so give it recipes/ for the recipes ops add from chat: sudo chown 10001 recipes
+#
+#   docker compose up -d
+#   docker compose logs -f
+services:
+  bot:
+    image: ghcr.io/archangelic/pinhook:2
+    # one copy only, since two would fight over the nick
+    restart: unless-stopped
+    configs:
+      - source: config
+        target: /bot/config.yaml
+    secrets:
+      - sasl_password
+    volumes:
+      - ./plugins:/bot/plugins:ro
+      - ./recipes:/bot/recipes
+      - data:/bot/data
+    # longer than the bot's shutdown_wait, so it quits cleanly
+    stop_grace_period: 30s
+
+configs:
+  config:
+    file: ./config.yaml
+
+secrets:
+  sasl_password:
+    file: ./sasl_password.txt
+
+volumes:
+  data:

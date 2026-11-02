@@ -92,3 +92,28 @@ jobs:
       run: tests/integration/ergo.sh
     - name: Run the image against Ergo
       run: tests/deploy/image.sh pinhook:test
+
+  examples:
+
+    runs-on: ubuntu-26.04
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v10.3.3
+    - name: Build the image and the wheel
+      run: |
+        docker build -t pinhook:test .
+        uv build --wheel --out-dir dist
+    - name: Start an Ergo IRC server
+      run: tests/integration/ergo.sh
+    - name: Run the compose example
+      run: tests/deploy/compose.sh pinhook:test
+    - name: Run the systemd example
+      run: tests/deploy/systemd.sh dist/*.whl
+    - name: Set up kind
+      uses: helm/kind-action@v1.15.1
+      with:
+        install_only: true
+    - name: Run the kubernetes example
+      run: tests/deploy/kubernetes.sh pinhook:test

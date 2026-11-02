@@ -1,0 +1,10 @@
+nickname: 'gamebot'
+server: 'irc.libera.chat'
+port: 6697
+ssl_required: true
+channels:
+  - '#gamebot-test'
+ops:
+  - '$a:youraccount'
+# compose mounts the secret here
+sasl_password: '${file:/run/secrets/sasl_password}'
