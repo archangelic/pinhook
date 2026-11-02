@@ -156,6 +156,10 @@ class Transport(Protocol):
         """Who is in channel, from member tracking, with no call to the server."""
         ...
 
+    def member(self, channel: str, nick: str) -> Member | None:
+        """nick in channel, or None if they aren't in it. As quick as one lookup."""
+        ...
+
     def joined(self) -> list[str]:
         """The channels the bot is in."""
         ...

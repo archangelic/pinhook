@@ -111,11 +111,10 @@ class Context:
 
     def member(self, nick, channel=None):
         """nick's Member in channel, this one by default, or None if they aren't in it."""
-        fold = self._bot.transport.casefold
-        for member in self.members(channel):
-            if fold(member.nick) == fold(nick):
-                return member
-        return None
+        channel = channel or self.channel
+        if not is_channel(channel or ''):
+            return None
+        return self._bot.transport.member(channel, nick)
 
     async def whois(self, nick):
         """Ask the server about nick, and return a Whois, or None if there's no one by

@@ -626,7 +626,7 @@ class Bot:
 
     async def run_timer(self, handler):
         try:
-            await self.run_handler(handler, Event('timer'), None, '', None)
+            await self.run_handler(handler, Event('timer'), None, '')
         finally:
             self.timer_busy.discard(handler)
 
@@ -1035,7 +1035,7 @@ class Bot:
         await self.run_event_handlers(event)
 
     async def run_event_handlers(self, event):
-        await asyncio.gather(*(self.run_handler(h, event, None, '', None)
+        await asyncio.gather(*(self.run_handler(h, event, None, '')
                                for h in self.registry.events.get(event.type, [])))
 
     async def send_out(self, message):
@@ -1066,7 +1066,7 @@ class Bot:
         nick = event.source.nick
         if event.kind == 'notice':
             # notices never run commands or 1.x listeners, a bot shouldn't answer one by itself
-            await asyncio.gather(*(self.run_handler(h, event, None, '', None)
+            await asyncio.gather(*(self.run_handler(h, event, None, '')
                                    for h in self.registry.events.get('notice', [])))
             return
         op = self.is_op(event.source)
@@ -1091,15 +1091,13 @@ class Bot:
                 return
         if self.stopping:
             return
-        nick_list = ([m.nick for m in self.transport.members(chan)] if is_channel(event.target)
-                     else [nick])
         handler = self.registry.find(word, addressed) if word else None
         if handler:
-            await self.run_handler(handler, event, word, arg, nick_list, addressed)
+            await self.run_handler(handler, event, word, arg, addressed)
             return
         # each listener answers on its own, so a slow or broken one doesn't hold up the rest
         listeners = list(self.registry.listeners.values()) + self.registry.events.get('message', [])
-        await asyncio.gather(*(self.run_handler(h, event, None, '', nick_list, addressed)
+        await asyncio.gather(*(self.run_handler(h, event, None, '', addressed)
                                for h in listeners))
 
     def strip_address(self, text):
@@ -1187,15 +1185,11 @@ class Bot:
         label = handler.label(self.cmd_prefix)
         target = channel if channel and is_channel(channel) else self.transport.nick
         event = Event('message', who, target, '{} {}'.format(label, arg).strip(), 'privmsg')
-        nick_list = ([m.nick for m in self.transport.members(target)] if is_channel(target)
-                     else [who.nick])
         lines = [] if capture else None
-        status, error = await self.run_handler(handler, event, label, arg, nick_list,
-                                               capture=lines)
+        status, error = await self.run_handler(handler, event, label, arg, capture=lines)
         return RunResult(status, tuple(lines or ()), error)
 
-    async def run_handler(self, handler, event, trigger, arg, nick_list, addressed=False,
-                          capture=None):
+    async def run_handler(self, handler, event, trigger, arg, addressed=False, capture=None):
         """Run one command or handler for a message or event, and send what it answers.
 
         Returns how it went, as ('ran' | 'refused' | 'busy' | 'failed', error or None).
@@ -1247,7 +1241,7 @@ class Bot:
                     if worker is None:
                         worker = self.workers[handler.plugin] = compat.Worker(handler.plugin)
                     output = await asyncio.wrap_future(worker.submit(
-                        compat.run, handler, ctx, trigger, nick_list, self.ops))
+                        compat.run, handler, ctx, trigger, self.nick_list(event), self.ops))
         except TimeoutError:
             self.logger.error('{} took longer than {} seconds, giving up waiting for it'.format(
                 label if command else handler.kind + ' ' + label, timeout))
@@ -1267,6 +1261,12 @@ class Bot:
             self.logger.debug(f'sending output: {output.msg}')
             self.process_output(ctx.channel, output, ctx)
         return 'ran', None
+
+    def nick_list(self, event):
+        # msg.nick_list for 1.x plugins: the channel's nicks, or the sender's own
+        if is_channel(event.target or ''):
+            return [m.nick for m in self.transport.members(event.target)]
+        return [event.source.nick] if event.source else []
 
     def say_error(self, handler, ctx):
         # failures stay out of chat unless the plugin's author chose words for it

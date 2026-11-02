@@ -176,6 +176,9 @@ class IrcTransport(IrcIdentity):
     def members(self, channel):
         return self.tracker.members(channel)
 
+    def member(self, channel, nick):
+        return self.tracker.find(channel, nick)
+
     def joined(self):
         return list(self.channel_names.values())
 

@@ -177,3 +177,16 @@ def test_members_of_a_private_message_is_empty(tmp_path):
     bot = TestBot(plugin_dir=str(tmp_path))
     # an empty reply sends nothing
     assert bot.private('!members', nick='ana') == []
+
+
+def test_one_member_is_looked_up_directly():
+    from pinhook.transport.base import casefold
+    from pinhook.transport.members import Tracker
+    tracker = Tracker(casefold)
+    tracker.add_channel('#games')
+    tracker.join('#games', 'Ana', account='ana')
+    tracker.set_mode('#games', 'Ana', 'o', True)
+    member = tracker.find('#Games', 'ANA')
+    assert (member.nick, member.account, member.is_chanop) == ('Ana', 'ana', True)
+    assert tracker.find('#games', 'bob') is None
+    assert tracker.find('#other', 'ana') is None

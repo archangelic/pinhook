@@ -125,6 +125,12 @@ class Tracker:
         members = self.channels.get(self.fold(channel), {})
         return [self.member(key, modes) for key, modes in members.items() if key in self.people]
 
+    def find(self, channel, nick):
+        """nick's Member in channel, or None if they aren't in it."""
+        key = self.fold(nick)
+        modes = self.channels.get(self.fold(channel), {}).get(key)
+        return self.member(key, modes) if modes is not None and key in self.people else None
+
     def member(self, key, modes):
         person = self.people[key]
         return Member(person['nick'], person['user'], person['host'], person['account'],

@@ -163,6 +163,10 @@ class FakeTransport(IrcIdentity):
     def members(self, channel):
         return self.channels[channel].members() if channel in self.channels else []
 
+    def member(self, channel, nick):
+        fold = self.casefold
+        return next((m for m in self.members(channel) if fold(m.nick) == fold(nick)), None)
+
     def joined(self):
         return list(self.channels)
 
