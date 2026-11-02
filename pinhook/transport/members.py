@@ -27,11 +27,15 @@ class Tracker:
         self.people = {}
         # casefolded channel: {casefolded nick: set of mode letters}
         self.channels = {}
+        # casefolded channel: the channel's name as the server wrote it
+        self.names = {}
 
     def add_channel(self, channel):
         self.channels[self.fold(channel)] = {}
+        self.names[self.fold(channel)] = channel
 
     def remove_channel(self, channel):
+        self.names.pop(self.fold(channel), None)
         members = self.channels.pop(self.fold(channel), {})
         for key in members:
             self.forget_if_gone(key)
@@ -141,4 +145,5 @@ class Tracker:
         return frozenset(members.get(self.fold(nick), ()))
 
     def channel_names(self):
-        return list(self.channels)
+        """The channels the bot is in, as the server wrote their names."""
+        return list(self.names.values())

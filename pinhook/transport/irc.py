@@ -101,7 +101,6 @@ class IrcTransport(IrcIdentity):
         self.isupport = {}
         # who is in each channel, and each channel's name as the server wrote it
         self.tracker = Tracker(self.casefold)
-        self.channel_names = {}
         self.server_caps = {}
         self.caps = set()
         # open batches, by id: their type, parameters, label and the lines in them
@@ -178,7 +177,7 @@ class IrcTransport(IrcIdentity):
         return self.tracker.find(channel, nick)
 
     def joined(self):
-        return list(self.channel_names.values())
+        return self.tracker.channel_names()
 
     def member_modes(self, channel, nick):
         return self.tracker.modes(channel, nick)
@@ -809,7 +808,6 @@ class IrcTransport(IrcIdentity):
         channel = line.params[0]
         if self.is_me(nick):
             self.tracker.add_channel(channel)
-            self.channel_names[self.casefold(channel)] = channel
             if line.hostmask.username and line.hostmask.hostname:
                 hostmask = '!{}@{}'.format(line.hostmask.username, line.hostmask.hostname)
                 self.hostmask_length = len(hostmask.encode('utf-8'))
@@ -831,7 +829,6 @@ class IrcTransport(IrcIdentity):
     def leave(self, channel, nick):
         if self.is_me(nick):
             self.tracker.remove_channel(channel)
-            self.channel_names.pop(self.casefold(channel), None)
         else:
             self.tracker.leave(channel, nick)
 
