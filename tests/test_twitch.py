@@ -40,7 +40,7 @@ def twitch(tmp_path, **options):
     (tmp_path / 'plugins' / 'plugin.py').write_text(PLUGIN)
     bot = pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'plugins'),
                                 log_file=str(tmp_path / 't.log'), data_dir=str(tmp_path / 'data'),
-                                **options)
+                                ban_file=str(tmp_path / 'bans.json'), **options)
     w = Wire(bot=bot)
     w.connect()
     w.receive(':tmi.twitch.tv 001 pinbot :Welcome, GLHF!',
