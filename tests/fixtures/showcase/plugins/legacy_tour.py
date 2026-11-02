@@ -20,7 +20,8 @@ def legacy_lines(msg):
 @p.command('!legacysend')
 def legacy_send(msg):
     msg.reply('replied as I go')
-    msg.send('#log', 'sent to #log')
+    channel = msg.config.shared['channel']
+    msg.send(channel, 'sent to {}'.format(channel))
     msg.privmsg(msg.nick, 'a private message')
     msg.notice('a notice')
     msg.action('acts as I go')

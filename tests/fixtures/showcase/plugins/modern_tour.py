@@ -56,7 +56,8 @@ class Tour(Plugin):
     async def say(self, ctx: Context) -> None:
         await ctx.action('waves')
         await ctx.notice('a notice for you')
-        await ctx.send('#log', ['sent to #log', 'on two lines'])
+        channel = ctx.config.shared['channel']
+        await ctx.send(channel, [f'sent to {channel}', 'on two lines'])
 
     @command('slow')
     async def slow(self, ctx: Context) -> None:
@@ -178,4 +179,4 @@ class Tour(Plugin):
 
     @every(minutes=30)
     async def remind(self, ctx: Context) -> None:
-        await ctx.send('#log', 'the timer fired')
+        await ctx.send(ctx.config.shared['channel'], 'the timer fired')

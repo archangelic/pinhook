@@ -50,7 +50,8 @@ def test_1x_sending_as_it_goes(bot):
     bot.say('!legacysend', nick='ana')
     sent = [(s.kind, s.target, s.text) for s in bot.sent[-5:]]
     # the output queue takes turns between targets, so ana's notice follows #test's action
-    assert sent == [('message', '#test', 'replied as I go'), ('message', '#log', 'sent to #log'),
+    assert sent == [('message', '#test', 'replied as I go'),
+                    ('message', '#showcase-test', 'sent to #showcase-test'),
                     ('message', 'ana', 'a private message'), ('action', '#test', 'acts as I go'),
                     ('notice', 'ana', 'a notice')]
 
@@ -106,7 +107,8 @@ def test_ways_to_answer(bot):
     bot.say('!say', nick='ana')
     sent = [(s.kind, s.target, s.text) for s in bot.sent[-4:]]
     assert sent == [('action', '#test', 'waves'), ('notice', 'ana', 'a notice for you'),
-                    ('message', '#log', 'sent to #log'), ('message', '#log', 'on two lines')]
+                    ('message', '#showcase-test', 'sent to #showcase-test'),
+                    ('message', '#showcase-test', 'on two lines')]
     assert bot.say('!slow') == ['done slowly']
 
 
@@ -145,7 +147,7 @@ def test_events_and_the_timer(bot):
     assert bot.say('!events') == [
         'join newbie, topic game night, nick newbie>newbie_, mode +o newbie_, kick newbie_']
     assert bot.say('testbot: hello', nick='ana') == ['hello ana, you addressed me']
-    assert [s.text for s in bot.tick(1800)] == ['the timer fired']
+    assert [(s.target, s.text) for s in bot.tick(1800)] == [('#showcase-test', 'the timer fired')]
 
 
 # recipes

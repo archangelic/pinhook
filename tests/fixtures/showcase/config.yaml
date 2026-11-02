@@ -4,14 +4,18 @@ server: 'irc.libera.chat'
 port: 6697
 ssl_required: true
 channels:
-  - '#showcase-test'
+  # the &channel names it once, and *channel uses it below
+  - &channel '#showcase-test'
 ops:
   - '$a:youraccount'
 bot_dir: '.'
 history:
   channels:
-    - '#showcase-test'
+    - *channel
 plugin_config:
+  # every plugin reads shared: where they send messages that aren't replies
+  shared:
+    channel: *channel
   legacy_tour:
     word: 'legacy'
   modern_tour:
