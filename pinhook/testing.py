@@ -6,60 +6,209 @@
         bot = TestBot(plugin_dir='plugins')
         assert bot.say('!roll 1d1') == ['1']
 """
-from collections import namedtuple
+import asyncio
 import logging
 import os
-
-import irc.bot
-import irc.client
+import weakref
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 
 from .bot import Bot
 from .store import Store
+from .transport.base import Event, Limits, Member, Source, Whois, casefold, is_channel
+from .transport.identity import IrcIdentity
+from .transport.irc import text_room
 
-# one thing the bot sent, kind is 'message', 'action' or 'notice'
-Sent = namedtuple('Sent', ['kind', 'target', 'text'])
+
+class Sent(NamedTuple):
+    """Something the bot sent: its kind, 'message', 'action' or 'notice', where to, and
+    the text."""
+    kind: str
+    target: str
+    text: str
 
 
 class PluginError(Exception):
     """A plugin raised an exception, or returned something it shouldn't."""
 
 
-class FakeConnection:
-    # stands in for the irc library's connection and records what the bot sends
+class FakeChannel:
+
+    def __init__(self):
+        self.nicks = {}
+        self.modes = {}
+
+    def add_user(self, nick, account=None):
+        if account or nick not in self.nicks:
+            self.nicks[nick] = account
+
+    def remove_user(self, nick):
+        self.nicks.pop(nick, None)
+        self.modes.pop(nick, None)
+
+    def set_modes(self, changes):
+        adding, args = True, list(changes[1:])
+        for letter in changes[0] if changes else '':
+            if letter in '+-':
+                adding = letter == '+'
+            elif letter in 'qaohv' and args:
+                modes = self.modes.setdefault(args.pop(0), set())
+                if adding:
+                    modes.add(letter)
+                else:
+                    modes.discard(letter)
+
+    def users(self):
+        return list(self.nicks)
+
+    def members(self):
+        return [Member(nick, account=account, modes=frozenset(self.modes.get(nick, ())))
+                for nick, account in self.nicks.items()]
+
+
+class Driver:
+    """Runs a bot's core a step at a time, so a test can wait for each answer.
+
+    Time only moves when the output queue waits for its rate limit, and those
+    waits are kept in pauses instead of taken.
+    """
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.loop = asyncio.new_event_loop()
+        weakref.finalize(self, self.loop.close)
+        self.now = 0.0
+        self.pauses = []
+        bot.loop = self.loop
+        bot.clock = lambda: self.now
+        bot.pause = self.pause
+        bot.reset_timers()
+
+    async def pause(self, seconds):
+        self.pauses.append(seconds)
+        self.now += seconds
+
+    def tick(self, seconds):
+        """Move the clock on by seconds, run the timers that are due, and wait for them."""
+        self.now += seconds
+        self.loop.run_until_complete(self.fire_timers())
+
+    async def fire_timers(self):
+        self.bot.fire_due_timers()
+        await self.settle(())
+
+    def run(self, *events):
+        """Handle events, and any the transport has waiting, until the bot has sent every
+        answer. Raises SystemExit if the bot quit."""
+        self.loop.run_until_complete(self.settle(events))
+        if self.bot.stopping:
+            self.loop.run_until_complete(self.bot.transport.close(self.bot.quit_reason))
+            raise SystemExit
+
+    async def settle(self, events):
+        bot = self.bot
+        for event in events:
+            bot.dispatch(event)
+        while True:
+            while not bot.transport.queue.empty():
+                event = bot.transport.queue.get_nowait()
+                if event is not None:
+                    bot.dispatch(event)
+            running = {task for task in bot.handlers if not task.done()}
+            if running:
+                done, _ = await asyncio.wait(running, timeout=0.01)
+                if (not done and getattr(bot.transport, 'whois_waiting', None)
+                        and bot.transport.queue.empty()):
+                    return
+            elif bot.output.targets:
+                await bot.output.flush()
+            else:
+                await asyncio.sleep(0)
+                if bot.transport.queue.empty() and not bot.handlers and not bot.output.targets:
+                    return
+
+
+class FakeTransport(IrcIdentity):
+    name = 'fake'
+    limits = Limits()
+    sasl_logged_in = False
 
     def __init__(self, bot, nickname):
         self.bot = bot
-        self.nickname = nickname
+        self.nick = nickname
+        self.channels = {}
+        self.queue = asyncio.Queue()
+        self.closed = asyncio.Event()
 
-    def get_nickname(self):
-        return self.nickname
+    async def run(self):
+        await self.closed.wait()
 
-    def privmsg(self, target, text):
-        self.bot.sent.append(Sent('message', target, text))
+    async def events(self):
+        while True:
+            event = await self.queue.get()
+            if event is None:
+                return
+            yield event
 
-    def action(self, target, text):
-        self.bot.sent.append(Sent('action', target, text))
-
-    def notice(self, target, text):
-        self.bot.sent.append(Sent('notice', target, text))
+    async def send(self, message):
+        kind = 'message' if message.kind == 'privmsg' else message.kind
+        self.bot.sent.append(Sent(kind, message.target, message.prefix + message.text))
 
     def join(self, channel, key=''):
         self.bot.add_channel(channel)
 
-    def part(self, channel, message=''):
-        self.bot.channels.pop(channel, None)
+    def text_room(self, kind, target, prefix=''):
+        return text_room(self.nick, kind, target, prefix)
 
-    def nick(self, new_nick):
-        self.nickname = new_nick
+    def members(self, channel):
+        return self.channels[channel].members() if channel in self.channels else []
 
-    def quit(self, message=''):
-        self.bot.quit_message = message
+    def member(self, channel, nick):
+        fold = self.casefold
+        return next((m for m in self.members(channel) if fold(m.nick) == fold(nick)), None)
 
-    def mode(self, target, command):
+    def joined(self):
+        return list(self.channels)
+
+    async def whois(self, nick, timeout=10):
+        fold = self.casefold
+        channels = [name for name, channel in self.channels.items()
+                    if any(fold(n) == fold(nick) for n in channel.nicks)]
+        if not channels:
+            return None
+        account = next((channel.nicks[n] for channel in self.channels.values()
+                        for n in channel.nicks if fold(n) == fold(nick) and channel.nicks[n]),
+                       None)
+        return Whois(nick, user=nick, host='example.com', account=account,
+                     channels=tuple(channels))
+
+    def member_modes(self, channel, nick):
+        if channel not in self.channels:
+            return frozenset()
+        return frozenset(self.channels[channel].modes.get(nick, ()))
+
+    def supports(self, feature):
+        return feature in ('account-tag', 'notice', 'private')
+
+    def typing(self, target, state):
         pass
 
-    def cap(self, subcommand, *args):
-        pass
+    def is_me(self, nick):
+        return self.casefold(nick) == self.casefold(self.nick)
+
+    def is_channel(self, name):
+        return is_channel(name)
+
+    def exempt(self, target):
+        return False
+
+    def casefold(self, name):
+        return casefold(name)
+
+    async def close(self, reason=''):
+        self.bot.quit_message = reason
+        self.closed.set()
+        self.queue.put_nowait(None)
 
 
 class _ErrorCatcher(logging.Handler):
@@ -84,15 +233,17 @@ class TestBot(Bot):
     # tell pytest this isn't a test class, despite the name
     __test__ = False
 
-    def __init__(self, plugin_dir='plugins', nickname='testbot', channels=('#test',), **options):
+    def __init__(self, plugin_dir: str = 'plugins', nickname: str = 'testbot',
+                 channels: Sequence[str] = ('#test',), **options: Any) -> None:
         options.setdefault('log_file', os.devnull)
         options.setdefault('ban_file', '')
-        self.sent = []
-        self.pauses = []
+        options.setdefault('recipe_dir', None)
+        self.sent: list[Sent] = []
         self.quit_message = None
         self._errors = _ErrorCatcher()
         super().__init__(list(channels), nickname, 'localhost', plugin_dir=plugin_dir, **options)
-        self.connection = FakeConnection(self, nickname)
+        self.driver = Driver(self)
+        self.online = True
         for channel in channels:
             self.add_channel(channel)
         # a plugin that couldn't load fails here, not later
@@ -102,20 +253,37 @@ class TestBot(Bot):
         super().start_logging()
         self.logger.addHandler(self._errors)
 
+    def make_transport(self, server, nickname):
+        return FakeTransport(self, nickname)
+
+    def switches_path(self):
+        # !enable and !disable stay in memory too
+        return None
+
+    def access_path(self):
+        return None
+
     def open_store(self, name):
         # stores stay in memory, look at one with bot.store('karma')
         return Store(name)
 
-    def pause(self, seconds):
-        # record flood protection pauses instead of waiting for them
-        self.pauses.append(seconds)
+    @property
+    def channels(self):
+        """The channels the bot is in, each with the nicks seen there."""
+        return self.transport.channels
+
+    @property
+    def pauses(self):
+        """The waits for the rate limit the bot would have taken, in seconds."""
+        return self.driver.pauses
 
     def add_channel(self, channel):
         if channel not in self.channels:
-            self.channels[channel] = irc.bot.Channel()
-            self.channels[channel].add_user(self.connection.get_nickname())
+            self.channels[channel] = FakeChannel()
+            self.channels[channel].add_user(self.transport.nick)
 
-    def say(self, text, nick='tester', channel=None, **who):
+    def say(self, text: str, nick: str = 'tester', channel: str | None = None,
+            **who: str | None) -> list[str]:
         """Send a message to a channel as nick, and return the bot's replies there.
 
         who can be user, host and account, to test ops and bans by hostmask
@@ -123,30 +291,81 @@ class TestBot(Bot):
         """
         channel = channel or self.chanlist[0]
         self.add_channel(channel)
-        self.channels[channel].add_user(nick)
-        return self._receive('pubmsg', nick, channel, text, channel, **who)
+        self.channels[channel].add_user(nick, who.get('account'))
+        return self._receive('privmsg', nick, channel, text, channel, **who)
 
-    def action(self, text, nick='tester', channel=None, **who):
+    def action(self, text: str, nick: str = 'tester', channel: str | None = None,
+               **who: str | None) -> list[str]:
         """Send a /me action to a channel as nick, and return the bot's replies there."""
         channel = channel or self.chanlist[0]
         self.add_channel(channel)
-        self.channels[channel].add_user(nick)
+        self.channels[channel].add_user(nick, who.get('account'))
         return self._receive('action', nick, channel, text, channel, **who)
 
-    def private(self, text, nick='tester', **who):
+    def private(self, text: str, nick: str = 'tester', **who: str | None) -> list[str]:
         """Send a private message to the bot as nick, and return the bot's replies to them."""
-        return self._receive('privmsg', nick, self.connection.get_nickname(), text, nick, **who)
+        return self._receive('privmsg', nick, self.transport.nick, text, nick, **who)
 
-    def sent_to(self, target):
+    def event(self, kind: str, nick: str = 'tester', channel: str | None = None, text: str = '',
+              user: str | None = None, host: str = 'example.com',
+              account: str | None = None, **data: Any) -> list[Sent]:
+        """Something other than a message happens, and returns what the bot sent, as Sent.
+
+        kind is join, part, kick, quit, nick, topic, invite, mode, netsplit, netjoin
+        or notice. channel is the bot's first channel unless given, or none for nick,
+        quit, netsplit and netjoin. data is
+        the rest: kicked='troll' for a kick, new_nick='mal_' for a nick change,
+        modes=['+o', 'mal'] for a mode change, which gives mal +o in the channel the
+        way a real one would, invited='ana' for an invite of someone other than
+        the bot, and nicks=['ana', 'bob'] for a netsplit or netjoin, with the two
+        servers as text. A notice's channel can be the bot's nick.
+        """
+        if kind in ('nick', 'quit', 'netsplit', 'netjoin'):
+            target = ''
+        else:
+            target = channel or self.chanlist[0]
+        if kind == 'join':
+            self.add_channel(target)
+            self.channels[target].add_user(nick, account)
+        elif kind == 'part' and target in self.channels:
+            self.channels[target].remove_user(nick)
+        elif kind == 'mode' and target in self.channels:
+            self.channels[target].set_modes(data.get('modes', []))
+        elif kind == 'invite':
+            data.setdefault('invited', self.transport.nick)
+        tags: dict[str, str | None] = {'account': account} if account else {}
+        source = None if kind in ('netsplit', 'netjoin') else Source(nick, user or nick, host,
+                                                                     account)
+        if kind == 'notice':
+            event = Event('message', source, target, text, 'notice', tags)
+        else:
+            event = Event(kind, source, target, text, tags=tags, data=data)
+        start = len(self.sent)
+        self.driver.run(event)
+        self._raise_plugin_errors()
+        return self.sent[start:]
+
+    def tick(self, seconds: float) -> list[Sent]:
+        """Let seconds pass, run any @every timers that come due, and return what the bot sent.
+
+        Time only moves when you call this, so a timer every 30 minutes runs on
+        bot.tick(1800).
+        """
+        start = len(self.sent)
+        self.driver.tick(seconds)
+        self._raise_plugin_errors()
+        return self.sent[start:]
+
+    def sent_to(self, target: str) -> list[str]:
         """Every message and action the bot has sent to target, like a nick for !help."""
         return [s.text for s in self.sent if s.target == target and s.kind in ('message', 'action')]
 
     def _receive(self, kind, nick, target, text, reply_to,
                  user=None, host='example.com', account=None):
         start = len(self.sent)
-        source = irc.client.NickMask.from_params(nick, user or nick, host)
-        tags = [{'key': 'account', 'value': account}] if account else None
-        self.process_event(self.connection, irc.client.Event(kind, source, target, [text], tags))
+        tags = {'account': account} if account else {}
+        source = Source(nick, user or nick, host, account)
+        self.driver.run(Event('message', source, target, text, kind, tags))
         self._raise_plugin_errors()
         return [s.text for s in self.sent[start:]
                 if s.target == reply_to and s.kind in ('message', 'action')]
@@ -155,4 +374,5 @@ class TestBot(Bot):
         if self._errors.records:
             record = self._errors.records.pop(0)
             self._errors.records.clear()
-            raise PluginError(record.getMessage()) from record.exc_info[1]
+            error = record.exc_info[1]
+            raise PluginError('{}: {}'.format(record.getMessage(), error)) from error
