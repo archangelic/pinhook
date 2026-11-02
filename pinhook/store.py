@@ -5,16 +5,26 @@ import os
 import threading
 
 
-def write_json(path, data):
-    """Write data to path as JSON, creating its folder if needed."""
+def to_json(data):
+    """data as the JSON pinhook saves: indented, with sorted keys."""
+    return json.dumps(data, indent=2, sort_keys=True)
+
+
+def write_text(path, text):
+    """Write text to path, creating its folder if needed."""
     folder = os.path.dirname(path)
     if folder:
         os.makedirs(folder, exist_ok=True)
     # write to a temp file first so a crash can't leave a half written file
     tmp = path + '.tmp'
     with open(tmp, 'w') as f:
-        json.dump(data, f, indent=2, sort_keys=True)
+        f.write(text)
     os.replace(tmp, path)
+
+
+def write_json(path, data):
+    """Write data to path as JSON, creating its folder if needed."""
+    write_text(path, to_json(data))
 
 
 def read_json(path, default, what=None):
@@ -91,7 +101,7 @@ class Store(dict):
 
     def _snapshot(self):
         try:
-            return json.dumps(self, sort_keys=True)
+            return to_json(self)
         except (TypeError, ValueError) as e:
             raise TypeError('the store for {} can only hold JSON values (strings, numbers, lists, '
                             'dicts, True, False and None): {}'.format(self.name, e)) from e
@@ -103,5 +113,5 @@ class Store(dict):
             if snapshot == self._saved:
                 return
             if self.path:
-                write_json(self.path, json.loads(snapshot))
+                write_text(self.path, snapshot)
             self._saved = snapshot
