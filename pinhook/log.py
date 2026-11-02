@@ -74,7 +74,7 @@ def get_bot_logger(nickname):
 def set_log_file(filename, target=logger, log_format='text'):
     """Log to filename, or to stdout when it's '-', as text or json."""
     if filename == '-':
-        handler: logging.Handler = logging.StreamHandler(sys.stdout)
+        handler = logging.StreamHandler(sys.stdout)
         # the console handler on the parent writes to stderr, and once is enough
         target.propagate = False
     else:
