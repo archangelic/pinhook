@@ -6,7 +6,7 @@ the recipe, and it says why.
 """
 import contextvars
 
-from ..transport.base import Source, is_channel
+from ..transport.base import Source
 from .steps import STEPS
 from .templates import as_list, text
 
@@ -44,7 +44,7 @@ class Run:
         self.recipe = recipe
         self.ctx = ctx
         self.who = Source(ctx.nick, ctx.user, ctx.host, ctx.account)
-        self.channel = ctx.channel if is_channel(ctx.channel or '') else None
+        self.channel = ctx.channel if self.bot.transport.is_channel(ctx.channel or '') else None
         self.store = bot.store(STORE)
         self.vars = {'nick': ctx.nick, 'channel': ctx.channel or '', 'arg': arg}
         self.steps_run = 0

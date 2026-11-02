@@ -4,7 +4,6 @@ import contextlib
 from datetime import datetime, timezone
 
 from .store import PluginConfig
-from .transport.base import is_channel
 
 
 class BotInfo:
@@ -71,8 +70,9 @@ class Context:
         self.user = source.user if source else None
         self.host = source.host if source else None
         self.account = source.account if source else None
-        self.is_private = bool(event.target) and not is_channel(event.target) and source is not None
-        if is_channel(event.target):
+        in_channel = bot.transport.is_channel(event.target or '')
+        self.is_private = bool(event.target) and not in_channel and source is not None
+        if in_channel:
             self.channel = event.target
         else:
             self.channel = self.nick if self.is_private else None
@@ -117,14 +117,14 @@ class Context:
         modes and whether they're a bot. From member tracking, so it never waits on the
         server. Empty for a private message."""
         channel = channel or self.channel
-        if not is_channel(channel or ''):
+        if not self._bot.transport.is_channel(channel or ''):
             return ()
         return tuple(self._bot.transport.members(channel))
 
     def member(self, nick, channel=None):
         """nick's Member in channel, this one by default, or None if they aren't in it."""
         channel = channel or self.channel
-        if not is_channel(channel or ''):
+        if not self._bot.transport.is_channel(channel or ''):
             return None
         return self._bot.transport.member(channel, nick)
 
@@ -137,7 +137,7 @@ class Context:
         """This channel's recent messages, oldest first, as history Entries: nick, text,
         kind, time, msgid and own, True for the bot's. Empty unless the history option
         lists the channel. limit keeps only that many of the newest."""
-        if not is_channel(self.channel or ''):
+        if not self._bot.transport.is_channel(self.channel or ''):
             return ()
         return self._bot.history.recent(self.channel, limit)
 
@@ -230,7 +230,7 @@ class Context:
         target = self.where(target)
         if self.supports('notice'):
             self.out('notice', target, text)
-        elif is_channel(target):
+        elif self._bot.transport.is_channel(target):
             self.out('privmsg', target, text)
         elif self.plugin not in self._bot.notice_warned:
             self._bot.notice_warned.add(self.plugin)

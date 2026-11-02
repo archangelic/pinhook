@@ -15,7 +15,7 @@ import time
 import irctokens
 
 from ..__version__ import __version__
-from .base import Event, Limits, Source, Whois, casefold, is_channel
+from .base import CHANTYPES, Event, Limits, Source, Whois, casefold, is_channel
 from .identity import IrcIdentity, TwitchIdentity
 from ..store import read_json, write_json
 from . import sasl
@@ -332,6 +332,10 @@ class IrcTransport(IrcIdentity):
 
     def is_me(self, nick):
         return self.casefold(nick) == self.casefold(self.nick)
+
+    def is_channel(self, name):
+        # the server's CHANTYPES, once it's said
+        return is_channel(name, self.isupport.get('CHANTYPES') or CHANTYPES)
 
     def exempt(self, target):
         # IRC servers have one rate limit for everything
@@ -891,7 +895,7 @@ class IrcTransport(IrcIdentity):
                             data={'invited': line.params[0]}))
 
     def on_mode(self, line):
-        if len(line.params) > 1 and is_channel(line.params[0]):
+        if len(line.params) > 1 and self.is_channel(line.params[0]):
             self.track_modes(line.params[0], line.params[1], line.params[2:])
         # only modes someone set, not the server setting the bot's own when it connects
         if line.source and '!' in line.source:
@@ -1060,7 +1064,7 @@ class TwitchTransport(TwitchIdentity, IrcTransport):
     def on_privmsg(self, line):
         # badges become member modes: broadcaster and moderator +o, VIP +v, so
         # ctx.is_chanop and the chanops and voiced access groups work here too
-        if line.source and len(line.params) >= 2 and is_channel(line.params[0]):
+        if line.source and len(line.params) >= 2 and self.is_channel(line.params[0]):
             badges = self.badges(line.tags or {})
             nick, channel = line.hostmask.nickname, line.params[0]
             self.tracker.set_mode(channel, nick, 'o', bool(badges & {'broadcaster', 'moderator'}))
@@ -1091,7 +1095,7 @@ class TwitchTransport(TwitchIdentity, IrcTransport):
         return max(self.max_length - len(start + prefix), 64)
 
     def lines(self, message, text):
-        if message.kind == 'notice' and not is_channel(message.target):
+        if message.kind == 'notice' and not self.is_channel(message.target):
             self.logger.debug("twitch doesn't deliver notices to people, dropping one to "
                               "{}".format(message.target))
             return []

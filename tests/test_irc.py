@@ -333,3 +333,11 @@ def test_an_empty_name_is_not_a_channel():
     from pinhook.transport.base import is_channel
     assert not is_channel('')
     assert is_channel('#test')
+
+
+def test_channel_names_go_by_the_servers_chantypes(tmp_path):
+    w = Wire(tmp_path)
+    assert w.bot.transport.is_channel('&local') and w.bot.transport.is_channel('#games')
+    w = Wire(tmp_path).ready(isupport='CHANTYPES=#')
+    assert w.bot.transport.is_channel('#games')
+    assert not w.bot.transport.is_channel('&local')

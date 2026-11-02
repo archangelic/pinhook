@@ -29,7 +29,7 @@ from . import recipes
 from .recipes.engine import RECIPES, run_recipe
 from .registry import Handler, Registry, Switches
 from .store import PluginConfig, Store
-from .transport.base import Event, Outgoing, Source, Transport, is_channel
+from .transport.base import Event, Outgoing, Source, Transport
 from .transport.identity import entry_kind
 from .transport.irc import IrcTransport, TwitchTransport
 
@@ -728,7 +728,7 @@ class Bot:
         # source is who asked, and channel where, so the list can say what they can't use
         prefix = self.cmd_prefix
         who = source or Source(nick)
-        where = channel if is_channel(channel or '') else None
+        where = channel if self.transport.is_channel(channel or '') else None
         if arg:
             return self.command_help(nick, op, arg, who, where)
         names = {prefix + 'help': prefix + 'help'}
@@ -1077,13 +1077,14 @@ class Bot:
         # the output queue sends through here. Where the server doesn't echo the bot's
         # messages back, history records them as they're sent
         await self.transport.send(message)
-        if is_channel(message.target) and not self.transport.supports('echo-message'):
+        if self.transport.is_channel(message.target) and \
+                not self.transport.supports('echo-message'):
             self.history.add(message.target, Entry(
                 self.transport.nick, message.prefix + message.text, message.kind,
                 datetime.now(timezone.utc), own=True))
 
     def remember_message(self, event, own=False):
-        if is_channel(event.target):
+        if self.transport.is_channel(event.target):
             self.history.add(event.target, Entry(
                 event.source.nick, event.text, event.kind,
                 server_time(event.tags.get('time')) or datetime.now(timezone.utc),
@@ -1104,7 +1105,7 @@ class Bot:
             return
         op = self.is_op(event.source)
         text = event.text
-        chan = event.target if is_channel(event.target) else nick
+        chan = event.target if self.transport.is_channel(event.target) else nick
         addressed, body = self.strip_address(text)
         # actions only reach listeners, a /me is never a command
         word, _, rest = body.partition(' ') if event.kind != 'action' else ('', '', '')
@@ -1169,7 +1170,7 @@ class Bot:
         # and everywhere from a private message
         args = split_args(arg)
         verb = 'enable' if on else 'disable'
-        scope_ok = len(args) < 2 or args[1] == 'all' or is_channel(args[1])
+        scope_ok = len(args) < 2 or args[1] == 'all' or self.transport.is_channel(args[1])
         if not args or len(args) > 2 or not scope_ok:
             return '{}: usage: {}{} <plugin> [all | #channel]'.format(
                 nick, self.cmd_prefix, verb)
@@ -1177,7 +1178,7 @@ class Bot:
         if name is None:
             return "{}: '{}' not found".format(nick, args[0])
         where = args[1] if len(args) == 2 else channel
-        target = where if is_channel(where) else None
+        target = where if self.transport.is_channel(where) else None
         place = 'in ' + target if target else 'everywhere'
         if target is None:
             entry = self.switches.saved.get(name, {})
@@ -1190,7 +1191,7 @@ class Bot:
         return "{}: '{}' {}d {}".format(nick, args[0], verb, place)
 
     def enabled_for(self, handler, target):
-        channel = target if is_channel(target) else None
+        channel = target if self.transport.is_channel(target) else None
         return self.switches.is_on((handler.name, handler.plugin), channel)
 
     async def run_as(self, who, command, arg='', channel=None, capture=True):
@@ -1215,7 +1216,7 @@ class Bot:
             return RunResult('refused', (), '{} is banned from the bot, or not logged in where '
                                             'require_account is on'.format(who.nick))
         label = handler.label(self.cmd_prefix)
-        target = channel if channel and is_channel(channel) else self.transport.nick
+        target = channel if channel and self.transport.is_channel(channel) else self.transport.nick
         event = Event('message', who, target, '{} {}'.format(label, arg).strip(), 'privmsg')
         lines = [] if capture else None
         status, error = await self.run_handler(handler, event, label, arg, capture=lines)
@@ -1239,7 +1240,7 @@ class Bot:
         # don't, since nobody in particular starts them
         checked = command or handler.kind == 'listener' or handler.event in ('message', 'notice')
         if checked and event.source:
-            channel = event.target if is_channel(event.target) else None
+            channel = event.target if self.transport.is_channel(event.target) else None
             if not self.access.allows(event.source, handler, channel):
                 nick = event.source.nick
                 self.logger.debug('%s has no access to %s', nick, label)
@@ -1301,7 +1302,7 @@ class Bot:
 
     def nick_list(self, event):
         # msg.nick_list for 1.x plugins: the channel's nicks, or the sender's own
-        if is_channel(event.target or ''):
+        if self.transport.is_channel(event.target or ''):
             return [m.nick for m in self.transport.members(event.target)]
         return [event.source.nick] if event.source else []
 

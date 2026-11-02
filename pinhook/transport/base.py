@@ -183,6 +183,10 @@ class Transport(Protocol):
 
     def casefold(self, name: str) -> str: ...
 
+    def is_channel(self, name: str) -> bool:
+        """True if name is a channel on this network, not a person."""
+        ...
+
     def is_me(self, nick: str) -> bool:
         """True if nick is the bot's own nick right now."""
         ...
@@ -230,6 +234,10 @@ def casefold(name: str, casemapping: str = 'rfc1459') -> str:
     return name.translate(CASEMAPPINGS.get(casemapping, CASEMAPPINGS['rfc1459']))
 
 
-def is_channel(name: str) -> bool:
-    # the channel types every irc server has, until CHANTYPES is read from the server
-    return bool(name) and name[0] in '#&+!'
+# the channel types most IRC servers have, for a server that doesn't say with CHANTYPES
+CHANTYPES = '#&+!'
+
+
+def is_channel(name: str, chantypes: str = CHANTYPES) -> bool:
+    """True if name is a channel, going by the characters channel names start with."""
+    return bool(name) and name[0] in chantypes

@@ -14,7 +14,7 @@ import weakref
 
 from .bot import Bot
 from .store import Store
-from .transport.base import Event, Limits, Member, Source, Whois, casefold
+from .transport.base import Event, Limits, Member, Source, Whois, casefold, is_channel
 from .transport.identity import IrcIdentity
 from .transport.irc import text_room
 
@@ -198,6 +198,9 @@ class FakeTransport(IrcIdentity):
 
     def is_me(self, nick):
         return self.casefold(nick) == self.casefold(self.nick)
+
+    def is_channel(self, name):
+        return is_channel(name)
 
     def exempt(self, target):
         return False
