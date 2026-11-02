@@ -1062,6 +1062,14 @@ class TwitchTransport(TwitchIdentity, IrcTransport):
     # how many chatters' badges are kept, the most recent ones
     badges_kept = 10000
 
+    def source(self, line):
+        # on Twitch, someone's account is their numeric user ID, which stays the same when
+        # they rename. Member tracking keeps it, for their joins and parts too
+        user_id = (line.tags or {}).get('user-id')
+        if user_id and line.source:
+            self.tracker.update(line.hostmask.nickname, account=user_id)
+        return super().source(line)
+
     def member_badges(self, channel, nick):
         return self.badges_seen.get((self.casefold(channel), self.casefold(nick)), frozenset())
 

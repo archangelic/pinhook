@@ -50,8 +50,9 @@ def twitch(tmp_path, **options):
     return w
 
 
-def say(w, text, nick='viewer', badges=''):
-    tags = '@badges={};display-name={} '.format(badges, nick)
+def say(w, text, nick='viewer', badges='', user_id=None):
+    tags = '@badges={};display-name={}{} '.format(
+        badges, nick, ';user-id={}'.format(user_id) if user_id else '')
     w.receive('{}:{}!{}@{}.tmi.twitch.tv PRIVMSG #chan :{}'.format(tags, nick, nick, nick, text))
     return w.sent()
 
@@ -196,3 +197,14 @@ def test_chat_commands_refuse_entries_twitch_doesnt_use(tmp_path):
         "streamer: banned troll. *!*@host is a hostmask, which twitch doesn't use. It takes "
         "nicks and $a:accounts"]
     assert w.bot.banned_users == ['troll']
+
+
+def test_accounts_are_user_ids_and_survive_a_rename(tmp_path):
+    w = twitch(tmp_path, ops=['$a:1001'])
+    say(w, 'hello', 'troll', user_id='666')
+    assert texts(say(w, '!ban troll', 'streamer', user_id='1001')) == [
+        'streamer: banned troll (account 666)']
+    assert w.bot.banned_users == ['$a:666']
+    w.receive(':trollagain!trollagain@trollagain.tmi.twitch.tv PART #chan')
+    assert say(w, '!roles', 'trollagain', user_id='666') == []
+    assert texts(say(w, '!roles', 'viewer', user_id='777')) == ['chanop=False']
