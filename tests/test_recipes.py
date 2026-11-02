@@ -315,3 +315,21 @@ def test_without_a_recipe_dir_there_is_nowhere_to_save(tmp_path):
     bot = TestBot(plugin_dir=str(tmp_path), ops=['$a:mal'])
     assert op(bot, '!recipe add hug hugs') == [
         "mal: this bot has no recipe_dir, so there's nowhere to save it"]
+
+
+def test_a_private_reply_inside_a_recipe_stays_private(tmp_path):
+    (tmp_path / 'plugins').mkdir()
+    (tmp_path / 'plugins' / 'secret.py').write_text(
+        "from pinhook import command\n\n\n"
+        "@command('mytoken')\n"
+        "async def mytoken(ctx):\n"
+        "    await ctx.reply('s3cret', private=True)\n"
+        "    await ctx.notice('a notice')\n"
+        "    await ctx.reply('done')\n")
+    (tmp_path / 'recipes').mkdir()
+    (tmp_path / 'recipes' / 'token.yaml').write_text(
+        "version: 1\nsteps:\n  - command: mytoken\n")
+    bot = TestBot(plugin_dir=str(tmp_path / 'plugins'), recipe_dir=str(tmp_path / 'recipes'))
+    assert bot.say('!token', nick='ana') == ['done']
+    assert [(s.kind, s.text) for s in bot.sent if s.target == 'ana'] == [
+        ('message', 's3cret'), ('notice', 'a notice')]

@@ -163,8 +163,11 @@ class Context:
         self.out('privmsg', target, text, tags, prefix)
 
     def out(self, kind, target, text, tags=None, prefix=''):
-        # everything a handler says goes through here, so capture catches all of it
-        if self._capture is not None:
+        # everything a handler says goes through here. Capture takes what it says where it
+        # ran, and a private reply or a notice still goes to whoever it's for
+        fold = self._bot.transport.casefold
+        if self._capture is not None and kind != 'notice' and self.channel and \
+                fold(target) == fold(self.channel):
             self._capture.extend(prefix + line for line in text_lines(text))
         else:
             self._bot.send_text(kind, target, text, tags, prefix)

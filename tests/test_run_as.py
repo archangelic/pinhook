@@ -60,12 +60,12 @@ def run(bot, *args, **kwargs):
     return bot.driver.loop.run_until_complete(bot.run_as(*args, **kwargs))
 
 
-def test_a_captured_run_returns_its_lines_and_sends_nothing(tmp_path):
+def test_a_captured_run_returns_what_it_says_where_it_runs(tmp_path):
     bot = make(tmp_path)
-    assert run(bot, ANA, 'roll', '20', '#test') == RunResult(
-        'ran', ('ana rolled 20', 'a roll'), None)
+    assert run(bot, ANA, 'roll', '20', '#test') == RunResult('ran', ('ana rolled 20',), None)
     bot.driver.run()
-    assert bot.sent == []
+    # what it sends somewhere else still goes there
+    assert [(s.target, s.text) for s in bot.sent] == [('#log', 'a roll')]
 
 
 def test_without_capture_the_command_answers_as_usual(tmp_path):

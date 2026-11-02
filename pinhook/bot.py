@@ -1156,8 +1156,9 @@ class Bot:
             command: the command's name, or how it's typed, like 'roll' or '!roll'.
             arg: the text after the command.
             channel: the channel it runs in, or None for a private message.
-            capture: True to return what the command says instead of sending it. Captured
-                lines never go to the output queue.
+            capture: True to return what the command says where it runs, instead of
+                sending it. Captured lines never go to the output queue. A private reply or
+                a notice still goes to whoever it's for.
 
         Returns a RunResult.
         """
