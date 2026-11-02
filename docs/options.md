@@ -187,3 +187,57 @@ File to write logs to. With [`bot_dir`](#bot_dir) set, the default is `logs/<nic
 ```
 2026-10-27 22:33:18,491 - INFO - bot.ph-bot - bot - setting bot mode +B
 ```
+
+
+#### Rotating log files
+
+Pinhook does not automatically rotate or limit the size of
+a regular log file. A long-running bot can therefore
+produce an increasingly large log.
+
+There are two ways to manage this:
+
+**1. Use service-managed logging**
+
+When running under systemd or in a container, set:
+
+```yaml
+log_file: "-"
+```
+
+This allows the service manager or container platform
+to handle log collection and rotation. Configure its
+retention policy separately.
+
+**2. Rotate files with logrotate (Linux)**
+
+If the bot writes to `/var/log/pinhook/ph-bot.log`,
+configure logrotate with:
+
+```text
+/var/log/pinhook/ph-bot.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+```
+
+Replace the path with your actual log file path.
+
+The `copytruncate` option is important because the bot
+keeps its log file open. It copies the existing file and
+truncates the original so logging can continue without
+restarting the bot.
+
+A few log messages can be lost during the copy-and-truncate
+operation. Prefer service-managed logging when that risk
+is unacceptable.
+
+This example checks for rotation daily and retains
+seven rotated files. Adjust the retention settings
+for your deployment.
+
