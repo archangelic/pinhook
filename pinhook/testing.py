@@ -7,10 +7,11 @@
         assert bot.say('!roll 1d1') == ['1']
 """
 import asyncio
-from collections import namedtuple
 import logging
 import os
 import weakref
+from collections.abc import Sequence
+from typing import Any, NamedTuple
 
 from .bot import Bot
 from .store import Store
@@ -18,8 +19,13 @@ from .transport.base import Event, Limits, Member, Source, Whois, casefold, is_c
 from .transport.identity import IrcIdentity
 from .transport.irc import text_room
 
-# one thing the bot sent, kind is 'message', 'action' or 'notice'
-Sent = namedtuple('Sent', ['kind', 'target', 'text'])
+
+class Sent(NamedTuple):
+    """Something the bot sent: its kind, 'message', 'action' or 'notice', where to, and
+    the text."""
+    kind: str
+    target: str
+    text: str
 
 
 class PluginError(Exception):
@@ -236,12 +242,13 @@ class TestBot(Bot):
     # tell pytest this isn't a test class, despite the name
     __test__ = False
 
-    def __init__(self, plugin_dir='plugins', nickname='testbot', channels=('#test',), **options):
+    def __init__(self, plugin_dir: str = 'plugins', nickname: str = 'testbot',
+                 channels: Sequence[str] = ('#test',), **options: Any) -> None:
         options.setdefault('log_file', os.devnull)
         options.setdefault('ban_file', '')
         # no recipes unless the test points at a folder of them
         options.setdefault('recipe_dir', None)
-        self.sent = []
+        self.sent: list[Sent] = []
         self.quit_message = None
         self._errors = _ErrorCatcher()
         super().__init__(list(channels), nickname, 'localhost', plugin_dir=plugin_dir, **options)
@@ -287,7 +294,8 @@ class TestBot(Bot):
             self.channels[channel] = FakeChannel()
             self.channels[channel].add_user(self.transport.nick)
 
-    def say(self, text, nick='tester', channel=None, **who):
+    def say(self, text: str, nick: str = 'tester', channel: str | None = None,
+            **who: str | None) -> list[str]:
         """Send a message to a channel as nick, and return the bot's replies there.
 
         who can be user, host and account, to test ops and bans by hostmask
@@ -298,19 +306,21 @@ class TestBot(Bot):
         self.channels[channel].add_user(nick, who.get('account'))
         return self._receive('privmsg', nick, channel, text, channel, **who)
 
-    def action(self, text, nick='tester', channel=None, **who):
+    def action(self, text: str, nick: str = 'tester', channel: str | None = None,
+               **who: str | None) -> list[str]:
         """Send a /me action to a channel as nick, and return the bot's replies there."""
         channel = channel or self.chanlist[0]
         self.add_channel(channel)
         self.channels[channel].add_user(nick, who.get('account'))
         return self._receive('action', nick, channel, text, channel, **who)
 
-    def private(self, text, nick='tester', **who):
+    def private(self, text: str, nick: str = 'tester', **who: str | None) -> list[str]:
         """Send a private message to the bot as nick, and return the bot's replies to them."""
         return self._receive('privmsg', nick, self.transport.nick, text, nick, **who)
 
-    def event(self, kind, nick='tester', channel=None, text='', user=None, host='example.com',
-              account=None, **data):
+    def event(self, kind: str, nick: str = 'tester', channel: str | None = None, text: str = '',
+              user: str | None = None, host: str = 'example.com',
+              account: str | None = None, **data: Any) -> list[Sent]:
         """Something other than a message happens, and returns what the bot sent, as Sent.
 
         kind is join, part, kick, quit, nick, topic, invite, mode, netsplit, netjoin
@@ -335,7 +345,7 @@ class TestBot(Bot):
             self.channels[target].set_modes(data.get('modes', []))
         elif kind == 'invite':
             data.setdefault('invited', self.transport.nick)
-        tags = {'account': account} if account else {}
+        tags: dict[str, str | None] = {'account': account} if account else {}
         # a netsplit or netjoin comes from the network, not anyone in particular
         source = None if kind in ('netsplit', 'netjoin') else Source(nick, user or nick, host,
                                                                      account)
@@ -348,7 +358,7 @@ class TestBot(Bot):
         self._raise_plugin_errors()
         return self.sent[start:]
 
-    def tick(self, seconds):
+    def tick(self, seconds: float) -> list[Sent]:
         """Let seconds pass, run any @every timers that come due, and return what the bot sent.
 
         Time only moves when you call this, so a timer every 30 minutes runs on
@@ -359,7 +369,7 @@ class TestBot(Bot):
         self._raise_plugin_errors()
         return self.sent[start:]
 
-    def sent_to(self, target):
+    def sent_to(self, target: str) -> list[str]:
         """Every message and action the bot has sent to target, like a nick for !help."""
         return [s.text for s in self.sent if s.target == target and s.kind in ('message', 'action')]
 

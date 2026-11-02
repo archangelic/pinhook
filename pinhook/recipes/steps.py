@@ -14,7 +14,12 @@ loads. Each field has a kind:
 Every step can also carry `when`, a condition like `sorted.category is bug`.
 """
 import re
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
+from typing import Any
+
+# a step: an async function given the Run and the step's fields
+StepFunc = Callable[[Any, dict[str, Any]], Awaitable[None]]
 
 KINDS = {'template', 'text', 'name', 'path', 'steps', 'flag', 'any'}
 NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
@@ -30,7 +35,7 @@ class StepType:
     name: str
     fields: dict[str, str]
     required: frozenset[str]
-    run: object
+    run: StepFunc
     saves: str | None = None
     one_of: tuple[frozenset[str], ...] = field(default_factory=tuple)
 
@@ -38,7 +43,9 @@ class StepType:
 STEPS: dict[str, StepType] = {}
 
 
-def step(name, fields, required=(), saves=None, one_of=()):
+def step(name: str, fields: dict[str, str], required: Iterable[str] = (),
+         saves: str | None = None,
+         one_of: Iterable[Iterable[str]] = ()) -> Callable[[StepFunc], StepFunc]:
     """Register a step type, for plugins. The function runs it, with a Run, which fills
     in templates and runs commands as the person who started the recipe, and the
     step's fields, templates parsed.
@@ -61,7 +68,7 @@ def step(name, fields, required=(), saves=None, one_of=()):
     if name not in fields:
         raise ValueError('step {} needs a field called {}, its own key'.format(name, name))
 
-    def register(func):
+    def register(func: StepFunc) -> StepFunc:
         STEPS[name] = StepType(name, dict(fields), frozenset(required) | {name}, func, saves,
                                tuple(frozenset(group) for group in one_of))
         return func

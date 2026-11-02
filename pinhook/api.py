@@ -12,6 +12,11 @@ too, for plugins with nothing to keep between messages.
 """
 import inspect
 import re
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any, TypeVar
+
+# a handler: an async function, or a Plugin's async method
+Handler = TypeVar('Handler', bound=Callable[..., Awaitable[Any]])
 
 # what @on handles. message is every message that isn't a command, notice is notices only
 EVENTS = {'message', 'notice', 'join', 'part', 'kick', 'quit', 'nick', 'topic', 'invite', 'mode',
@@ -31,23 +36,26 @@ class Plugin:
     teardown also runs when the plugin is removed and when the bot quits.
     """
 
-    def setup(self, previous):
+    def setup(self, previous: Any) -> None:
         """Called when the plugin loads. previous is the old instance on !reload, or None."""
 
-    def teardown(self):
+    def teardown(self) -> None:
         """Called when this instance is replaced or removed, or the bot quits."""
 
 
-def _mark(func, **spec):
-    if not inspect.iscoroutinefunction(func):
+def _mark(func: Handler, **spec: Any) -> Handler:
+    # checked through a name of its own, so func keeps its type for the caller
+    is_async = inspect.iscoroutinefunction(func)
+    if not is_async:
         raise TypeError('{} is a 2.0 handler, so it has to be async: write async def {}(...)'
-                        .format(func.__qualname__, func.__name__))
-    func.__dict__.setdefault('_pinhook', []).append(spec)
+                        .format(getattr(func, '__qualname__', func), getattr(func, '__name__', '')))
+    vars(func).setdefault('_pinhook', []).append(spec)
     return func
 
 
-def command(name, help=None, ops=False, restricted=False, denied_msg='', error_msg='',
-            timeout=None, hide=False, aliases=()):
+def command(name: str, help: str | None = None, ops: bool = False, restricted: bool = False,
+            denied_msg: str = '', error_msg: str = '', timeout: float | None = None,
+            hide: bool = False, aliases: str | Sequence[str] = ()) -> Callable[[Handler], Handler]:
     """Make an async function a command. Its arguments after ctx come from the message, typed.
 
     Args:
@@ -61,25 +69,26 @@ def command(name, help=None, ops=False, restricted=False, denied_msg='', error_m
         hide: if True, leave it out of !help.
         aliases: other names that run it, like ['r', 'dice'] for roll.
     """
-    aliases = (aliases,) if isinstance(aliases, str) else tuple(aliases)
-    for word in (name,) + aliases:
+    names = (aliases,) if isinstance(aliases, str) else tuple(aliases)
+    for word in (name,) + names:
         if not isinstance(word, str) or not NAME.match(word):
             raise ValueError("command names are letters, digits, - and _, without a prefix: "
                              "'{}'".format(word))
-    if name in aliases or len(set(aliases)) != len(aliases):
-        raise ValueError("{}'s aliases repeat a name: {}".format(name, ', '.join(aliases)))
+    if name in names or len(set(names)) != len(names):
+        raise ValueError("{}'s aliases repeat a name: {}".format(name, ', '.join(names)))
     if ops and restricted:
         raise ValueError("{} can be ops=True or restricted=True, not both".format(name))
 
-    def mark(func):
+    def mark(func: Handler) -> Handler:
         doc = (inspect.getdoc(func) or '').strip().splitlines()
         return _mark(func, kind='command', name=name, help_text=help or (doc[0] if doc else 'N/A'),
                      ops=ops, restricted=restricted, denied_msg=denied_msg, error_msg=error_msg,
-                     timeout=timeout, hide=hide, aliases=aliases)
+                     timeout=timeout, hide=hide, aliases=names)
     return mark
 
 
-def every(seconds=0, minutes=0, hours=0, timeout=None):
+def every(seconds: float = 0, minutes: float = 0, hours: float = 0,
+          timeout: float | None = None) -> Callable[[Handler], Handler]:
     """Make an async function run on a timer, first one interval after its plugin loads.
 
     It gets a ctx with no channel or sender, so it answers with ctx.send(target, text).
@@ -96,12 +105,13 @@ def every(seconds=0, minutes=0, hours=0, timeout=None):
     if interval <= 0:
         raise ValueError('every() needs a time, like every(minutes=30)')
 
-    def mark(func):
-        return _mark(func, kind='timer', name=func.__name__, interval=interval, timeout=timeout)
+    def mark(func: Handler) -> Handler:
+        return _mark(func, kind='timer', name=getattr(func, '__name__', ''), interval=interval,
+                     timeout=timeout)
     return mark
 
 
-def on(event, timeout=None):
+def on(event: str, timeout: float | None = None) -> Callable[[Handler], Handler]:
     """Make an async function handle an event, like 'join'. It gets a ctx about the event.
 
     Args:
@@ -113,6 +123,7 @@ def on(event, timeout=None):
     if event not in EVENTS:
         raise ValueError("@on takes one of {}, not '{}'".format(', '.join(sorted(EVENTS)), event))
 
-    def mark(func):
-        return _mark(func, kind='event', name=func.__name__, event=event, timeout=timeout)
+    def mark(func: Handler) -> Handler:
+        return _mark(func, kind='event', name=getattr(func, '__name__', ''), event=event,
+                     timeout=timeout)
     return mark

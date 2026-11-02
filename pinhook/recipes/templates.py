@@ -11,6 +11,7 @@ literal braces. This is never Python's str.format, whose attribute access is a
 well-known way out of a sandbox: {name.key} only looks a key up in a mapping.
 """
 from collections.abc import Callable
+from typing import Any
 import random as random_module
 import re
 
@@ -21,14 +22,16 @@ FILTER = re.compile(r'^([a-z_][a-z0-9_]*)(?::(.*))?$', re.S)
 CONTROL = re.compile('[\x00-\x1f\x7f]')
 
 # filter name: the function, taking the value and its argument
-FILTERS: dict[str, Callable] = {}
+# a filter: the value, and the text after its colon or None, to the new value
+FilterFunc = Callable[[Any, str | None], Any]
+FILTERS: dict[str, FilterFunc] = {}
 
 
 class TemplateError(ValueError):
     """A template that can't be parsed, or uses a filter that doesn't exist."""
 
 
-def template_filter(name):
+def template_filter(name: str) -> Callable[[FilterFunc], FilterFunc]:
     """Register a filter, for plugins: a function taking the value and the text after
     a colon, like 'everyone' in {arg|default:everyone}, or None.
 
@@ -36,7 +39,7 @@ def template_filter(name):
         def shout(value, arg):
             return text(value).upper() + '!'
     """
-    def register(func):
+    def register(func: FilterFunc) -> FilterFunc:
         FILTERS[name] = func
         return func
     return register

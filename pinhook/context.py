@@ -1,24 +1,34 @@
 """The context: everything a plugin gets for one message, and nothing else."""
 import asyncio
 import contextlib
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, overload
 
-from .store import PluginConfig
+from .history import Entry
+from .store import PluginConfig, Store
+from .transport.base import Event, Member, Whois
+
+if TYPE_CHECKING:
+    from .bot import Bot
+
+# what a plugin can say: a string, sent a line at a time, or a list of lines
+Text = str | Sequence[str]
 
 
 class BotInfo:
     """What a plugin can see of the bot. Read only."""
 
-    def __init__(self, bot):
+    def __init__(self, bot: 'Bot') -> None:
         self._bot = bot
 
     @property
-    def nick(self):
+    def nick(self) -> str:
         """The bot's nick right now."""
         return self._bot.transport.nick
 
     @property
-    def channels(self):
+    def channels(self) -> tuple[str, ...]:
         """The channels the bot is in."""
         return tuple(self._bot.transport.joined())
 
@@ -59,8 +69,9 @@ class Context:
         logger: the bot's logger.
     """
 
-    def __init__(self, bot, event, plugin=None, addressed=False, command=None, arg='',
-                 capture=None):
+    def __init__(self, bot: 'Bot', event: Event, plugin: str | None = None,
+                 addressed: bool = False, command: str | None = None, arg: str = '',
+                 capture: list[str] | None = None) -> None:
         self._bot = bot
         # a list to put what the handler says in, instead of sending it, for run_as
         self._capture = capture
@@ -72,6 +83,7 @@ class Context:
         self.account = source.account if source else None
         in_channel = bot.transport.is_channel(event.target or '')
         self.is_private = bool(event.target) and not in_channel and source is not None
+        self.channel: str | None
         if in_channel:
             self.channel = event.target
         else:
@@ -96,44 +108,45 @@ class Context:
         self.time = server_time(self.tags.get('time')) or datetime.now(timezone.utc)
         self.plugin = plugin
         # the plugin's store, opened when the handler first uses ctx.store
-        self._store = None
+        self._store: dict[str, Any] | None = None
         self.config = bot.config_for(plugin) if plugin else PluginConfig('plugin')
         self.bot = BotInfo(bot)
         self.logger = bot.logger
 
     @property
-    def store(self):
+    def store(self) -> dict[str, Any]:
+        """The plugin's saved data, a dict kept between restarts."""
         if self._store is None:
             self._store = self._bot.store(self.plugin) if self.plugin else {}
         return self._store
 
-    def save_store(self):
+    def save_store(self) -> None:
         """Save the plugin's store, if the handler used it and changed something."""
-        if self._store is not None and self.plugin:
+        if isinstance(self._store, Store):
             self._store.save_if_changed()
 
-    def members(self, channel=None):
+    def members(self, channel: str | None = None) -> tuple[Member, ...]:
         """Who is in channel, this one by default, as Members: each one's nick, account,
         modes and whether they're a bot. From member tracking, so it never waits on the
         server. Empty for a private message."""
         channel = channel or self.channel
-        if not self._bot.transport.is_channel(channel or ''):
+        if channel is None or not self._bot.transport.is_channel(channel):
             return ()
         return tuple(self._bot.transport.members(channel))
 
-    def member(self, nick, channel=None):
+    def member(self, nick: str, channel: str | None = None) -> Member | None:
         """nick's Member in channel, this one by default, or None if they aren't in it."""
         channel = channel or self.channel
-        if not self._bot.transport.is_channel(channel or ''):
+        if channel is None or not self._bot.transport.is_channel(channel):
             return None
         return self._bot.transport.member(channel, nick)
 
-    async def whois(self, nick):
+    async def whois(self, nick: str) -> Whois | None:
         """Ask the server about nick, and return a Whois, or None if there's no one by
         that name. This waits for the server, unlike members()."""
         return await self._bot.transport.whois(nick)
 
-    def history(self, limit=None):
+    def history(self, limit: int | None = None) -> tuple[Entry, ...]:
         """This channel's recent messages, oldest first, as history Entries: nick, text,
         kind, time, msgid and own, True for the bot's. Empty unless the history option
         lists the channel. limit keeps only that many of the newest."""
@@ -141,11 +154,11 @@ class Context:
             return ()
         return self._bot.history.recent(self.channel, limit)
 
-    def supports(self, feature):
+    def supports(self, feature: str) -> bool:
         """True if the network supports feature, like 'account-tag'."""
         return self._bot.transport.supports(feature)
 
-    async def reply(self, text, thread=False, private=False):
+    async def reply(self, text: Text, thread: bool = False, private: bool = False) -> None:
         """Answer where the message came from: the channel, or the sender if private.
 
         Args:
@@ -156,15 +169,17 @@ class Context:
                 can show with the channel it's about.
         """
         target = self.where(self.channel)
-        tags, prefix = {}, ''
+        tags: dict[str, str] = {}
+        prefix = ''
         if not self.supports('private'):
             # a network with no private messages from bots, like Twitch, gets it in the
             # channel, addressed to them
             thread = thread or private
             private = False
         if private and self.nick and not self.is_private:
+            # the channel it's about, where the message came from
+            tags['+channel-context'] = target
             target = self.nick
-            tags['+channel-context'] = self.channel
         elif thread and self.nick and not self.is_private:
             if self.msgid and self.supports('reply'):
                 tags['+reply'] = self.msgid
@@ -173,7 +188,8 @@ class Context:
                 prefix = '{}: '.format(self.nick)
         self.out('privmsg', target, text, tags, prefix)
 
-    def out(self, kind, target, text, tags=None, prefix=''):
+    def out(self, kind: str, target: str, text: Text, tags: dict[str, str] | None = None,
+            prefix: str = '') -> None:
         # everything a handler says goes through here. Capture takes what it says where it
         # ran, and a private reply or a notice still goes to whoever it's for
         fold = self._bot.transport.casefold
@@ -184,7 +200,7 @@ class Context:
             self._bot.send_text(kind, target, text, tags, prefix)
 
     @contextlib.asynccontextmanager
-    async def typing(self):
+    async def typing(self) -> AsyncIterator[None]:
         """Show the bot as typing while a slow command works:
 
             async with ctx.typing():
@@ -206,21 +222,33 @@ class Context:
             keep_going.cancel()
             transport.typing(target, 'done')
 
-    async def keep_typing(self, target):
+    async def keep_typing(self, target: str) -> None:
         while True:
             await asyncio.sleep(3)
             self._bot.transport.typing(target, 'active')
 
-    async def send(self, target, text):
+    async def send(self, target: str, text: Text) -> None:
         """Send text to another channel or nick."""
         self.out('privmsg', target, text)
 
-    async def action(self, *args):
+    @overload
+    async def action(self, text: Text, /) -> None: ...
+
+    @overload
+    async def action(self, target: str, text: Text, /) -> None: ...
+
+    async def action(self, *args: Any) -> None:
         """action(text) answers with a /me, action(target, text) sends one somewhere else."""
         target, text = target_and_text(args, self.channel)
         self.out('action', self.where(target), text)
 
-    async def notice(self, *args):
+    @overload
+    async def notice(self, text: Text, /) -> None: ...
+
+    @overload
+    async def notice(self, target: str, text: Text, /) -> None: ...
+
+    async def notice(self, *args: Any) -> None:
         """notice(text) sends the sender a notice, notice(target, text) sends one to anyone.
 
         Where the network has no notices from bots, like Twitch, a notice to a channel
@@ -238,21 +266,21 @@ class Context:
                                 'notices from bots, so it was dropped. Check '
                                 "ctx.supports('notice') first".format(self.plugin, target))
 
-    def where(self, target):
+    def where(self, target: str | None) -> str:
         if not target:
             raise RuntimeError('there is no channel or sender to answer here, '
                                'use ctx.send(target, text)')
         return target
 
 
-def text_lines(text):
+def text_lines(text: Text) -> list[str]:
     """The lines text is sent as: each line of a string, or of each item in a list."""
     if isinstance(text, (list, tuple)):
         return [line for item in text for line in str(item).splitlines()]
     return str(text).splitlines()
 
 
-def target_and_text(args, default_target):
+def target_and_text(args: tuple[Any, ...], default_target: str | None) -> tuple[Any, Any]:
     if len(args) == 1:
         return default_target, args[0]
     if len(args) == 2:
@@ -260,7 +288,7 @@ def target_and_text(args, default_target):
     raise TypeError('expected (text) or (target, text), got {} arguments'.format(len(args)))
 
 
-def server_time(value):
+def server_time(value: str | None) -> datetime | None:
     # the server-time tag, like 2026-10-30T01:02:03.456Z
     if not value:
         return None

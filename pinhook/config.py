@@ -12,6 +12,8 @@ import functools
 import json
 import os
 import re
+from collections.abc import Callable
+from typing import Any
 
 import yaml
 from marshmallow import (Schema, fields, validate, validates_schema, INCLUDE,
@@ -329,7 +331,8 @@ def read_conf(config, conf_format):
     return check_conf(Config(), data, config.name)
 
 
-def load_bot(path, conf_format=None, warn=None, **overrides):
+def load_bot(path: str, conf_format: str | None = None,
+             warn: Callable[[str], Any] | None = None, **overrides: Any) -> Bot:
     """The bot the config at path describes, ready to start(), the way pinhook run makes it.
 
     secrets.env beside the config is read first. Relative paths start from the config's
