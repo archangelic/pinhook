@@ -297,8 +297,7 @@ class Bot:
     def add_recipe(self, nick, name, template):
         if not self.recipe_dir:
             return "{}: this bot has no recipe_dir, so there's nowhere to save it".format(nick)
-        if self.registry.find(name) or self.registry.commands.get(name) or \
-                name in self.builtins:
+        if self.registry.find(name, addressed=True) or name in self.builtins:
             return '{}: {} is already a command'.format(nick, name)
         data = {'version': recipes.loader.VERSION, 'name': name,
                 'help': 'added by {}'.format(nick), 'steps': [{'reply': template}]}
@@ -782,7 +781,7 @@ class Bot:
             line = '{}{} -- {}'.format(prefix, name, self.internal_commands[name])
             self.send_help(target, [line])
             return None
-        handler = self.registry.find(word) or self.registry.find(word, addressed=True)
+        handler = self.registry.find(word, addressed=True)
         if handler is None or (self.access.level(handler) == 'ops' and not op):
             self.send_help(target, ["there's no command called {}".format(word)])
             return None
@@ -911,7 +910,7 @@ class Bot:
         # (plugin, None) for a plugin, (plugin, command) for a command
         if name in self.registry.plugins:
             return name, None
-        handler = self.registry.find(name) or self.registry.commands.get(name)
+        handler = self.registry.find(name, addressed=True)
         if handler is None:
             return None
         return handler.plugin, handler.name
@@ -1194,7 +1193,7 @@ class Bot:
 
         Returns a RunResult.
         """
-        handler = self.registry.find(command) or self.registry.commands.get(command)
+        handler = self.registry.find(command, addressed=True)
         if handler is None or handler.kind != 'command':
             return RunResult('unknown', (), "there's no command called {}".format(command))
         if self.ignores(who):

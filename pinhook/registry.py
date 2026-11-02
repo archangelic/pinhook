@@ -281,9 +281,9 @@ class Registry:
     def split_trigger(self, word):
         # 1.x commands are written with their prefix, like '!roll'. One of the bot's
         # prefixes is dropped, and a word with no prefix uses the bot's prefixes
-        for prefix in sorted(self.prefixes, key=len, reverse=True):
-            if word.startswith(prefix) and len(word) > len(prefix):
-                return word[len(prefix):], None
+        name = self.strip_prefix(word)
+        if name:
+            return name, None
         if word[:1].isalnum():
             return word, None
         return word, word
@@ -307,7 +307,8 @@ class Registry:
         """The command a message's first word runs, or None.
 
         A word written with one of the bot's prefixes runs the command of that
-        name. Addressing the bot by nick also runs one without a prefix.
+        name. Addressing the bot by nick also runs one without a prefix, and so does
+        addressed=True, for a name given without one, like a recipe step's.
         """
         if word in self.literals:
             return self.literals[word]

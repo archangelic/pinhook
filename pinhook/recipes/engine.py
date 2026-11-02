@@ -79,7 +79,7 @@ class Run:
         word, _, arg = line.strip().partition(' ')
         if not word:
             self.stop('a command step had no command')
-        handler = (self.bot.registry.find(word) or self.bot.registry.commands.get(word))
+        handler = self.bot.registry.find(word, addressed=True)
         chain = CHAIN.get()
         if handler is not None and handler.plugin == RECIPES and handler.name in chain:
             self.stop('it calls itself: {}'.format(' -> '.join(chain + (handler.name,))))
