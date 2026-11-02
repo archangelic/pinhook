@@ -608,8 +608,11 @@ class Bot:
             return
         elif event.type == 'message':
             self.spawn(self.process_event(event))
-        else:
+        elif self.registry.events.get(event.type):
             self.spawn(self.process_other(event))
+        elif event.source:
+            # nothing handles it, but !ban still wants to know who was here
+            self.remember(event.source)
 
     def reset_timers(self):
         # each timer's first run is one interval after its plugin loaded
