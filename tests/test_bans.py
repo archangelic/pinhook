@@ -102,6 +102,6 @@ def test_broken_ban_file_stops_bot_starting(make_bot, tmp_path):
 def test_seen_list_is_capped(make_bot):
     b = make_bot()
     for i in range(1100):
-        b.remember('nick{}'.format(i), 'user', 'host', None)
+        b.remember(Source('nick{}'.format(i), 'user', 'host'))
     assert len(b.seen) == 1000
     assert 'nick0' not in b.seen and 'nick1099' in b.seen

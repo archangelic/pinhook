@@ -33,6 +33,15 @@ from .transport.identity import entry_kind
 from .transport.irc import IrcTransport, TwitchTransport
 
 
+def split_args(text):
+    """The words of a built-in command's arguments, with quotes grouping words, or split on
+    spaces when the quotes don't pair up."""
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return text.split()
+
+
 def did_you_mean(name, names):
     """", did you mean 'x'?" for the closest of names to a name that's probably a typo,
     or nothing."""
@@ -87,6 +96,9 @@ class Bot:
         'access': 'show who can use a plugin or command',
         'recipe': 'add a one-line recipe, or remove a recipe',
     }
+    # every built-in command's name, which no plugin or recipe can take. !help isn't
+    # listed with the rest, since it's shown to everyone
+    builtins = frozenset(internal_commands) | {'help'}
     # keyword options Bot understands, subclasses can add their own
     options = {
         'port', 'ops', 'plugin_dir', 'ssl_required', 'ssl_verify', 'ns_pass',
@@ -151,7 +163,7 @@ class Bot:
         self.transport = self.make_transport(server, nickname)
         self.setup_core()
         self.warn_unknown_options(kwargs)
-        self.setup_bans(nickname, kwargs)
+        self.setup_bans(kwargs)
         self.check_entries()
         if self.sasl_password and not self.ssl_required:
             self.logger.warning('sasl_password will be sent without ssl, '
@@ -251,7 +263,6 @@ class Bot:
         self.switches = Switches(self.plugin_channels, self.switches_path(),
                                  self.transport.casefold)
         # !help isn't listed with the rest, it's shown to everyone
-        self.builtins = set(self.internal_commands) | {'help'}
         self.registry = Registry(self.bot_nick, self.prefixes, self.builtins, self.logger)
         # who can use what, from the access config and !allow and !deny
         self.access = Access(self, self.access_config, self.access_path())
@@ -316,7 +327,7 @@ class Bot:
         return '{}: added {}{}'.format(nick, self.cmd_prefix, name)
 
     def remove_recipe(self, nick, name):
-        recipe = getattr(self, 'recipes', {}).get(name)
+        recipe = self.recipes.get(name)
         if recipe is None or not recipe.path:
             return "{}: there's no recipe called {}".format(nick, name)
         folder = os.path.realpath(self.recipe_dir)
@@ -376,7 +387,7 @@ class Bot:
     def open_store(self, name):
         return Store(name, os.path.join(self.data_dir, name + '.json'))
 
-    def setup_bans(self, nickname, kwargs):
+    def setup_bans(self, kwargs):
         self.config_bans = list(kwargs.get('banned_users', []))
         self.banned_users = list(self.config_bans)
         saved = access.load_bans(self.ban_file)
@@ -398,17 +409,16 @@ class Bot:
         saved = [b for b in self.banned_users if not self.nick_in(b, self.config_bans)]
         access.save_bans(self.ban_file, saved)
 
-    def remember(self, nick, user, host, account):
-        key = self.transport.casefold(nick)
-        self.seen[key] = (nick, user, host, account)
+    def remember(self, source):
+        key = self.transport.casefold(source.nick)
+        self.seen[key] = source
         self.seen.move_to_end(key)
         while len(self.seen) > 1000:
             self.seen.popitem(last=False)
 
     def last_seen(self, nick):
         """Who was last seen using nick, as a Source, or None."""
-        seen = self.seen.get(self.transport.casefold(nick))
-        return Source(*seen) if seen else None
+        return self.seen.get(self.transport.casefold(nick))
 
     def ban_entry(self, target):
         # a nick on its own is easy to change, so the transport says what's harder to
@@ -443,7 +453,7 @@ class Bot:
         if not self.ssl_verify:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
-        if getattr(self, 'ssl_certfile', None):
+        if self.ssl_certfile:
             context.load_cert_chain(self.path(self.ssl_certfile),
                                     self.path(self.ssl_keyfile) if self.ssl_keyfile else None)
         return context
@@ -521,12 +531,13 @@ class Bot:
         async with asyncio.TaskGroup() as core:
             core.create_task(self.transport.run())
             core.create_task(self.read_events())
-            sender = core.create_task(self.output.run())
-            timers = core.create_task(self.run_timers())
+            # stopped when the bot quits, unlike the transport, which closes itself
+            background = [core.create_task(self.output.run()), core.create_task(self.run_timers())]
             if self.health_port:
-                checks = core.create_task(health.serve(self, self.health_host, self.health_port))
+                background.append(core.create_task(
+                    health.serve(self, self.health_host, self.health_port)))
             if self.reload_on_change:
-                watcher = core.create_task(self.watch_files())
+                background.append(core.create_task(self.watch_files()))
             await self.quitting.wait()
             try:
                 # answers already on their way, then everything waiting to be sent
@@ -537,12 +548,8 @@ class Bot:
             except TimeoutError:
                 self.logger.warning('quitting with {} messages still waiting to be sent'
                                     .format(self.output.waiting()))
-            sender.cancel()
-            timers.cancel()
-            if self.health_port:
-                checks.cancel()
-            if self.reload_on_change:
-                watcher.cancel()
+            for task in background:
+                task.cancel()
             self.registry.teardown()
             await self.transport.close(self.quit_reason)
 
@@ -761,8 +768,7 @@ class Bot:
         return nick
 
     def send_help(self, target, lines):
-        for line in lines:
-            self.send_message('privmsg', target, line)
+        self.send_text('privmsg', target, lines)
 
     def access_note(self, handler, who, channel):
         # restricted commands show for everyone, so people know to ask for access
@@ -927,10 +933,7 @@ class Bot:
                 and (command is None or (h.kind == 'command' and h.name == command))]
 
     def access_command(self, cmd, nick, arg):
-        try:
-            args = shlex.split(arg)
-        except ValueError:
-            args = arg.split()
+        args = split_args(arg)
         usage = '{}: usage: {}{} <plugin or command>{}'.format(
             nick, self.cmd_prefix, cmd, '' if cmd == 'access' else ' <who> [<who> ...]')
         if not args or (cmd == 'access') != (len(args) == 1):
@@ -1027,7 +1030,7 @@ class Bot:
 
     def accepts(self, source):
         """True if the bot should act on something this person did."""
-        self.remember(source.nick, source.user, source.host, source.account)
+        self.remember(source)
         return not self.ignores(source, log=True)
 
     def ignores(self, source, log=False):
@@ -1150,10 +1153,7 @@ class Bot:
     def switch(self, on, channel, nick, arg):
         # !enable and !disable <name> [all | #channel]: the current channel by default,
         # and everywhere from a private message
-        try:
-            args = shlex.split(arg)
-        except ValueError:
-            args = arg.split()
+        args = split_args(arg)
         verb = 'enable' if on else 'disable'
         scope_ok = len(args) < 2 or args[1] == 'all' or is_channel(args[1])
         if not args or len(args) > 2 or not scope_ok:

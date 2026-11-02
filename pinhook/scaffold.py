@@ -42,7 +42,7 @@ def write(path, text):
 
 def reserved():
     # built-in commands, which no plugin or recipe can take
-    return set(Bot.internal_commands) | {'help'}
+    return Bot.builtins
 
 
 def check_plugin_name(name):
