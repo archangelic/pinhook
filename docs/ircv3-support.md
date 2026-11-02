@@ -14,7 +14,7 @@ pinhook asks for each IRCv3 capability the server offers, and each one has a fal
 | `batch`, `labeled-response` | `await ctx.whois(nick)` matches answers to questions, and netsplits are one event | WHOIS answers matched by nick |
 | `multi-prefix`, `userhost-in-names` | every mode and the full hostmask of each member | the highest mode, and hostmasks from WHO |
 | `away-notify`, `chghost`, `setname` | members' away state, host and real name kept current | what WHO said when the bot joined |
-| `invite-notify` | `invite` events for anyone invited to the bot's channels | only invites of the bot |
+| `invite-notify` | `invite` events for anyone invited to the bot's channels. Some servers, like Ergo, tell only channel operators | only invites of the bot |
 | `cap-notify` | capabilities the server adds or removes while connected | the list from connecting |
 
 ## Client tags

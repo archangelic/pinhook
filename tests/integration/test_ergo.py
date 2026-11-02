@@ -506,3 +506,123 @@ def test_the_health_endpoint_says_when_the_bot_is_ready(names, users, start_bot)
     while get(base + '/readyz')[0] != 503 and time.time() < end:
         time.sleep(0.1)
     assert get(base + '/readyz') == (503, 'not in {}\n'.format(channel))
+
+
+# one case for each IRCv3 capability the raw-line tests cover, against a real server
+
+def test_monitor_wins_the_bots_nick_back(names, users, start_bot):
+    bot, channel = names
+    holder = users(bot)
+    watcher = users('watcher', channel=channel)
+    start_bot(watcher)
+    holder.close()
+    line = watcher.wait_for(' NICK ')
+    assert line.startswith(':{}_!'.format(bot)) and line.endswith(bot)
+
+
+INVITES = '''
+from pinhook import on
+
+
+@on('invite')
+async def invited(ctx):
+    await ctx.send(ctx.channel, 'invited {} by {}'.format(ctx.invited, ctx.nick))
+'''
+
+
+def test_invite_notify_reports_invites_to_the_bots_channels(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'invites': INVITES})
+    # ergo tells a channel's operators who was invited
+    mal.send('MODE {} +o {}'.format(channel, bot))
+    mal.wait_for(' MODE ')
+    users('guesty')
+    mal.send('INVITE guesty {}'.format(channel))
+    assert mal.wait_for('invited ').endswith('invited guesty by mallory')
+
+
+MEMBER = '''
+from pinhook import command
+
+
+@command('who')
+async def who(ctx, nick: str):
+    m = ctx.member(nick)
+    await ctx.reply('{} away={} realname={} modes={}'.format(
+        m.nick, m.away, m.realname, ''.join(sorted(m.modes))))
+'''
+
+
+def test_away_setname_and_multi_prefix_keep_members_current(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    ana = users('anaa', channel=channel)
+    start_bot(mal, plugins={'member': MEMBER})
+    mal.send('MODE {} +ov anaa anaa'.format(channel))
+    mal.wait_for(' MODE ')
+    ana.send('AWAY :brb')
+    ana.send('CAP REQ setname')
+    ana.wait_for('ACK')
+    ana.send('SETNAME :Ana Real')
+    ana.wait_for('SETNAME')
+    time.sleep(0.3)
+    assert messages(mal.say('!who anaa', channel, bot)) == [
+        'anaa away=True realname=Ana Real modes=ov']
+
+
+PRIVATE = '''
+import asyncio
+
+from pinhook import command
+
+
+@command('psst')
+async def psst(ctx):
+    await ctx.reply('just you', private=True)
+
+
+@command('slow')
+async def slow(ctx):
+    async with ctx.typing():
+        await asyncio.sleep(0.3)
+    await ctx.reply('done')
+
+
+@command('broken')
+async def broken(ctx):
+    await ctx.reply('caf\\u00e9 \\udc80')
+'''
+
+
+def test_a_private_reply_carries_its_channel(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'private': PRIVATE})
+    mal.send('CAP REQ message-tags')
+    mal.wait_for('ACK')
+    mal.send('PRIVMSG {} :!psst'.format(channel))
+    line = mal.wait_for(':just you')
+    assert '+channel-context={}'.format(channel) in line
+    assert ' PRIVMSG mallory ' in line
+
+
+def test_typing_is_shown_while_a_command_works(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'private': PRIVATE})
+    mal.send('CAP REQ message-tags')
+    mal.wait_for('ACK')
+    mal.send('PRIVMSG {} :!slow'.format(channel))
+    mal.read(1.5)
+    typing = [line.split(';+typing=')[1].split(' ')[0] for line in mal.lines
+              if ' TAGMSG ' in line and '+typing=' in line]
+    assert typing == ['active', 'done']
+    assert any(line.endswith(':done') for line in mal.lines)
+
+
+def test_text_the_server_would_refuse_arrives_as_valid_utf8(names, users, start_bot):
+    bot, channel = names
+    mal = users('mallory', channel=channel)
+    start_bot(mal, plugins={'private': PRIVATE})
+    assert messages(mal.say('!broken', channel, bot)) == ['café ?']
