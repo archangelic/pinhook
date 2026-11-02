@@ -61,7 +61,7 @@ def test_1x_store_config_ops_hidden_and_details(bot):
     assert bot.say('!legacyops', nick='ana') == ['ops only, sorry']
     assert mal(bot, '!legacyops') == ['hello op']
     assert bot.say('!legacyhidden') == ['found the hidden one']
-    assert 'legacyhidden' not in bot.private('!help', nick='ana')[0]
+    assert 'legacyhidden' not in ' '.join(bot.private('!help', nick='ana'))
     assert bot.say('!legacywho a b', nick='ana') == [
         'nick=ana op=False private=False botnick=testbot people=4 cmd=!legacywho arg=a b']
 
@@ -131,7 +131,8 @@ def test_access_failures_and_limits(bot):
         bot.say('!broken')
     assert bot.sent_to('#test')[-1] == 'that went wrong'
     assert bot.say('!sleepy') == []
-    assert 'hidden' not in mal(bot, '!help') and bot.say('!hidden') == ['found the hidden one']
+    assert '!hidden' not in ' '.join(bot.private('!help', nick='mal', account='mal'))
+    assert bot.say('!hidden') == ['found the hidden one']
 
 
 def test_events_and_the_timer(bot):
