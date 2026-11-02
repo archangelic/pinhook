@@ -385,3 +385,27 @@ def test_access_commands_work_on_a_1x_command_with_its_own_trigger(tmp_path):
     bot = TestBot(plugin_dir=str(tmp_path / 'plugins'), ops=['mal'])
     assert bot.say('!access .weather', nick='mal') == ['.weather: open']
     assert bot.say('!deny .weather troll', nick='mal')[0].startswith('mal: kept off .weather:')
+
+
+def test_a_group_given_access_from_chat_stays_a_group(tmp_path, caplog):
+    (tmp_path / 'plugins').mkdir(exist_ok=True)
+    (tmp_path / 'plugins' / 'weather.py').write_text(
+        "from pinhook import command\n\n\n"
+        "@command('weather', restricted=True)\n"
+        "async def weather(ctx):\n"
+        "    await ctx.reply('sunny')\n")
+    config = {'groups': {'regulars': ['ana']}}
+    bot = TestBot(plugin_dir=str(tmp_path / 'plugins'), ops=['mal'], access=config)
+    assert bot.say('!allow weather regulars', nick='mal') == [
+        'mal: gave access to plugin weather to regulars']
+    assert bot.say('!weather', nick='ana') == ['sunny']
+    assert bot.say('!access weather', nick='mal') == [
+        'plugin weather: open', '!weather: restricted, allowed: ops, regulars']
+    # the config drops the group: its grant matches no one, not a nick called regulars
+    bot.access.configure({})
+    bot.check_plugin_config()
+    assert bot.say('!weather', nick='regulars') == []
+    assert bot.say('!weather', nick='ana') == []
+    assert 'saved group regulars for weather, but the config has no group' in caplog.text
+    assert bot.say('!revoke weather regulars', nick='mal') == [
+        'mal: took back regulars on plugin weather']

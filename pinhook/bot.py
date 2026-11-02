@@ -338,6 +338,10 @@ class Bot:
         return os.path.join(self.data_dir, '{}.access.json'.format(self.bot_nick))
 
     def check_plugin_config(self):
+        for plugin_name, command, group in self.access.missing_groups():
+            where = plugin_name if command is None else '{} {}'.format(plugin_name, command)
+            self.logger.warning("!allow or !deny saved group {} for {}, but the config has no "
+                                "group called that, so it matches no one".format(group, where))
         # a section for a plugin that isn't loaded is probably a typo
         loaded = set(self.registry.plugins) - {RECIPES}
         sections = [('plugin_config', set(self.plugin_config) - {'shared'}),
@@ -938,7 +942,7 @@ class Bot:
                 problems.append(problem)
                 continue
             if self.access.is_group(target):
-                entry, description = target, target
+                entry, description = access.GROUP + target, target
             else:
                 entry, description = self.ban_entry(target)
             added = self.access.add(cmd, plugin_name, command, entry)
@@ -955,14 +959,15 @@ class Bot:
 
             def wanted(entry):
                 # the entry itself, or one that matches the person last seen as target
-                return (fold(entry) == fold(target) or
+                return (fold(entry.removeprefix(access.GROUP)) == fold(target) or
                         bool(seen) and not self.access.is_group(entry) and
                         self.transport.matches(entry, seen))
             removed += self.access.remove(plugin_name, command, wanted)
             in_config += self.access.in_config(plugin_name, command, wanted)
         reply = '{}: '.format(nick)
         if removed:
-            reply += 'took back {} on {}'.format(', '.join(removed), label)
+            reply += 'took back {} on {}'.format(
+                ', '.join(entry.removeprefix(access.GROUP) for entry in removed), label)
         else:
             reply += 'nothing to take back for {} on {}'.format(' '.join(targets), label)
         if in_config:
@@ -994,6 +999,8 @@ class Bot:
         parts = [level]
         allowed = self.access.entries(handler, 'allow')
         denied = self.access.entries(handler, 'deny')
+        allowed = [entry.removeprefix(access.GROUP) for entry in allowed]
+        denied = [entry.removeprefix(access.GROUP) for entry in denied]
         if level == 'restricted':
             parts.append('allowed: ' + (', '.join(['ops'] + allowed)))
         if denied:

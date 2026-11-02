@@ -15,6 +15,9 @@ from .transport.identity import entry_kind
 
 # least strict first
 LEVELS = ('open', 'restricted', 'ops')
+# how !allow and !deny save a group, so it stays a group even once the config drops it,
+# and never turns into a nick anyone could take
+GROUP = 'group:'
 
 
 KINDS = {'nick': ('a nick', 'nicks'), 'mask': ('a hostmask', 'hostmasks'),
@@ -266,6 +269,11 @@ class Access:
         """True if who is one of entries. channel is where they are, for groups like chanops."""
         transport = self.bot.transport
         for entry in entries:
+            if entry.startswith(GROUP):
+                entry = entry[len(GROUP):]
+                if not self.is_group(entry):
+                    # a group that's gone from the config matches no one
+                    continue
             if entry in self.groups:
                 if entry not in groups_seen and self.matches(who, self.groups[entry], channel,
                                                              groups_seen + (entry,)):
@@ -335,6 +343,19 @@ class Access:
         if removed:
             self.save()
         return removed
+
+    def missing_groups(self):
+        """Groups saved by !allow and !deny that the config no longer has, as (plugin,
+        command, group), with command None for a whole plugin."""
+        missing = []
+        for plugin, saved in self.saved.items():
+            places = [(None, saved)] + list(saved.get('commands', {}).items())
+            for command, entry in places:
+                for which in ('allow', 'deny'):
+                    for name in entry.get(which, []):
+                        if name.startswith(GROUP) and not self.is_group(name[len(GROUP):]):
+                            missing.append((plugin, command, name[len(GROUP):]))
+        return missing
 
     def in_config(self, plugin, command, wanted):
         rule = self.rules.get(plugin, Rule())
