@@ -67,7 +67,7 @@ async def roll(ctx, sides: int = 6):
 | `msg.arg`, parsed by hand | arguments in the signature |
 | `return message(text)` | `await ctx.reply(text)` |
 | `return action(text)` | `await ctx.action(text)` |
-| `@listener('name')` | `@on('message')` |
+| `@listener('name')` | `@on('message', name='name')`, so `!enable` and `!disable` still know it by its name |
 | `msg.store`, `msg.config` | `ctx.store`, `ctx.config` |
 | `msg.is_op` | `ctx.is_op`, or `ops=True` on the command |
 | `ops_msg='...'` | `denied_msg='...'` |
