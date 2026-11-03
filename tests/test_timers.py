@@ -76,8 +76,24 @@ def test_switching_a_timer_in_a_channel_switches_it_everywhere(tmp_path):
     assert bot.tick(1800) == []
     assert bot.say('!enable remind #games', nick='mal') == ["mal: 'remind' enabled everywhere"]
     assert bot.tick(1800) == [Sent('message', '#games', 'dice night is friday')]
-    # a plugin file with a timer still switches per channel
-    assert bot.say('!disable notes', nick='mal') == ["mal: 'notes' disabled in #test"]
+    # so does a plugin file that's only timers
+    assert bot.say('!disable notes', nick='mal') == ["mal: 'notes' disabled everywhere"]
+
+
+def test_a_channel_switch_says_it_missed_the_timers(tmp_path):
+    bot = bot_with(tmp_path, notes=REMIND.replace('@every(minutes=30)',
+                                                  "@every(minutes=30, name='roll')")
+                   + "@command('roll')\nasync def roll(ctx): await ctx.reply('4')\n")
+    assert bot.say('!disable notes', nick='mal') == [
+        "mal: 'notes' disabled in #test, but not its timers, which only '!disable notes all' "
+        "switches"]
+    assert bot.tick(1800) == [Sent('message', '#games', 'dice night is friday')]
+    bot.say('!enable notes', nick='mal')
+    assert bot.say('!disable roll', nick='mal') == [
+        "mal: 'roll' disabled in #test, but not its timers, which only '!disable roll all' "
+        "switches"]
+    assert bot.say('!disable roll all', nick='mal') == ["mal: 'roll' disabled everywhere"]
+    assert bot.tick(1800) == []
 
 
 def test_a_timer_can_be_named(tmp_path):

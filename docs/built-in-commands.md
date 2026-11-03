@@ -33,4 +33,6 @@ Every bot has these. They use the bot's [`cmd_prefix`](options.md), `!` by defau
 
 `!enable` and `!disable`, from a private message, apply everywhere. Both are saved, and last through restarts.
 
+A [timer](timers.md) runs in no channel, so only `all` switches it. `!disable notes` in a channel turns off the notes plugin's commands and handlers there and leaves its timers running; `!disable notes all` stops them too.
+
 Every command that changes who can do what is logged as an [audit line](deployment.md#logs).

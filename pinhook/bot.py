@@ -1201,11 +1201,16 @@ class Bot:
             return "{}: '{}' not found".format(nick, args[0])
         where = args[1] if len(args) == 2 else channel
         target = where if self.transport.is_channel(where) else None
-        named = [h for h in self.registry.handlers() if h.name == name]
-        if named and all(h.kind == 'timer' for h in named):
-            # a timer runs in no channel, so it's on or off everywhere
+        # a timer runs in no channel, so only a switch everywhere reaches it: a name that's
+        # only timers switches everywhere, and a switch in a channel says it missed them
+        covered = [h for h in self.registry.handlers() if name in (h.name, h.plugin)]
+        timers = [h for h in covered if h.kind == 'timer']
+        if timers and len(timers) == len(covered):
             target = None
         place = 'in ' + target if target else 'everywhere'
+        if timers and target is not None:
+            place += ", but not its timers, which only '{}{} {} all' switches".format(
+                self.cmd_prefix, verb, args[0])
         if target is None:
             entry = self.switches.saved.get(name, {})
             already = entry.get('all') == on and not entry.get('channels')
