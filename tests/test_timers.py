@@ -70,11 +70,21 @@ def test_timers_can_be_switched_off(tmp_path):
     assert bot.tick(1800) == []
 
 
+def test_switching_a_timer_in_a_channel_switches_it_everywhere(tmp_path):
+    bot = bot_with(tmp_path, notes=REMIND)
+    assert bot.say('!disable remind', nick='mal') == ["mal: 'remind' disabled everywhere"]
+    assert bot.tick(1800) == []
+    assert bot.say('!enable remind #games', nick='mal') == ["mal: 'remind' enabled everywhere"]
+    assert bot.tick(1800) == [Sent('message', '#games', 'dice night is friday')]
+    # a plugin file with a timer still switches per channel
+    assert bot.say('!disable notes', nick='mal') == ["mal: 'notes' disabled in #test"]
+
+
 def test_a_timer_can_be_named(tmp_path):
     bot = bot_with(tmp_path, notes=REMIND.replace('@every(minutes=30)',
                                                   "@every(minutes=30, name='nudge')"))
     assert bot.say('!disable remind all', nick='mal') == ["mal: 'remind' not found"]
-    bot.say('!disable nudge all', nick='mal')
+    bot.say('!disable nudge', nick='mal')
     assert bot.tick(1800) == []
 
 

@@ -21,7 +21,7 @@ A run still going when the next one is due is left to finish, and the next run w
 
 ## Turn a timer off
 
-[`!disable reminder all`](built-in-commands.md#for-ops) stops it, and `!enable reminder all` starts it again. The name is the function's. Give it another with `name`:
+[`!disable reminder`](built-in-commands.md#for-ops) stops it everywhere, since a timer runs in no channel, and `!enable reminder` starts it again. The name is the function's. Give it another with `name`:
 
 ```python
 @every(minutes=30, name='friday')

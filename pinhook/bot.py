@@ -1201,6 +1201,10 @@ class Bot:
             return "{}: '{}' not found".format(nick, args[0])
         where = args[1] if len(args) == 2 else channel
         target = where if self.transport.is_channel(where) else None
+        named = [h for h in self.registry.handlers() if h.name == name]
+        if named and all(h.kind == 'timer' for h in named):
+            # a timer runs in no channel, so it's on or off everywhere
+            target = None
         place = 'in ' + target if target else 'everywhere'
         if target is None:
             entry = self.switches.saved.get(name, {})
