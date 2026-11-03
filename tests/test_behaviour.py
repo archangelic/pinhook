@@ -7,6 +7,7 @@ import json
 import pytest
 
 from pinhook import bot as pinhook_bot
+from pinhook.testing import PluginError, TestBot
 
 from wire import Wire, lines
 
@@ -218,7 +219,6 @@ def test_newlines_inside_list_output_send_each_line(tmp_path):
         "@p.command('!multi')\n"
         "def multi(msg): return p.message(['one\\ntwo', 'three'])\n")})
     assert w.say('!multi') == ['one', 'two', 'three']
-    assert w.pauses == [.5, .5, .5]
 
 
 # logging
@@ -284,9 +284,10 @@ def test_reload_without_a_config_file_just_reloads(tmp_path):
 
 
 @pytest.mark.parametrize('new_config, reply, units', [
-    ('{"units": "imperial"}', 'Plugins reloaded (and plugin_config from config.json)', 'imperial'),
-    (None, "Plugins reloaded, but config.json has a problem so plugin_config wasn't changed, "
-           "see the log", 'metric'),
+    ('{"units": "imperial"}', 'Plugins reloaded (and plugin_config and access from config.json)',
+     'imperial'),
+    (None, "Plugins reloaded, but config.json has a problem so plugin_config and access weren't "
+           "changed, see the log", 'metric'),
 ])
 def test_reload_reads_plugin_config_from_the_config_file(tmp_path, new_config, reply, units):
     from unittest import mock
@@ -312,3 +313,60 @@ def test_reload_reads_plugin_config_from_the_config_file(tmp_path, new_config, r
     path.write_text(config(json.loads(new_config)) if new_config else '{"nickname": ')
     assert w.say('!reload', nick='mal') == [reply]
     assert w.say('!units') == [units]
+
+
+def test_with_help_off_a_listener_can_answer_help_addressed_to_the_bot(tmp_path):
+    (tmp_path / 'helpplugin.py').write_text(
+        "import pinhook.plugin as plugin\n\n\n"
+        "@plugin.listener('help')\n"
+        "def help_plugin(msg):\n"
+        "    if msg.text.startswith('{}: !help'.format(msg.botnick)):\n"
+        "        msg.privmsg(msg.nick, 'ask an admin')\n")
+    bot = TestBot(plugin_dir=str(tmp_path), disable_help=True)
+    bot.say('testbot: !help', nick='ana')
+    assert bot.sent_to('ana') == ['ask an admin']
+
+
+def test_send_message_is_safe_from_another_thread(tmp_path):
+    import threading
+    bot = TestBot(plugin_dir=str(tmp_path))
+    sender = threading.Thread(target=bot.send_message, args=('privmsg', '#test', 'from a hook'))
+    bot.driver.loop.call_soon(sender.start)
+    bot.driver.run()
+    sender.join()
+    bot.driver.run()
+    assert bot.sent_to('#test') == ['from a hook']
+
+
+MY_HELP = ("from pinhook import command\n\n\n"
+           "@command('help')\n"
+           "async def my_help(ctx, topic: str = ''):\n"
+           "    await ctx.reply('my own help ' + topic)\n")
+
+
+def test_with_help_off_a_plugin_can_have_its_own_help_command(tmp_path):
+    (tmp_path / 'myhelp.py').write_text(MY_HELP)
+    bot = TestBot(plugin_dir=str(tmp_path), disable_help=True)
+    assert bot.say('!help dice') == ['my own help dice']
+    assert [c.name for c in bot.commands()] == ['help']
+
+
+def test_with_help_on_a_plugin_cant_take_help(tmp_path):
+    (tmp_path / 'myhelp.py').write_text(MY_HELP)
+    with pytest.raises(PluginError, match='registers command !help, which the bot itself'):
+        TestBot(plugin_dir=str(tmp_path))
+
+
+def test_help_off_frees_only_help(tmp_path):
+    (tmp_path / 'myban.py').write_text(
+        "import pinhook.plugin as p\n\n\n@p.command('!ban')\ndef b(msg):\n    pass\n")
+    with pytest.raises(PluginError, match='registers command !ban, which the bot itself'):
+        TestBot(plugin_dir=str(tmp_path), disable_help=True)
+
+
+def test_with_help_off_a_1x_help_command_loads(tmp_path):
+    (tmp_path / 'oldhelp.py').write_text(
+        "import pinhook.plugin as p\n\n\n"
+        "@p.command('!help')\ndef h(msg):\n    return p.message('old help')\n")
+    bot = TestBot(plugin_dir=str(tmp_path), disable_help=True)
+    assert bot.say('!help') == ['old help']

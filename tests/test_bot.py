@@ -3,6 +3,7 @@ import logging
 import pytest
 
 from pinhook import bot as pinhook_bot
+from pinhook.testing import TestBot
 
 
 PING_PLUGIN = (
@@ -48,18 +49,13 @@ def test_logging_works_again_after_off(make_bot, caplog):
     assert 'should appear' in caplog.text
 
 
-MESSAGE_ARGS = dict(bot=None, channel='#test', nick='mal', user='user', botnick='pinbot', ops=[],
-                    logger=None, action=None, privmsg=None, notice=None, msg_type='message')
-
-
-def test_message_needs_cmd_or_text():
-    with pytest.raises(TypeError, match='missing cmd or text'):
-        pinhook_bot.Bot.Message(**MESSAGE_ARGS)
-
-
-def test_message_with_cmd_and_text_is_fine():
-    msg = pinhook_bot.Bot.Message(cmd='!ping', arg='', text='!ping', **MESSAGE_ARGS)
-    assert msg.cmd == '!ping' and msg.text == '!ping'
+def test_commands_get_cmd_arg_and_text(tmp_path):
+    from pinhook.testing import TestBot
+    (tmp_path / 'show.py').write_text(
+        "import pinhook.plugin as p\n"
+        "@p.command('!show')\n"
+        "def show(msg): return p.message('|'.join([msg.cmd, msg.arg, msg.text]))\n")
+    assert TestBot(plugin_dir=str(tmp_path)).say('!show a  b') == ['!show|a  b|!show a  b']
 
 
 def test_several_bots_do_not_duplicate_log_lines(make_bot, tmp_path, monkeypatch):
@@ -108,3 +104,20 @@ def test_twitch_bot_warns_about_irc_only_options(tmp_path, caplog):
     pinhook_bot.TwitchBot('pinbot', '#chan', 'secret', plugin_dir=str(tmp_path / 'p'),
                           log_file=str(tmp_path / 't.log'), ns_pass='x')
     assert "unknown option 'ns_pass' ignored" in caplog.text
+
+
+def test_rate_limit_changes_the_burst_and_interval(tmp_path):
+    bot = TestBot(plugin_dir=str(tmp_path), rate_limit={'burst': 8, 'interval': 1})
+    assert (bot.output.limits.burst, bot.output.limits.interval) == (8, 1)
+    assert bot.output.limits.backlog == 50
+    assert TestBot(plugin_dir=str(tmp_path)).output.limits.burst == 4
+
+
+@pytest.mark.parametrize('rate_limit, problem', [
+    ({'burst': 0}, 'rate_limit.burst should be a whole number'),
+    ({'interval': 'fast'}, 'rate_limit.interval should be a number of seconds'),
+    ({'lines': 4}, 'rate_limit should be settings like'),
+])
+def test_a_bad_rate_limit_stops_the_bot_starting(tmp_path, rate_limit, problem):
+    with pytest.raises(ValueError, match=problem):
+        TestBot(plugin_dir=str(tmp_path), rate_limit=rate_limit)
