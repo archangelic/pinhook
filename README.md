@@ -98,7 +98,7 @@ Give someone access from chat, as an op:
 !access !weather
 ```
 
-pinhook saves carol's services account, or her user and host, not her nick. [Access levels](https://archangelic.github.io/pinhook/latest/access-levels/) covers groups, denies and setting levels in the config.
+pinhook saves carol's services account, or their user and host, not their nick. [Access levels](https://archangelic.github.io/pinhook/latest/access-levels/) covers groups, denies and setting levels in the config.
 
 ## Add a command without code
 
