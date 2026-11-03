@@ -1095,8 +1095,9 @@ class TwitchTransport(TwitchIdentity, IrcTransport):
         return self.badges_seen.get((self.casefold(channel), self.casefold(nick)), frozenset())
 
     def text_room(self, kind, target, prefix=''):
+        # leaving room for the repeat mark
         start = '/me ' if kind == 'action' else ''
-        return max(self.max_length - len(start + prefix), 64)
+        return max(self.max_length - len(start + prefix + self.repeat_mark), 64)
 
     def lines(self, message, text):
         if message.kind == 'notice' and not self.is_channel(message.target):

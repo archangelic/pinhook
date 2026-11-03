@@ -86,7 +86,16 @@ def test_long_messages_are_split_at_500_characters(tmp_path):
     w = twitch(tmp_path)
     w.driver.loop.run_until_complete(w.bot.transport.send(
         Outgoing('privmsg', '#chan', 'é' * 600)))
-    assert [len(s.text) for s in w.sent()] == [500, 100]
+    # two short of 500, for the repeat mark
+    assert [len(s.text) for s in w.sent()] == [498, 102]
+
+
+def test_a_repeated_long_line_stays_within_500_characters(tmp_path):
+    w = twitch(tmp_path)
+    for _ in range(2):
+        w.driver.loop.run_until_complete(w.bot.transport.send(
+            Outgoing('privmsg', '#chan', 'é' * 500)))
+    assert max(len(s.text) for s in w.sent()) == 498
 
 
 def test_a_repeat_gets_an_invisible_character_so_twitch_takes_it(tmp_path):
