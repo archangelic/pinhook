@@ -310,6 +310,11 @@ class Registry:
     def handlers(self):
         return [h for handlers in self.plugins.values() for h in handlers]
 
+    def listener_names(self):
+        # what !help lists as listeners, by the names !enable and !disable take: 1.x
+        # listeners, and @on('message') handlers by their function's name
+        return sorted(set(self.listeners) | {h.name for h in self.events.get('message', [])})
+
     def find(self, word, addressed=False):
         """The command a message's first word runs, or None.
 

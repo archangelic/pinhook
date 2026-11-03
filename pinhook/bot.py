@@ -761,8 +761,9 @@ class Bot:
         if op:
             names.update({prefix + name: prefix + name for name in self.internal_commands})
         groups = [('commands', [names[label] for label in sorted(names)])]
-        if self.registry.listeners:
-            groups.append(('listeners', sorted(self.registry.listeners)))
+        listeners = self.registry.listener_names()
+        if listeners:
+            groups.append(('listeners', listeners))
         groups.append((None, ['{}help <command> for more'.format(prefix)]))
         target = self.help_target(nick, where)
         self.send_help(target, commands.pack(groups, self.transport.text_room('privmsg', target)))

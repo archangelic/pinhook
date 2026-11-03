@@ -58,6 +58,21 @@ def test_commands_and_listeners_can_be_switched_by_name(tmp_path):
     assert bot.say('!ping') == ['pong']
 
 
+def test_a_message_handler_is_listed_and_switched_by_its_name(tmp_path):
+    (tmp_path / 'thanks.py').write_text(
+        "from pinhook import on\n\n\n"
+        "@on('message')\n"
+        "async def thanks(ctx):\n"
+        "    await ctx.reply('any time')\n")
+    bot = bot_with(tmp_path)
+    assert 'listeners: thanks' in ' '.join(bot.private('!help'))
+    assert bot.say('!disable thanks', nick='mal') == ["mal: 'thanks' disabled in #test"]
+    assert bot.say('thanks gamebot') == []
+    assert bot.say('!ping') == ['pong']
+    bot.say('!enable thanks', nick='mal')
+    assert bot.say('thanks gamebot') == ['any time']
+
+
 def test_saying_so_twice_says_it_already_is(tmp_path):
     bot = bot_with(tmp_path)
     bot.say('!disable dice', nick='mal')

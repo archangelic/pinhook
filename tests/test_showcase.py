@@ -182,11 +182,17 @@ def test_listeners_hear_everything_but_commands(bot):
 
 
 def test_listeners_in_help_and_turned_off(bot):
-    assert 'listeners: legacy_counter, legacy_listener' in ' '.join(bot.private('!help'))
+    # the list can break across lines, so the names are read one by one
+    listed = ' '.join(bot.private('!help')).split('listeners: ')[1].split(' | ')[0]
+    assert listed.replace(',', ' ').split() == [
+        'legacy_counter', 'legacy_listener', 'message', 'waved']
     mal(bot, '!disable legacy_listener')
-    assert bot.say('ping legacy') == []
+    mal(bot, '!disable message')
+    assert bot.say('ping legacy') == [] and bot.say('ping modern') == []
     mal(bot, '!enable legacy_listener')
+    mal(bot, '!enable message')
     assert bot.say('ping legacy') == ['pong from a 1.x listener']
+    assert bot.say('ping modern') == ['pong from a 2.0 listener']
 
 
 # recipes
