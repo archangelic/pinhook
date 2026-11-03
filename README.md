@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/archangelic/pinhook/master/docs/assets/brand/pinhook-readme-header@2x.png" alt="pinhook: python irc bot framework" width="640"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/archangelic/pinhook/86d35082a1f2441f7c8ed0ee0dd2f49224d8759f/docs/assets/brand/pinhook-readme-header@2x.png" alt="pinhook: python irc bot framework" width="640"></p>
 
 # pinhook
 
