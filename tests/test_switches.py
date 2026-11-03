@@ -73,6 +73,19 @@ def test_a_message_handler_is_listed_and_switched_by_its_name(tmp_path):
     assert bot.say('thanks gamebot') == ['any time']
 
 
+def test_a_handler_can_be_named(tmp_path):
+    (tmp_path / 'polite.py').write_text(
+        "from pinhook import on\n\n\n"
+        "@on('message', name='thanker')\n"
+        "async def thanks(ctx):\n"
+        "    await ctx.reply('any time')\n")
+    bot = bot_with(tmp_path)
+    assert 'listeners: thanker' in ' '.join(bot.private('!help'))
+    assert bot.say('!disable thanks', nick='mal') == ["mal: 'thanks' not found"]
+    bot.say('!disable thanker', nick='mal')
+    assert bot.say('thanks gamebot') == []
+
+
 def test_saying_so_twice_says_it_already_is(tmp_path):
     bot = bot_with(tmp_path)
     bot.say('!disable dice', nick='mal')

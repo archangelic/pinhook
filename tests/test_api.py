@@ -294,5 +294,10 @@ def test_on_only_takes_known_events():
         on('sneeze')
 
 
+def test_an_event_handlers_name_is_one_disable_can_take():
+    with pytest.raises(ValueError, match="handler names are letters"):
+        on('message', name='say thanks')
+
+
 def test_plugin_is_exported_for_subclassing():
     assert issubclass(type('Mine', (Plugin,), {}), Plugin)

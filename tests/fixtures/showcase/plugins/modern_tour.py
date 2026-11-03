@@ -178,9 +178,10 @@ class Tour(Plugin):
         self.events.append(f'notice {ctx.text}')
 
     # listeners: @on('message') runs for every message that isn't a command, /me
-    # actions and private messages included, and a plugin can have several
+    # actions and private messages included, and a plugin can have several. !help lists
+    # each by its name, the function's unless name= gives another
 
-    @on('message')
+    @on('message', name='modern_listener')
     async def message(self, ctx: Context) -> None:
         if ctx.addressed and ctx.text.endswith('hello'):
             await ctx.reply(f'hello {ctx.nick}, you addressed me')

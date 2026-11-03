@@ -48,7 +48,11 @@ async def thanks(ctx):
         await ctx.reply('any time')
 ```
 
-`!help` lists it as a listener by its function's name, `thanks`, and [`!disable thanks`](built-in-commands.md#for-ops) turns it off.
+`!help` lists it as a listener by its function's name, `thanks`, and [`!disable thanks`](built-in-commands.md#for-ops) turns it off. Give it another name with `name`:
+
+```python
+@on('message', name='thanker')
+```
 
 A netsplit is one event for everyone who left, not one per person, so a bot never answers a netsplit with a flood.
 

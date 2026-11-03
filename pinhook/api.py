@@ -111,7 +111,8 @@ def every(seconds: float = 0, minutes: float = 0, hours: float = 0,
     return mark
 
 
-def on(event: str, timeout: float | None = None) -> Callable[[Handler], Handler]:
+def on(event: str, timeout: float | None = None,
+       name: str | None = None) -> Callable[[Handler], Handler]:
     """Make an async function handle an event, like 'join'. It gets a ctx about the event.
 
     Args:
@@ -119,11 +120,15 @@ def on(event: str, timeout: float | None = None) -> Callable[[Handler], Handler]
             netsplit, netjoin, connected or disconnected. A netsplit or netjoin is one event
             for everyone who left or came back, with their nicks in ctx.nicks.
         timeout: seconds before the bot stops waiting for it, instead of the bot's default.
+        name: what !enable and !disable call it, and !help lists a message handler as.
+            Defaults to the function's name.
     """
     if event not in EVENTS:
         raise ValueError("@on takes one of {}, not '{}'".format(', '.join(sorted(EVENTS)), event))
+    if name is not None and (not isinstance(name, str) or not NAME.match(name)):
+        raise ValueError("handler names are letters, digits, - and _: '{}'".format(name))
 
     def mark(func: Handler) -> Handler:
-        return _mark(func, kind='event', name=getattr(func, '__name__', ''), event=event,
-                     timeout=timeout)
+        return _mark(func, kind='event', name=name or getattr(func, '__name__', ''),
+                     event=event, timeout=timeout)
     return mark

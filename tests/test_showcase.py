@@ -185,12 +185,12 @@ def test_listeners_in_help_and_turned_off(bot):
     # the list can break across lines, so the names are read one by one
     listed = ' '.join(bot.private('!help')).split('listeners: ')[1].split(' | ')[0]
     assert listed.replace(',', ' ').split() == [
-        'legacy_counter', 'legacy_listener', 'message', 'waved']
+        'legacy_counter', 'legacy_listener', 'modern_listener', 'waved']
     mal(bot, '!disable legacy_listener')
-    mal(bot, '!disable message')
+    mal(bot, '!disable modern_listener')
     assert bot.say('ping legacy') == [] and bot.say('ping modern') == []
     mal(bot, '!enable legacy_listener')
-    mal(bot, '!enable message')
+    mal(bot, '!enable modern_listener')
     assert bot.say('ping legacy') == ['pong from a 1.x listener']
     assert bot.say('ping modern') == ['pong from a 2.0 listener']
 
