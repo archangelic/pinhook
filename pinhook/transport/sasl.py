@@ -11,6 +11,9 @@ import secrets
 
 # best first, when the server lists what it offers
 PREFERRED = ('EXTERNAL', 'SCRAM-SHA-256', 'PLAIN')
+# the most SCRAM hashing rounds the bot does for a server, well above what servers use: the
+# hashing holds up everything else the bot is doing, so a server can't ask for minutes of it
+MOST_ROUNDS = 1_000_000
 
 
 class SaslError(Exception):
@@ -91,6 +94,9 @@ class ScramSha256:
         nonce, salt, rounds = fields.get('r', ''), fields.get('s'), fields.get('i', '')
         if not nonce.startswith(self.nonce) or salt is None or not rounds.isdigit():
             raise SaslError("the server's SCRAM challenge doesn't make sense: " + server_first)
+        if int(rounds) > MOST_ROUNDS:
+            raise SaslError('the server asked for {} SCRAM rounds, more than the {} the bot '
+                            'does'.format(rounds, MOST_ROUNDS))
         salted = hashlib.pbkdf2_hmac('sha256', self.password, base64.b64decode(salt),
                                      int(rounds))
         client_key = mac(salted, b'Client Key')

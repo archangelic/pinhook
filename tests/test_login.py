@@ -70,6 +70,13 @@ def test_a_server_that_doesnt_know_the_password_is_refused(tmp_path, monkeypatch
     assert not w.bot.sasl_logged_in
 
 
+def test_too_many_rounds_is_refused_without_hashing():
+    login = sasl.ScramSha256('user', 'pencil', nonce=NONCE)
+    login.respond(b'')
+    with pytest.raises(sasl.SaslError, match='asked for 2000000000 SCRAM rounds, more than'):
+        login.respond(SERVER_FIRST.replace('i=4096', 'i=2000000000').encode())
+
+
 def test_challenges_longer_than_400_bytes_are_put_back_together(tmp_path):
     login = sasl.ScramSha256('user', 'pencil', nonce=NONCE)
     login.respond(b'')
