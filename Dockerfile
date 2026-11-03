@@ -4,11 +4,11 @@
 # /bot/data. Plugins and recipes go in /bot/plugins and /bot/recipes, mounted or baked
 # into an image built on this one. Logs go to stdout, and the health endpoint is on 8080.
 
-FROM python:3.14-slim AS build
+FROM python:3.15-slim AS build
 COPY . /src
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /dist /src
 
-FROM python:3.14-slim
+FROM python:3.15-slim
 COPY --from=build /dist /dist
 RUN pip install --no-cache-dir /dist/*.whl && rm -r /dist \
     && useradd --system --uid 10001 --home-dir /bot --shell /usr/sbin/nologin pinhook \
