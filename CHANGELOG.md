@@ -17,6 +17,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 * Typed commands: arguments come from the handler's signature, bad input gets a usage line, and `!help <command>` shows it. `aliases=` gives a command other names
 * Class plugins with `setup(previous)` and `teardown()`, so state carries across `!reload`
 * `@on` for joins, parts, kicks, nick changes, topics, invites, modes, netsplits and more, and `@every` for timers
+* `name=` on `@on` and `@every` sets the name `!enable` and `!disable` take, and `!help` lists `@on('message')` handlers with the listeners
 * An async core with an output queue, which keeps to each network's rate limits, so a slow plugin or a long reply never freezes the bot. `rate_limit` changes how fast it sends
 * Access levels: open, restricted or ops-only, per plugin or command, with groups, and `!allow`, `!deny`, `!revoke` and `!access` from chat
 * Recipes: commands written as YAML, which run existing commands as the person who asked, with replies, a store, loops and conditions. Ops add one-line recipes with `!recipe add`
