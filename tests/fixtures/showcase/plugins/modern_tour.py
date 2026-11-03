@@ -201,6 +201,6 @@ class Tour(Plugin):
     async def disconnected(self, ctx: Context) -> None:
         self.events.append('disconnected')
 
-    @every(minutes=30)
+    @every(minutes=30, name='showcase_timer')
     async def remind(self, ctx: Context) -> None:
         await ctx.send(ctx.config.shared['channel'], 'the timer fired')
