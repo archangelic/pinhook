@@ -46,8 +46,9 @@ def run(config, conf_format, reload):
     """
     try:
         bot = load_bot(config, conf_format, warn=warn)
-    except ValueError as e:
-        # a config mistake, a bad log_level or ban file: what's wrong, without a traceback
+    except (ValueError, OSError) as e:
+        # a config mistake, a bad log_level or ban file, or a file that can't be read or
+        # written, like ssl_certfile: what's wrong, without a traceback
         raise click.ClickException(str(e))
     bot.reload_on_change = reload
     bot.start()

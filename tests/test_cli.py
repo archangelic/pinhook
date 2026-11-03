@@ -102,6 +102,18 @@ def test_bot_startup_errors_are_shown_plainly(tmp_path):
     assert "Error: couldn't read ban file bans.json: oops" in result.output
 
 
+def test_a_file_the_bot_cant_open_is_shown_plainly(tmp_path):
+    path = tmp_path / 'config.json'
+    path.write_text(json.dumps(dict(BASE, ssl_required=True, ssl_certfile='client.pem')))
+    result = CliRunner().invoke(cli, ['run', str(path)])
+    assert result.exit_code == 1
+    assert result.output == "Error: couldn't load client.pem: No such file or directory\n"
+    error = PermissionError(13, 'Permission denied', 'logs/pinbot.log')
+    with mock.patch('pinhook.config.Bot', side_effect=error):
+        result = CliRunner().invoke(cli, ['run', str(path)])
+    assert result.output == "Error: [Errno 13] Permission denied: 'logs/pinbot.log'\n"
+
+
 def test_environment_variables_are_filled_in(tmp_path, monkeypatch):
     monkeypatch.setenv('PH_NS_PASS', 'hunter2')
     monkeypatch.setenv('PH_CHAN', 'games')

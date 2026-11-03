@@ -460,8 +460,13 @@ class Bot:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
         if self.ssl_certfile:
-            context.load_cert_chain(self.path(self.ssl_certfile),
-                                    self.path(self.ssl_keyfile) if self.ssl_keyfile else None)
+            try:
+                context.load_cert_chain(self.path(self.ssl_certfile),
+                                        self.path(self.ssl_keyfile) if self.ssl_keyfile else None)
+            except OSError as e:
+                # ssl's own error doesn't name the file
+                files = ' and '.join(f for f in (self.ssl_certfile, self.ssl_keyfile) if f)
+                raise ValueError("couldn't load {}: {}".format(files, e.strerror or e)) from e
         return context
 
     def is_op(self, source):
