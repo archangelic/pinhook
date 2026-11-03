@@ -53,6 +53,16 @@ def _mark(func: Handler, **spec: Any) -> Handler:
     return func
 
 
+def _handler_name(name: str | None, func: Handler) -> str:
+    # an @on or @every handler's name, which !enable and !disable take: the function's,
+    # unless name gives another, which has to be one a person can type after !disable
+    if name is None:
+        return getattr(func, '__name__', '')
+    if not isinstance(name, str) or not NAME.match(name):
+        raise ValueError("handler names are letters, digits, - and _: '{}'".format(name))
+    return name
+
+
 def command(name: str, help: str | None = None, ops: bool = False, restricted: bool = False,
             denied_msg: str = '', error_msg: str = '', timeout: float | None = None,
             hide: bool = False, aliases: str | Sequence[str] = ()) -> Callable[[Handler], Handler]:
@@ -88,7 +98,7 @@ def command(name: str, help: str | None = None, ops: bool = False, restricted: b
 
 
 def every(seconds: float = 0, minutes: float = 0, hours: float = 0,
-          timeout: float | None = None) -> Callable[[Handler], Handler]:
+          timeout: float | None = None, name: str | None = None) -> Callable[[Handler], Handler]:
     """Make an async function run on a timer, first one interval after its plugin loads.
 
     It gets a ctx with no channel or sender, so it answers with ctx.send(target, text).
@@ -100,13 +110,14 @@ def every(seconds: float = 0, minutes: float = 0, hours: float = 0,
         minutes: how often, in minutes, like every(minutes=30).
         hours: how often, in hours.
         timeout: seconds before the bot stops waiting for it, instead of the bot's default.
+        name: what !enable and !disable call it. Defaults to the function's name.
     """
     interval = seconds + minutes * 60 + hours * 3600
     if interval <= 0:
         raise ValueError('every() needs a time, like every(minutes=30)')
 
     def mark(func: Handler) -> Handler:
-        return _mark(func, kind='timer', name=getattr(func, '__name__', ''), interval=interval,
+        return _mark(func, kind='timer', name=_handler_name(name, func), interval=interval,
                      timeout=timeout)
     return mark
 
@@ -125,10 +136,8 @@ def on(event: str, timeout: float | None = None,
     """
     if event not in EVENTS:
         raise ValueError("@on takes one of {}, not '{}'".format(', '.join(sorted(EVENTS)), event))
-    if name is not None and (not isinstance(name, str) or not NAME.match(name)):
-        raise ValueError("handler names are letters, digits, - and _: '{}'".format(name))
 
     def mark(func: Handler) -> Handler:
-        return _mark(func, kind='event', name=name or getattr(func, '__name__', ''),
-                     event=event, timeout=timeout)
+        return _mark(func, kind='event', name=_handler_name(name, func), event=event,
+                     timeout=timeout)
     return mark

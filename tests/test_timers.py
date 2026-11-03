@@ -70,6 +70,14 @@ def test_timers_can_be_switched_off(tmp_path):
     assert bot.tick(1800) == []
 
 
+def test_a_timer_can_be_named(tmp_path):
+    bot = bot_with(tmp_path, notes=REMIND.replace('@every(minutes=30)',
+                                                  "@every(minutes=30, name='nudge')"))
+    assert bot.say('!disable remind all', nick='mal') == ["mal: 'remind' not found"]
+    bot.say('!disable nudge all', nick='mal')
+    assert bot.tick(1800) == []
+
+
 def test_timers_only_run_while_connected(tmp_path):
     (tmp_path / 'plugins').mkdir()
     (tmp_path / 'plugins' / 'remind.py').write_text(HEAD + REMIND)

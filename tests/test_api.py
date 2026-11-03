@@ -3,7 +3,7 @@ import asyncio
 
 import pytest
 
-from pinhook import Plugin, command, on
+from pinhook import Plugin, command, every, on
 from pinhook.testing import PluginError, Sent, TestBot
 
 HEAD = 'from typing import Annotated, Literal\nfrom pinhook import Plugin, command, on\n'
@@ -294,9 +294,13 @@ def test_on_only_takes_known_events():
         on('sneeze')
 
 
-def test_an_event_handlers_name_is_one_disable_can_take():
+def test_a_handlers_name_is_one_disable_can_take():
+    async def thanks(ctx):
+        pass
     with pytest.raises(ValueError, match="handler names are letters"):
-        on('message', name='say thanks')
+        on('message', name='say thanks')(thanks)
+    with pytest.raises(ValueError, match="handler names are letters"):
+        every(minutes=5, name='say thanks')(thanks)
 
 
 def test_plugin_is_exported_for_subclassing():

@@ -19,6 +19,14 @@ A timer has no channel or sender, so it answers with `ctx.send(target, text)`.
 
 A run still going when the next one is due is left to finish, and the next run waits for the one after.
 
+## Turn a timer off
+
+[`!disable reminder all`](built-in-commands.md#for-ops) stops it, and `!enable reminder all` starts it again. The name is the function's. Give it another with `name`:
+
+```python
+@every(minutes=30, name='friday')
+```
+
 ## Test a timer
 
 Time stands still in `TestBot` until the test moves it:
