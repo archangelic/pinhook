@@ -59,7 +59,7 @@ A bot makes outbound connections only: IRC on 6697, or Twitch's chat servers. It
 
 ## The image
 
-`ghcr.io/archangelic/pinhook` is pinhook on Python's slim image, for amd64 and arm64, tagged with each version and its minor and major, like `2.0.0`, `2.0` and `2`. It runs as user 10001, with `/bot` as its folder:
+`ghcr.io/archangelic/pinhook` is pinhook on Python 3.15's slim image, for amd64 and arm64, tagged with each version and its minor and major, like `2.0.0`, `2.0` and `2`. It runs as user 10001, with `/bot` as its folder:
 
 | Path | Holds |
 | --- | --- |
