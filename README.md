@@ -4,7 +4,7 @@
 
 Python IRC bot framework. Write plugins as typed async functions. pinhook handles the connection, IRCv3, rate limits, access control and reloading.
 
-[![Python versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14%20%7C%203.15-blue.svg)](https://pypi.org/project/pinhook) [![PyPI](https://img.shields.io/pypi/v/pinhook.svg)](https://pypi.org/project/pinhook) [![License](https://img.shields.io/pypi/l/pinhook.svg)](https://github.com/archangelic/pinhook/blob/master/LICENSE) [![With love from tilde.town](https://img.shields.io/badge/with%20love%20from-tilde%20town-e0b0ff.svg)](https://tilde.town)
+[![Python versions](https://img.shields.io/pypi/pyversions/pinhook.svg)](https://pypi.org/project/pinhook) [![PyPI](https://img.shields.io/pypi/v/pinhook.svg)](https://pypi.org/project/pinhook) [![License](https://img.shields.io/pypi/l/pinhook.svg)](https://github.com/archangelic/pinhook/blob/master/LICENSE) [![With love from tilde.town](https://img.shields.io/badge/with%20love%20from-tilde%20town-e0b0ff.svg)](https://tilde.town)
 
 ## Install
 
