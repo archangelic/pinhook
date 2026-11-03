@@ -274,6 +274,22 @@ def test_failed_connections_are_retried_until_closed(caplog):
     assert caplog.text.count('connection refused, check the server and port') >= 2
 
 
+def test_closing_while_connecting_starts_no_session():
+    t = transport(Server())
+    writer = Writer()
+
+    async def open_connection(*args, **kwargs):
+        # the bot's told to stop before the connection comes up, and the server never hangs up
+        await t.close()
+        return asyncio.StreamReader(), writer
+    t.open_connection = open_connection
+
+    async def main():
+        await asyncio.wait_for(t.run(), 1)
+    asyncio.run(main())
+    assert writer.lines() == []
+
+
 def test_a_silent_server_is_pinged_then_given_up_on(caplog):
     t = transport(Server())
     t.ping_after = 0.05

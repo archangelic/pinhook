@@ -130,6 +130,10 @@ class IrcTransport(IrcIdentity):
             except OSError:
                 pass
             else:
+                if self.closing:
+                    # closed while connecting, so there's no session to start
+                    writer.close()
+                    break
                 await self.session(reader, writer)
                 if self.registered:
                     retry = self.retry_first
