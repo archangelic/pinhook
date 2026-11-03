@@ -17,10 +17,10 @@ def test_reply_sends_straight_away(tmp_path):
         "def count(msg):\n"
         "    msg.reply('one')\n"
         "    msg.reply('two\\nthree')\n"
+        "    msg.reply(['four', 'five', 'six'])\n"
     )))
-    assert bot.say('!count') == ['one', 'two', 'three']
-    # same flood protection as a returned reply
-    assert bot.pauses == [.5, .5, .5]
+    assert bot.say('!count') == ['one', 'two', 'three', 'four', 'five', 'six']
+    assert bot.pauses == [2, 2]
 
 
 def test_reply_to_a_private_message_goes_to_the_sender(tmp_path):
@@ -98,11 +98,11 @@ def test_msg_bot_still_works_but_warns(tmp_path, caplog):
     assert caplog.text.count('msg.bot is deprecated') == 1
 
 
-def test_old_decorators_warn_with_the_replacement():
-    with pytest.warns(DeprecationWarning, match=r"use @command\('!old'\) instead"):
-        plugin.register('!old')(lambda msg: None)
-    with pytest.warns(DeprecationWarning, match=r"use @command\('!older', ops=True"):
-        plugin.ops('!older', 'ops only')(lambda msg: None)
+def test_removed_decorators_say_what_replaces_them():
+    with pytest.raises(RuntimeError, match=r"@register was removed .* use @command\('!old'\)"):
+        plugin.register('!old')
+    with pytest.raises(RuntimeError, match=r"@ops was removed .* use @command\('!older', ops=True"):
+        plugin.ops('!older', 'ops only')
 
 
 def test_returning_output_still_works_with_no_warnings(tmp_path):
