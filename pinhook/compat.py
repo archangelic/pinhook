@@ -4,6 +4,7 @@ import queue
 import threading
 
 from . import plugin
+from .context import target_and_text
 
 
 class Worker:
@@ -129,21 +130,13 @@ class Message:
 
     def action(self, *args):
         """action(text) replies with a /me, action(target, text) sends one somewhere else."""
-        target, text = self._target_and_text(args, self.channel)
+        target, text = target_and_text(args, self.channel)
         self._ctx.out('action', target, text)
 
     def notice(self, *args):
         """notice(text) sends the sender a notice, notice(target, text) sends one to anyone."""
-        target, text = self._target_and_text(args, self.nick)
+        target, text = target_and_text(args, self.nick)
         self._ctx.out('notice', target, text)
-
-    @staticmethod
-    def _target_and_text(args, default_target):
-        if len(args) == 1:
-            return default_target, args[0]
-        if len(args) == 2:
-            return args
-        raise TypeError('expected (text) or (target, text), got {} arguments'.format(len(args)))
 
 
 def run(handler, ctx, trigger=None, nick_list=None, ops=()):
