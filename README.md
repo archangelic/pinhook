@@ -98,7 +98,7 @@ Give someone access from chat, as an op:
 !access !weather
 ```
 
-pinhook saves carol's services account, or their user and host, not their nick. [Access levels](https://archangelic.github.io/pinhook/latest/access-levels/) covers groups, denies and setting levels in the config.
+pinhook saves carol's services account, or their user and host, not their nick. [Access levels](https://archangelic.github.io/pinhook/2.0/access-levels/) covers groups, denies and setting levels in the config.
 
 ## Add a command without code
 
@@ -136,7 +136,7 @@ pinhook connect twitch twitch.yaml
 pinhook run twitch.yaml
 ```
 
-`connect` keeps the token in `secrets.env`, readable only by you. [Twitch](https://archangelic.github.io/pinhook/latest/twitch/) covers Twitch's rate limits, badges as access groups, and the private messages and notices Twitch doesn't deliver.
+`connect` keeps the token in `secrets.env`, readable only by you. [Twitch](https://archangelic.github.io/pinhook/2.0/twitch/) covers Twitch's rate limits, badges as access groups, and the private messages and notices Twitch doesn't deliver.
 
 ## Deploy it
 
@@ -145,20 +145,20 @@ docker run -d -v ./config.yaml:/bot/config.yaml:ro -v ./plugins:/bot/plugins:ro 
   -v gamebot-data:/bot/data ghcr.io/archangelic/pinhook:2
 ```
 
-The image logs to stdout and serves a health endpoint on port 8080. [Deployment](https://archangelic.github.io/pinhook/latest/deployment/) has compose, systemd and Kubernetes examples.
+The image logs to stdout and serves a health endpoint on port 8080. [Deployment](https://archangelic.github.io/pinhook/2.0/deployment/) has compose, systemd and Kubernetes examples.
 
 ## Upgrade from 1.x
 
-Plugins written with `pinhook.plugin` run on 2.0 through a compatibility layer. [Migrating from 1.x](https://archangelic.github.io/pinhook/latest/migrating-from-1x/) lists what changed for plugins, `Bot` subclasses and config files.
+Plugins written with `pinhook.plugin` run on 2.0 through a compatibility layer. [Migrating from 1.x](https://archangelic.github.io/pinhook/2.0/migrating-from-1x/) lists what changed for plugins, `Bot` subclasses and config files.
 
 ## Docs
 
-- [Your first bot](https://archangelic.github.io/pinhook/latest/your-first-bot/)
-- [Typed commands](https://archangelic.github.io/pinhook/latest/typed-commands/)
-- [Events](https://archangelic.github.io/pinhook/latest/events/) and [Timers](https://archangelic.github.io/pinhook/latest/timers/)
-- [Writing recipes](https://archangelic.github.io/pinhook/latest/writing-recipes/)
-- [Options](https://archangelic.github.io/pinhook/latest/options/) and [Built-in commands](https://archangelic.github.io/pinhook/latest/built-in-commands/)
-- [Troubleshooting](https://archangelic.github.io/pinhook/latest/troubleshooting/)
+- [Your first bot](https://archangelic.github.io/pinhook/2.0/your-first-bot/)
+- [Typed commands](https://archangelic.github.io/pinhook/2.0/typed-commands/)
+- [Events](https://archangelic.github.io/pinhook/2.0/events/) and [Timers](https://archangelic.github.io/pinhook/2.0/timers/)
+- [Writing recipes](https://archangelic.github.io/pinhook/2.0/writing-recipes/)
+- [Options](https://archangelic.github.io/pinhook/2.0/options/) and [Built-in commands](https://archangelic.github.io/pinhook/2.0/built-in-commands/)
+- [Troubleshooting](https://archangelic.github.io/pinhook/2.0/troubleshooting/)
 
 ## Bots using pinhook
 
