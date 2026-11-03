@@ -55,6 +55,12 @@ def test_new_plugin_makes_a_class_plugin_with_a_passing_test(tmp_path, monkeypat
     run_test_file('tests/test_dice_roll.py')
 
 
+def test_a_new_plugin_can_share_its_name_with_the_templates_counter(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert new('plugin', 'count').exit_code == 0
+    run_test_file('tests/test_count.py')
+
+
 def test_new_plugin_names_are_checked(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert 'should be lowercase letters' in new('plugin', 'Dice').output

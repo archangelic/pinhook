@@ -198,8 +198,9 @@ class Registry:
         handlers = []
         for owner, handler in found:
             if owner is not None:
-                # a method: bind it to the plugin's instance
-                handler.func = getattr(instances[owner], handler.func.__name__)
+                # a method: bind the class's function to the plugin's instance, so an
+                # attribute setup() gives the same name doesn't hide it
+                handler.func = handler.func.__get__(instances[owner], owner)
             handlers.append(handler)
         for handler in handlers:
             if handler.kind == 'listener':
