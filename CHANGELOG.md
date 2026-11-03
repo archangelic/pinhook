@@ -9,7 +9,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 * pinhook needs Python 3.11 or newer
 * TOML configs aren't read, and relative paths in a config start from the config file's folder
 * `msg.bot` has only the bot's nick and channels, `bot.connection` is gone, and `@register` and `@ops` are removed
-* [Migrating from 1.x](https://archangelic.github.io/pinhook/latest/migrating-from-1x/) lists every change, and shows a plugin and a config moved to 2.0
+* [Migrating from 1.x](https://archangelic.github.io/pinhook/2.0/migrating-from-1x/) lists every change, and shows a plugin and a config moved to 2.0
 
 ### New
 
@@ -62,7 +62,7 @@ Nothing should break. Two things you might notice:
 * `!reload` also reads `plugin_config` from the config file again, so settings can change without a restart
 * SASL logins with `sasl_password` (and `sasl_account` if it's not the nickname). The bot is logged in before it joins channels, and gets its own nick on networks that reserve registered nicks
 * `${NAME}` in a config file is filled in from the environment, so passwords don't have to be in the file
-* Docstrings for everything plugins and bot scripts use, so editors can show help, and an [API reference](https://archangelic.github.io/pinhook/latest/reference/) generated from them
+* Docstrings for everything plugins and bot scripts use, so editors can show help, and an [API reference](https://archangelic.github.io/pinhook/1.12/reference/) generated from them
 * A [Preparing for 2.0](https://archangelic.github.io/pinhook/1.12/preparing-for-2/) guide to getting plugins ready for 2.0
 
 ### Deprecated
