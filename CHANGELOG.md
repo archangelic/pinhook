@@ -45,7 +45,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 
 Nothing should break. Two things you might notice:
 
-* Plugins that use `msg.bot`, `@register` or `@ops` log a deprecation warning saying what to use instead (`msg.bot` only once per bot). They all still work. [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) has the details
+* Plugins that use `msg.bot`, `@register` or `@ops` log a deprecation warning saying what to use instead (`msg.bot` only once per bot). They all still work. [Preparing for 2.0](https://archangelic.github.io/pinhook/1.12/preparing-for-2/) has the details
 * Once a plugin uses `msg.store`, a `data/` folder appears where the bot runs, or inside `bot_dir` if that's set
 
 ### New
@@ -62,7 +62,7 @@ Nothing should break. Two things you might notice:
 * SASL logins with `sasl_password` (and `sasl_account` if it's not the nickname). The bot is logged in before it joins channels, and gets its own nick on networks that reserve registered nicks
 * `${NAME}` in a config file is filled in from the environment, so passwords don't have to be in the file
 * Docstrings for everything plugins and bot scripts use, so editors can show help, and an [API reference](https://archangelic.github.io/pinhook/latest/reference/) generated from them
-* A [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) guide to getting plugins ready for 2.0
+* A [Preparing for 2.0](https://archangelic.github.io/pinhook/1.12/preparing-for-2/) guide to getting plugins ready for 2.0
 
 ### Deprecated
 
