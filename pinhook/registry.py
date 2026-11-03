@@ -4,12 +4,14 @@ Every bot has its own registry, so two bots in one process never share plugins.
 A plugin file can hold 1.x commands and listeners, 2.0 handlers made with
 pinhook.command and pinhook.on, and Plugin classes whose methods are handlers.
 """
+import importlib.abc
 import importlib.util
 import inspect
 import os
 import re
 import sys
 import types
+import weakref
 
 from . import commands
 from . import plugin
@@ -19,6 +21,36 @@ from .store import read_json_object, write_json
 
 class LoadError(Exception):
     """A plugin file that can't be loaded alongside the others."""
+
+
+# each plugin package, pinhook_plugins.<bot>: the registry that last loaded it
+_registries: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+
+
+class PluginFinder(importlib.abc.MetaPathFinder):
+    # finds pinhook_plugins.<bot>.<name> in that bot's plugin_dir, so a plugin can import
+    # another whichever loads first
+    def find_spec(self, fullname, path=None, target=None):
+        package, _, name = fullname.rpartition('.')
+        registry = _registries.get(package)
+        if registry is None:
+            return None
+        file = os.path.join(registry.plugin_dir, name + '.py')
+        if not os.path.isfile(file):
+            return None
+        return importlib.util.spec_from_file_location(fullname, file,
+                                                      loader=PluginLoader(registry))
+
+
+class PluginLoader(importlib.abc.Loader):
+    def __init__(self, registry):
+        self.registry = registry
+
+    def exec_module(self, module):
+        self.registry.run_file(module)
+
+
+sys.meta_path.append(PluginFinder())
 
 
 class Handler:
@@ -89,6 +121,10 @@ class Registry:
 
     def __init__(self, bot_name, prefixes, reserved, logger):
         self.package = 'pinhook_plugins.' + module_name(bot_name)
+        self.plugin_dir = ''
+        # plugin file name: what it registered with the 1.x decorators, and its module,
+        # for the files imported so far in this load
+        self.imported = {}
         self.prefixes = list(prefixes)
         self.reserved = set(reserved)
         self.logger = logger
@@ -116,6 +152,7 @@ class Registry:
         if not os.path.exists(plugin_dir):
             self.logger.info('plugin directory {} not found, creating'.format(plugin_dir))
             os.makedirs(plugin_dir)
+        self.plugin_dir = plugin_dir
         self.make_packages()
         for file_name in sorted(os.listdir(plugin_dir)):
             if not file_name.endswith('.py'):
@@ -123,7 +160,7 @@ class Registry:
             name = file_name[:-3]
             self.logger.info('loading plugin {}'.format(name))
             try:
-                legacy, module = self.import_file(name, os.path.join(plugin_dir, file_name))
+                legacy, module = self.import_file(name)
                 self.add(name, legacy, module, old)
             except Exception:
                 self.logger.exception('could not load plugin {}'.format(name))
@@ -141,29 +178,41 @@ class Registry:
                 self.logger.exception('{}.teardown failed'.format(type(instance).__name__))
 
     def make_packages(self):
-        # so a plugin can import another as pinhook_plugins.<bot>.<name>
+        # so a plugin can import another as pinhook_plugins.<bot>.<name>, which PluginFinder
+        # finds in this registry's plugin_dir
+        # the bot's package is made again each load, and the last load's modules go, so an
+        # import gets the file as it is now and not one the old package kept
+        for name in [name for name in sys.modules if name.startswith(self.package + '.')]:
+            del sys.modules[name]
         for package in ('pinhook_plugins', self.package):
-            if package not in sys.modules:
+            if package not in sys.modules or package == self.package:
                 module = types.ModuleType(package)
                 module.__path__ = []
                 sys.modules[package] = module
+        _registries[self.package] = self
+        self.imported = {}
 
-    def import_file(self, name, path):
+    def import_file(self, name):
+        # a file another plugin imported earlier in this load has already run
+        importlib.import_module(self.package + '.' + name)
+        return self.imported[name]
+
+    def run_file(self, module):
         # compiled from the source every time: python's bytecode cache goes by the file's
         # size and mtime in whole seconds, so a quick edit before !reload could load the old code
-        spec = importlib.util.spec_from_file_location(self.package + '.' + name, path)
-        module = importlib.util.module_from_spec(spec)
+        path = module.__spec__.origin
         with open(path, 'rb') as f:
             code = compile(f.read(), path, 'exec')
-        # the decorators in pinhook.plugin record what the file registers while it runs
+        # the decorators in pinhook.plugin record what the file registers while it runs, and
+        # a file it imports records its own
         with plugin._lock:
+            outer = plugin._collector
             plugin._collector = []
             try:
-                sys.modules[spec.name] = module
                 exec(code, module.__dict__)
-                return plugin._collector, module
+                self.imported[module.__name__.rpartition('.')[2]] = (plugin._collector, module)
             finally:
-                plugin._collector = None
+                plugin._collector = outer
 
     def add(self, plugin_name, legacy, module, old_instances):
         # check the whole file first, so a clash leaves none of it half loaded

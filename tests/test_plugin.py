@@ -105,12 +105,20 @@ def test_two_bots_loading_one_folder_keep_separate_plugins_and_globals(tmp_path)
 
 
 def test_a_plugin_can_import_another_by_its_bot_module_name(tmp_path):
-    (tmp_path / 'aaa_words.py').write_text("WORD = 'pong'\n")
+    # words loads after ping, and !reload brings in its edits
+    (tmp_path / 'words.py').write_text("import pinhook.plugin as p\nWORD = 'pong'\n"
+                                       "@p.command('!word')\n"
+                                       "def word(msg): return p.message(WORD)\n")
     bot = bot_with(tmp_path, nickname='pinger', ping=(
-        "from pinhook_plugins.pinger import aaa_words\n"
+        "from pinhook_plugins.pinger import words\n"
         "@p.command('!ping')\n"
-        "def ping(msg): return p.message(aaa_words.WORD)\n"))
+        "def ping(msg): return p.message(words.WORD)\n"))
     assert bot.say('!ping') == ['pong']
+    assert bot.say('!word') == ['pong']
+    (tmp_path / 'words.py').write_text((tmp_path / 'words.py').read_text().replace('pong', 'pang'))
+    bot.registry.load(bot.plugin_dir)
+    assert bot.say('!ping') == ['pang']
+    assert bot.say('!word') == ['pang']
 
 
 # names
