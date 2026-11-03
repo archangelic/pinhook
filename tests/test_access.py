@@ -349,6 +349,10 @@ def test_can_run_is_the_check_the_bot_makes(tmp_path):
     assert bot.access.can_run(carol, 'weather', '#test')
     assert bot.access.can_run(carol, bot.registry.commands['weather'])
     assert not bot.access.can_run(carol, 'nope')
+    op(bot, '!disable weather')
+    assert not bot.access.can_run(carol, 'weather', '#test')
+    assert [c.name for c in bot.commands(carol, '#test')] == []
+    assert bot.access.can_run(carol, 'weather', '#games')
     bot.banned_users.append('$a:carol')
     assert not bot.access.can_run(carol, 'weather')
 

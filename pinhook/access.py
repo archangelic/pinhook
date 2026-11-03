@@ -292,7 +292,7 @@ class Access:
             channel: where they'd run it, or None for a private message.
         """
         handler = self.bot.registry.commands.get(command) if isinstance(command, str) else command
-        if handler is None or self.bot.ignores(who):
+        if handler is None or self.bot.ignores(who) or not self.bot.enabled_for(handler, channel):
             return False
         return self.allows(who, handler, channel)
 
