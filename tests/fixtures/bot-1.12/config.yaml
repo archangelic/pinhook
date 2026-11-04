@@ -1,0 +1,10 @@
+nickname: 'oldbot'
+server: 'localhost'
+channels:
+  - '#games'
+bot_dir: '.'
+ops:
+  - '$a:mal'
+plugin_config:
+  karma:
+    label: 'points'
