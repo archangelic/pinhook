@@ -18,6 +18,7 @@ import time
 import pytest
 
 HOST = os.environ.get('PINHOOK_ERGO')
+TLS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '.ergo', 'tls')
 PASSWORDS = {'malacct': 'correcthorse-mal', 'trollacct': 'correcthorse-troll'}
 
 
@@ -37,9 +38,9 @@ class NickTaken(Exception):
 class User:
     """Someone on the IRC server, talking over a plain socket."""
 
-    def __init__(self, nick, account=None):
+    def __init__(self, nick, account=None, port=6667):
         self.nick = nick
-        self.sock = socket.create_connection((HOST, 6667), timeout=10)
+        self.sock = socket.create_connection((HOST, port), timeout=10)
         self.buf = b''
         self.lines = []
         self.send('NICK ' + nick)
@@ -161,8 +162,8 @@ def names(request):
 def users():
     made = []
 
-    def make(nick, account=None, channel=None):
-        u = User(nick, account)
+    def make(nick, account=None, channel=None, port=6667):
+        u = User(nick, account, port)
         if channel:
             u.join(channel)
         made.append(u)
@@ -212,13 +213,15 @@ def start_bot(tmp_path, names):
         (tmp_path / 'config.json').write_text(json.dumps(config))
         run = tmp_path / 'run'
         run.mkdir(exist_ok=True)
-        process = subprocess.Popen([pinhook_command(), str(tmp_path / 'config.json')], cwd=str(run),
+        process = subprocess.Popen([pinhook_command(), 'run', str(tmp_path / 'config.json')],
+                                   cwd=str(run),
                                    env=dict(os.environ, **(env or {})),
                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         bot = BotProcess(str(tmp_path), process)
         started.append(bot)
         if wait:
-            watcher.wait_for(' JOIN ', seconds=15)
+            while not watcher.wait_for(' JOIN ', seconds=15).startswith(':' + nick):
+                pass
         return bot
     yield start
     for bot in started:
