@@ -16,9 +16,7 @@ def test_bot_dir_loads_plugins_from_inside_it(tmp_path):
     (tmp_path / 'plugins').mkdir()
     (tmp_path / 'plugins' / 'hi.py').write_text(
         "import pinhook.plugin as p\n@p.command('!hi')\ndef hi(msg): pass\n")
-    from pinhook import plugin
-    new_bot(bot_dir=str(tmp_path))
-    assert '!hi' in plugin.cmds
+    assert 'hi' in new_bot(bot_dir=str(tmp_path)).registry.commands
 
 
 def test_relative_options_are_inside_bot_dir(tmp_path):
