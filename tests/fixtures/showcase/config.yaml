@@ -1,0 +1,30 @@
+# Point this at a network to try everything. The tests use the same plugins and recipes.
+nickname: 'showcase'
+server: 'irc.libera.chat'
+port: 6697
+ssl_required: true
+channels:
+  # the &channel names it once, and *channel uses it below
+  - &channel '#showcase-test'
+ops:
+  - '$a:youraccount'
+bot_dir: '.'
+history:
+  channels:
+    - *channel
+plugin_config:
+  # every plugin reads shared: where they send messages that aren't replies
+  shared:
+    channel: *channel
+  legacy_tour:
+    word: 'legacy'
+  modern_tour:
+    word: 'modern'
+access:
+  groups:
+    trusted: ['$a:youraccount']
+  plugins:
+    modern_tour:
+      commands:
+        secret:
+          allow: [trusted]

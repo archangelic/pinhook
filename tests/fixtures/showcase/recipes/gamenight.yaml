@@ -1,0 +1,7 @@
+version: 1
+name: gamenight
+help: roll for tonight and pick who goes first
+steps:
+  - command: 'roll 2 6'
+    save: rolled
+  - reply: 'Tonight: {rolled|first}. {members|random} goes first'

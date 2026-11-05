@@ -1,0 +1,198 @@
+"""The showcase bot in tests/fixtures/showcase: every plugin feature, 1.x and 2.0, run
+through TestBot. The same folder is for trying 2.0 on a real network."""
+import os
+import shutil
+
+import pytest
+import yaml
+from click.testing import CliRunner
+
+from pinhook.cli import cli
+from pinhook.testing import PluginError, TestBot
+
+SHOWCASE = os.path.join(os.path.dirname(__file__), 'fixtures', 'showcase')
+
+
+@pytest.fixture
+def bot(tmp_path):
+    folder = tmp_path / 'showcase'
+    shutil.copytree(SHOWCASE, folder)
+    config = yaml.safe_load((folder / 'config.yaml').read_text())
+    access = config['access']
+    access['groups']['trusted'] = ['$a:ana']
+    return TestBot(plugin_dir=str(folder / 'plugins'), recipe_dir=str(folder / 'recipes'),
+                   ops=['$a:mal'], plugin_config=config['plugin_config'], access=access,
+                   history={'channels': ['#test']})
+
+
+def mal(bot, text):
+    return bot.say(text, nick='mal', account='mal')
+
+
+def test_the_showcase_config_checks_clean(tmp_path):
+    folder = tmp_path / 'showcase'
+    shutil.copytree(SHOWCASE, folder)
+    result = CliRunner().invoke(cli, ['check', '--strict', str(folder / 'config.yaml')])
+    assert result.exit_code == 0, result.output
+    assert 'Loaded 2 plugins' in result.output and '4 recipes' in result.output
+
+
+def test_1x_commands_and_replies(bot):
+    assert bot.say('!legacy', nick='ana') == ['hello ana from 1.x']
+    bot.say('!legacyaction')
+    assert bot.sent[-1].kind == 'action' and bot.sent[-1].text == 'waves the 1.x way'
+    assert bot.say('!legacylines') == ['first line', 'second line']
+    bot.say('!legacyoutput')
+    assert bot.sent[-1].kind == 'action' and bot.sent[-1].text == 'built an Output by hand'
+
+
+def test_1x_sending_as_it_goes(bot):
+    bot.say('!legacysend', nick='ana')
+    sent = [(s.kind, s.target, s.text) for s in bot.sent[-5:]]
+    assert sent == [('message', '#test', 'replied as I go'),
+                    ('message', '#showcase-test', 'sent to #showcase-test'),
+                    ('message', 'ana', 'a private message'), ('action', '#test', 'acts as I go'),
+                    ('notice', 'ana', 'a notice')]
+
+
+def test_1x_store_config_ops_hidden_and_details(bot):
+    assert bot.say('!legacycount') == ['counted 1 with legacy']
+    assert bot.say('!legacycount') == ['counted 2 with legacy']
+    assert bot.say('!legacyops', nick='ana') == ['ops only, sorry']
+    assert mal(bot, '!legacyops') == ['hello op']
+    assert bot.say('!legacyhidden') == ['found the hidden one']
+    assert 'legacyhidden' not in ' '.join(bot.private('!help', nick='ana'))
+    assert bot.say('!legacywho a b', nick='ana') == [
+        'nick=ana op=False private=False botnick=testbot people=4 cmd=!legacywho arg=a b']
+    assert mal(bot, '!legacymsg') == [
+        'account=mal user=mal ops=$a:mal type=message time=True']
+
+
+def test_1x_msg_bot(bot):
+    with pytest.warns(DeprecationWarning):
+        assert bot.say('!legacybot') == ['bot is testbot']
+
+
+def test_typed_commands_and_aliases(bot):
+    assert bot.say('!roll 2 20', nick='ana') == ['ana rolled 2d20']
+    assert bot.say('!r', nick='ana') == ['ana rolled 1d6']
+    assert bot.say('!types hi 3 1.5 yes b 7 and the rest') == ['hi 3 1.5 True b 7 and the rest']
+    assert bot.say('!types hi three 1 no') == [
+        'usage: types <word> <number> <ratio> <loud> [mode=a] [extra] [rest=] '
+        '(number must be a whole number)']
+    assert bot.private('!help r', nick='ana')[:2] == [
+        '!roll -- roll dice, like roll 2 20', 'also !r']
+
+
+def test_class_state_carries_across_reload(bot):
+    assert bot.say('!reloads') == ['reloaded 0 times']
+    mal(bot, '!reload')
+    assert bot.say('!reloads') == ['reloaded 1 times']
+
+
+def test_store_config_and_history(bot):
+    assert bot.say('!count') == ['counted 1 with modern']
+    bot.say('first', nick='ana')
+    bot.say('second', nick='bob')
+    assert bot.say('!history', nick='cat') == ['ana:first | bob:second | cat:!history']
+
+
+def test_ways_to_answer(bot):
+    bot.say('!thread', nick='ana')
+    assert bot.sent[-1].text == 'ana: a threaded reply'
+    bot.say('!private', nick='ana')
+    assert bot.sent_to('ana')[-1] == 'just for you'
+    bot.say('!say', nick='ana')
+    sent = [(s.kind, s.target, s.text) for s in bot.sent[-4:]]
+    assert sent == [('action', '#test', 'waves'), ('notice', 'ana', 'a notice for you'),
+                    ('message', '#showcase-test', 'sent to #showcase-test'),
+                    ('message', '#showcase-test', 'on two lines')]
+    assert bot.say('!slow') == ['done slowly']
+
+
+def test_who_members_whois_and_supports(bot):
+    assert mal(bot, '!who') == [
+        'nick=mal account=mal op=True chanop=False private=False addressed=False bot=testbot']
+    assert bot.say('testbot: who', nick='ana')[0].endswith('addressed=True bot=testbot')
+    assert mal(bot, '!details') == [
+        'event=message kind=privmsg command=details text=!details user=mal host=example.com '
+        'bot=False msgid=None tags=account utc=True channels=#test']
+    assert bot.say('!members', nick='ana') == ['3 here, me=ana']
+    assert bot.say('!whois ana') == ['ana account=None']
+    assert bot.say('!whois nobody') == ['nobody']
+    assert bot.say('!supports') == ['typing=False reply=False private=True notice=True']
+
+
+def test_access_failures_and_limits(bot):
+    assert bot.say('!secret', nick='bob') == ['ask an op']
+    assert bot.say('!secret', nick='ana', account='ana') == ['the secret']
+    assert bot.say('!admin', nick='ana') == []
+    assert mal(bot, '!admin') == ['admin things']
+    with pytest.raises(PluginError, match='broken on purpose'):
+        bot.say('!broken')
+    assert bot.sent_to('#test')[-1] == 'that went wrong'
+    assert bot.say('!sleepy') == []
+    assert '!hidden' not in ' '.join(bot.private('!help', nick='mal', account='mal'))
+    assert bot.say('!hidden') == ['found the hidden one']
+
+
+def test_events_and_the_timer(bot):
+    assert [s.text for s in bot.event('join', nick='newbie')] == ['welcome, newbie']
+    assert bot.event('join', nick='TestBot') == []
+    bot.event('topic', nick='mal', text='game night')
+    bot.event('nick', nick='newbie', new_nick='newbie_')
+    bot.event('mode', nick='mal', modes=['+o', 'newbie_'])
+    bot.event('kick', nick='mal', kicked='newbie_', text='bye')
+    assert bot.say('!events') == [
+        'join newbie, topic game night, nick newbie>newbie_, mode +o newbie_, kick newbie_']
+    bot.event('part', nick='mal')
+    assert bot.say('!events') == [
+        'topic game night, nick newbie>newbie_, mode +o newbie_, kick newbie_, part mal']
+    assert bot.say('testbot: hello', nick='ana') == ['hello ana, you addressed me']
+    assert [(s.target, s.text) for s in bot.tick(1800)] == [('#showcase-test', 'the timer fired')]
+    assert mal(bot, '!disable showcase_timer') == ["mal: 'showcase_timer' disabled everywhere"]
+    assert bot.tick(1800) == []
+
+
+def test_listeners_answer_messages_actions_and_private_messages(bot):
+    assert bot.say('ping legacy') == ['pong from a 1.x listener']
+    assert bot.say('ping modern') == ['pong from a 2.0 listener']
+    assert bot.private('ping legacy', nick='ana') == ['pong from a 1.x listener']
+    assert bot.private('ping modern', nick='ana') == ['pong from a 2.0 listener']
+    assert sorted(bot.action('waves', nick='ana')) == ['waves back', 'waves back the 1.x way']
+    assert bot.say('nothing to answer') == []
+
+
+def test_listeners_hear_everything_but_commands(bot):
+    bot.say('one')
+    bot.action('two')
+    bot.private('three')
+    bot.say('!legacy')
+    bot.say('!roll')
+    assert bot.say('!legacyheard') == ['heard 3 messages']
+
+
+def test_listeners_in_help_and_turned_off(bot):
+    listed = ' '.join(bot.private('!help')).split('listeners: ')[1].split(' | ')[0]
+    assert listed.replace(',', ' ').split() == [
+        'legacy_counter', 'legacy_listener', 'modern_listener', 'waved']
+    mal(bot, '!disable legacy_listener')
+    mal(bot, '!disable modern_listener')
+    assert bot.say('ping legacy') == [] and bot.say('ping modern') == []
+    mal(bot, '!enable legacy_listener')
+    mal(bot, '!enable modern_listener')
+    assert bot.say('ping legacy') == ['pong from a 1.x listener']
+    assert bot.say('ping modern') == ['pong from a 2.0 listener']
+
+
+def test_recipes(bot):
+    assert bot.say('!gamenight', nick='ana')[0].startswith('Tonight: ana rolled 2d6. ')
+    assert bot.say('!eachgame') == ['no games yet, add one with addgame']
+    assert bot.say('!addgame') == ['usage: addgame <game>']
+    bot.say('!addgame wingspan')
+    assert bot.say('!addgame Azul') == ['games: Azul, wingspan']
+    assert bot.say('!eachgame') == ['* WINGSPAN', '* AZUL']
+    assert bot.say('!vip', nick='bob') == []
+    assert bot.say('!vip', nick='ana', account='ana') == []
+    mal(bot, '!allow vip ana')
+    assert bot.say('!vip', nick='ana', account='ana') == ['welcome to the vip list, ana']
