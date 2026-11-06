@@ -9,47 +9,68 @@ on:
 jobs:
   test:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14', '3.15']
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v10.3.3
     - name: Set up Python ${{ matrix.python-version }}
       run: uv venv --python ${{ matrix.python-version }}
     - name: Install dependencies
-      run: uv pip install -e '.[toml,yaml]' pytest
+      run: uv pip install -e . pytest
     - name: Run tests
       run: uv run --no-project pytest
 
   style:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v10.3.3
     - name: Check PEP 8, with lines up to 100 characters (set in setup.cfg)
-      run: uv run --no-project --python 3.12 --with pycodestyle==2.15.0 pycodestyle pinhook tests examples setup.py
+      run: uv run --no-project --python 3.12 --with pycodestyle==2.15.0 pycodestyle pinhook tests examples tools setup.py
+
+  mypy:
+
+    runs-on: ubuntu-26.04
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v10.3.3
+    - name: Set up Python
+      run: uv venv --python 3.11
+    - name: Install dependencies
+      run: uv pip install -e . mypy==2.4.1 types-PyYAML==6.0.12.20260906
+    - name: Check types (settings in setup.cfg)
+      run: uv run --no-project mypy
+    - name: Check the type hints catch mistakes in a plugin
+      run: uv run --no-project python tools/check_plugin_types.py
 
   integration:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Set up uv
-      uses: astral-sh/setup-uv@v6
+      uses: astral-sh/setup-uv@v10.3.3
     - name: Set up Python
       run: uv venv --python 3.12
-    - name: Install dependencies
-      run: uv pip install -e '.[toml,yaml]' pytest
+    - name: Build the wheel
+      run: uv build --wheel --out-dir dist
+    - name: Check the wheel holds every module
+      run: python3 tools/check_wheel.py dist/*.whl
+    - name: Install the wheel
+      run: uv pip install dist/*.whl pytest
     - name: Start an Ergo IRC server
       run: tests/integration/ergo.sh
     - name: Run tests against Ergo
@@ -59,3 +80,48 @@ jobs:
     - name: Show Ergo's log
       if: failure()
       run: cat .ergo/ergo.log
+
+  image:
+
+    runs-on: ubuntu-26.04
+
+    steps:
+    - uses: actions/checkout@v7
+    - uses: docker/setup-qemu-action@v4
+    - uses: docker/setup-buildx-action@v4
+    - name: Build the image for amd64 and arm64
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+    - name: Build the image
+      run: docker build -t pinhook:test .
+    - name: Start an Ergo IRC server
+      run: tests/integration/ergo.sh
+    - name: Run the image against Ergo
+      run: tests/deploy/image.sh pinhook:test
+
+  examples:
+
+    runs-on: ubuntu-26.04
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v10.3.3
+    - name: Build the image and the wheel
+      run: |
+        docker build -t pinhook:test .
+        uv build --wheel --out-dir dist
+    - name: Start an Ergo IRC server
+      run: tests/integration/ergo.sh
+    - name: Run the compose example
+      run: tests/deploy/compose.sh pinhook:test
+    - name: Run the systemd example
+      run: tests/deploy/systemd.sh dist/*.whl
+    - name: Set up kind
+      uses: helm/kind-action@v1.15.1
+      with:
+        install_only: true
+    - name: Run the kubernetes example
+      run: tests/deploy/kubernetes.sh pinhook:test
