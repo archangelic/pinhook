@@ -1,0 +1,107 @@
+# One pinhook bot on Kubernetes: its config, its secret, a volume for data/ and
+# recipes/, and the bot itself. Plugins go in an image built on pinhook's:
+#
+#   FROM ghcr.io/archangelic/pinhook:2
+#   COPY plugins /bot/plugins
+#
+#   kubectl create secret generic gamebot-secrets --from-literal=sasl_password=...
+#   kubectl apply -f pinhook.yaml
+#   kubectl logs -f deployment/gamebot
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gamebot-config
+data:
+  config.yaml: |
+    nickname: 'gamebot'
+    server: 'irc.libera.chat'
+    port: 6697
+    ssl_required: true
+    channels:
+      - '#gamebot-test'
+    ops:
+      - '$a:youraccount'
+    # the Secret is mounted here
+    sasl_password: '${file:/run/secrets/pinhook/sasl_password}'
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gamebot-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gamebot
+  labels:
+    app: gamebot
+spec:
+  # one copy only, since two would fight over the nick. Recreate stops the old pod
+  # before starting the new one
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gamebot
+  template:
+    metadata:
+      labels:
+        app: gamebot
+    spec:
+      # longer than the bot's shutdown_wait, so it quits cleanly
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bot
+          image: ghcr.io/archangelic/pinhook:2
+          ports:
+            - name: health
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /bot/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets/pinhook
+              readOnly: true
+            - name: data
+              mountPath: /bot/data
+              subPath: data
+            - name: data
+              mountPath: /bot/recipes
+              subPath: recipes
+      volumes:
+        - name: config
+          configMap:
+            name: gamebot-config
+        - name: secrets
+          secret:
+            secretName: gamebot-secrets
+        - name: data
+          persistentVolumeClaim:
+            claimName: gamebot-data

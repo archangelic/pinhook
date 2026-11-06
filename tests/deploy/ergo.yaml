@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ergo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ergo
+  template:
+    metadata:
+      labels:
+        app: ergo
+    spec:
+      containers:
+        - name: ergo
+          image: ghcr.io/ergochat/ergo:v2.19.1
+          ports:
+            - containerPort: 6667
+          readinessProbe:
+            tcpSocket:
+              port: 6667
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ergo
+spec:
+  selector:
+    app: ergo
+  ports:
+    - port: 6667
