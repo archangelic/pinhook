@@ -1,5 +1,5 @@
 site_name: pinhook
-site_description: the pluggable python framework for IRC bots and Twitch bots
+site_description: python irc bot framework
 site_url: https://archangelic.github.io/pinhook/
 repo_url: https://github.com/archangelic/pinhook
 repo_name: archangelic/pinhook
@@ -15,22 +15,43 @@ validation:
 
 nav:
   - Home: index.md
-  - Getting started: getting-started.md
-  - Options: options.md
-  - Built-in commands: commands.md
-  - Writing plugins: plugins.md
-  - Testing plugins: testing.md
-  - Bans and ops: bans-and-ops.md
-  - Twitch bots: twitch.md
-  - Troubleshooting: troubleshooting.md
+  - Getting started:
+    - Install: install.md
+    - Your first bot: your-first-bot.md
+    - Configuration: configuration.md
+  - Plugins:
+    - The context: the-context.md
+    - Typed commands: typed-commands.md
+    - Events: events.md
+    - Timers: timers.md
+    - Class plugins & reload: class-plugins-and-reload.md
+  - Recipes:
+    - Writing recipes: writing-recipes.md
+    - Templates & filters: templates-and-filters.md
+  - Access:
+    - Access levels: access-levels.md
+    - Grants & denies: grants-and-denies.md
+    - Bans and ops: bans-and-ops.md
+  - Reference:
+    - IRCv3 support: ircv3-support.md
+    - Twitch: twitch.md
+    - TestBot: testbot.md
+    - Command line: command-line.md
+    - Deployment: deployment.md
+    - Options: options.md
+    - Built-in commands: built-in-commands.md
+    - API reference: api-reference.md
+    - Troubleshooting: troubleshooting.md
   - Upgrading:
-    - To 1.11: upgrading.md
-    - Preparing for 2.0: preparing-for-2.md
-  - API reference: reference.md
-  - Changelog: changelog.md
+    - Migrating from 1.x: migrating-from-1x.md
+    - Changelog: changelog.md
 
 theme:
   name: material
+  custom_dir: overrides
+  logo: assets/brand/pinhook-horizontal-reverse.svg
+  favicon: assets/brand/pinhook-favicon.ico
+  font: false
   features:
     - navigation.sections
     - navigation.top
@@ -40,20 +61,27 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: deep purple
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: deep purple
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
 
+extra_css:
+  - assets/brand.css
+
 extra:
   version:
     provider: mike
+  # vermilion's homepage, which turns on the homepage's vermilion band once it's set
+  vermilion_url:
 
 plugins:
   # listed here because adding any plugin turns off the default search
@@ -65,7 +93,7 @@ plugins:
           paths: [.]
           options:
             docstring_style: google
-            # type hints come in 2.0, so don't expect them yet
+            show_signature_annotations: true
             docstring_options:
               warn_missing_types: false
             show_source: false
