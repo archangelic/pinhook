@@ -13,18 +13,18 @@ on:
 jobs:
   docs:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       # lets mike push the built site to the gh-pages branch
       contents: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         # mike needs the gh-pages branch to add a version to it
         fetch-depth: 0
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v7
       with:
         python-version: '3.12'
     - name: Install docs tools
@@ -37,5 +37,11 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
         version=$(python -c "import re; print(re.search(r\"'(\d+\.\d+)\", open('pinhook/__version__.py').read()).group(1))")
-        mike deploy --push --update-aliases "$version" latest
-        mike set-default --push latest
+        if [ "$PRERELEASE" = true ]; then
+          mike deploy --push "$version"
+        else
+          mike deploy --push --update-aliases "$version" latest
+          mike set-default --push latest
+        fi
+      env:
+        PRERELEASE: ${{ github.event.release.prerelease || false }}
