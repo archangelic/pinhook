@@ -1,12 +1,52 @@
 # Changelog
 
+## 2.0.0rc1
+
+The 2.0 release candidate: a new core, with 1.x plugins still running through a compatibility layer. Install it with `pip install --pre pinhook`.
+
+### Before you upgrade
+
+* pinhook needs Python 3.11 or newer
+* TOML configs aren't read, and relative paths in a config start from the config file's folder
+* `msg.bot` has only the bot's nick and channels, `bot.connection` is gone, and `@register` and `@ops` are removed
+* [Migrating from 1.x](https://archangelic.github.io/pinhook/2.0/migrating-from-1x/) lists every change, and shows a plugin and a config moved to 2.0
+
+### New
+
+* Plugins get `ctx`: who spoke, where, how to answer, and the plugin's store and settings. Handlers are `async def`
+* Typed commands: arguments come from the handler's signature, bad input gets a usage line, and `!help <command>` shows it. `aliases=` gives a command other names
+* Class plugins with `setup(previous)` and `teardown()`, so state carries across `!reload`
+* `@on` for joins, parts, kicks, nick changes, topics, invites, modes, netsplits and more, and `@every` for timers
+* `name=` on `@on` and `@every` sets the name `!enable` and `!disable` take, and `!help` lists `@on('message')` handlers with the listeners
+* An async core with an output queue, which keeps to each network's rate limits, so a slow plugin or a long reply never freezes the bot. `rate_limit` changes how fast it sends
+* Access levels: open, restricted or ops-only, per plugin or command, with groups, and `!allow`, `!deny`, `!revoke` and `!access` from chat
+* Recipes: commands written as YAML, which run existing commands as the person who asked, with replies, a store, loops and conditions. Ops add one-line recipes with `!recipe add`
+* IRCv3: SCRAM-SHA-256 and EXTERNAL logins, STS, server time, message tags, threaded and private replies, typing, echo-message, labeled responses, MONITOR and case mapping
+* Twitch from a config file with `platform: twitch`, badges as access groups, and user IDs as accounts
+* `bot.commands()` lists what someone can run, `bot.run_as()` runs a command as them, and `ctx.history()` reads a channel's recent messages
+* The command line: `pinhook new`, `pinhook check`, `pinhook run`, with `--reload`, and `pinhook connect twitch`
+* Deployment: an image on ghcr.io, signed and with an SBOM, `${file:PATH}` secrets, `secrets.env`, logs to stdout and as JSON, audit lines, a health endpoint, and compose, systemd and Kubernetes examples
+* Type hints throughout, with `py.typed`, so mypy checks plugins against pinhook's API
+
+### Changed
+
+* Commands are written without their prefix, and answer to `cmd_prefix` or the bot's nick
+* 1.x plugins run through the compatibility layer, with deprecation warnings, each on a thread of its own, one call at a time
+* Two plugins with the same command is a load error naming both
+* `pinhook config.yaml` is `pinhook run config.yaml`. The old form still works, with a warning
+
+### Removed
+
+* The `irc` library, replaced by `irctokens`
+* TOML configs, `@register`, `@ops` and `use_prefix_for_plugins`
+
 ## 1.12.0
 
 ### Before you upgrade
 
 Nothing should break. Two things you might notice:
 
-* Plugins that use `msg.bot`, `@register` or `@ops` log a deprecation warning saying what to use instead (`msg.bot` only once per bot). They all still work. [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) has the details
+* Plugins that use `msg.bot`, `@register` or `@ops` log a deprecation warning saying what to use instead (`msg.bot` only once per bot). They all still work. [Preparing for 2.0](https://archangelic.github.io/pinhook/1.12/preparing-for-2/) has the details
 * Once a plugin uses `msg.store`, a `data/` folder appears where the bot runs, or inside `bot_dir` if that's set
 
 ### New
@@ -22,8 +62,8 @@ Nothing should break. Two things you might notice:
 * `!reload` also reads `plugin_config` from the config file again, so settings can change without a restart
 * SASL logins with `sasl_password` (and `sasl_account` if it's not the nickname). The bot is logged in before it joins channels, and gets its own nick on networks that reserve registered nicks
 * `${NAME}` in a config file is filled in from the environment, so passwords don't have to be in the file
-* Docstrings for everything plugins and bot scripts use, so editors can show help, and an [API reference](https://archangelic.github.io/pinhook/latest/reference/) generated from them
-* A [Preparing for 2.0](https://archangelic.github.io/pinhook/latest/preparing-for-2/) guide to getting plugins ready for 2.0
+* Docstrings for everything plugins and bot scripts use, so editors can show help, and an [API reference](https://archangelic.github.io/pinhook/1.12/reference/) generated from them
+* A [Preparing for 2.0](https://archangelic.github.io/pinhook/1.12/preparing-for-2/) guide to getting plugins ready for 2.0
 
 ### Deprecated
 
