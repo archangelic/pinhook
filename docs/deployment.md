@@ -41,6 +41,35 @@ log_format: json
 
 Changes to who can do what are audit lines, logged with who made them and carrying `"audit": true`: `!op`, `!deop`, `!ban`, `!unban`, `!allow`, `!deny`, `!revoke`, `!enable`, `!disable` and `!recipe`.
 
+### Retain logs
+
+Pinhook does not rotate a log file itself. With `log_file: '-'` stdout logging, configure retention
+in the service manager or container runtime that collects it: journald for the
+systemd service, or the logging system used by Docker or Kubernetes.
+
+For a plain install that writes a file, configure a rotation tool such as
+[logrotate](https://github.com/logrotate/logrotate/blob/main/logrotate.8.in).
+For example, put this in `/etc/logrotate.d/pinhook`, replacing the path with the
+absolute path of your bot's log:
+
+~~~
+/var/lib/pinhook/logs/gamebot.log {
+    daily
+    rotate 7
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+~~~
+
+The bot keeps its log file open. `copytruncate` copies the old contents and truncates
+the same file in place, so the running bot continues writing to it. Renaming the
+file alone leaves the bot writing to the old file. As the logrotate manual notes,
+messages written between copying and truncating can be lost; use managed stdout
+logging when that tradeoff is unacceptable. The rotation process needs permission
+to read and truncate the log and write the rotated files.
+
 ## Health checks
 
 ```yaml
