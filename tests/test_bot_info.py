@@ -21,12 +21,17 @@ def make(name, reply, access='open'):
 class Skills(Plugin):
     def setup(self, previous):
         self.where = (self.bot.nick, self.bot.prefix, self.bot.data_dir)
+        self.units = self.config.get('units', 'none')
         self.problems = self.set_recipes([make('hug', '{nick} hugs {arg}'),
                                           make('pick', 'picked', 'restricted')])
 
     @command('where')
     async def where(self, ctx):
         await ctx.reply('{} {} {}'.format(*self.where))
+
+    @command('units')
+    async def units(self, ctx):
+        await ctx.reply(self.units)
 
     @command('reset', ops=True)
     async def reset(self, ctx):
@@ -190,3 +195,9 @@ def test_split_says_what_lines_a_long_text_goes_as(tmp_path):
     assert ' '.join(lines[:-1]) == text
     room = bot.transport.text_room('privmsg', '#test', '[x] ')
     assert all(len(line.encode()) <= room for line in lines)
+
+
+def test_a_plugin_class_gets_its_config_before_setup(tmp_path):
+    bot = make_bot(tmp_path, plugin_config={'skills': {'units': 'metric'}})
+    assert bot.say('!units') == ['metric']
+    assert make_bot(tmp_path).say('!units') == ['none']

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 if TYPE_CHECKING:
     from .context import BotInfo, OwnCommands
     from .recipes import Recipe
+    from .store import PluginConfig
 
 Handler = TypeVar('Handler', bound=Callable[..., Awaitable[Any]])
 
@@ -36,12 +37,15 @@ class Plugin:
     anything you keep away from previous, like `self.conn, previous.conn = previous.conn, None`.
     teardown also runs when the plugin is removed and when the bot quits.
 
-    self.bot is the bot, as handlers see it in ctx.bot, from setup on.
+    self.bot is the bot, as handlers see it in ctx.bot, and self.config the plugin's
+    plugin_config section, as ctx.config, both from setup on. !reload reads
+    plugin_config again, so a new instance gets the new settings.
 
     The bot is read only to a plugin, apart from the plugin's own commands: set_recipes
     adds recipes as commands of its own, and allow gives someone access to one of them.
     """
     bot: 'BotInfo'
+    config: 'PluginConfig'
     _pinhook: 'OwnCommands | None' = None
 
     def setup(self, previous: Any) -> None:

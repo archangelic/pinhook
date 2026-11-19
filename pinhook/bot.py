@@ -270,9 +270,10 @@ class Bot:
         self.check_plugin_config()
 
     def prepare_plugin(self, instance, plugin):
-        # what a Plugin instance has from setup on: the bot, as its handlers see it, and
-        # its own commands to change
+        # what a Plugin instance has from setup on: the bot, as its handlers see it, its
+        # config, and its own commands to change
         instance.bot = self.info
+        instance.config = self.config_for(plugin)
         instance._pinhook = OwnCommands(self, plugin)
 
     def load_plugins(self):

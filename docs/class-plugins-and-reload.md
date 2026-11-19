@@ -21,6 +21,8 @@ The bot makes one instance of each `Plugin` class in a plugin file. Methods take
 
 ## Use the bot from a plugin
 
+`self.config` is the plugin's [`plugin_config`](options.md#commands-and-plugins) section, as `ctx.config` is, from `setup` on, so a plugin can check its settings as it loads. `!reload` reads `plugin_config` again, and the new instance gets the new settings.
+
 `self.bot` is the bot, from `setup` on, and handlers get the same as `ctx.bot`. It's read only:
 
 | Member | What it is |
