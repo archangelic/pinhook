@@ -41,11 +41,12 @@ await ctx.reply('just you', private=True)    # a private message to the sender
 await ctx.action('waves')                    # a /me
 await ctx.notice('a notice to the sender')
 await ctx.send('#announcements', 'liftoff')  # anywhere else
+await ctx.reply(forecast, prefix='[wx] ')     # every line starts with [wx]
 ```
 
 A string with line breaks, or a list, is sent a line at a time. Every line goes through the output queue, which keeps to the network's rate limits, so a long answer never floods the bot off the server.
 
-`thread=True` uses the IRCv3 reply tag where the server supports it, and starts the line with the sender's nick elsewhere.
+`thread=True` uses the IRCv3 reply tag where the server supports it, and starts the line with the sender's nick elsewhere. `prefix` starts every line, including each part of a line split to fit the network.
 
 ## Show it's working
 

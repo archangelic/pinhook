@@ -113,3 +113,21 @@ def test_returning_output_still_works_with_no_warnings(tmp_path):
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         assert bot.say('!old', nick='mal') == ['mal']
+
+
+PREFIXED = '''
+from pinhook import command
+
+@command('marked')
+async def marked(ctx):
+    await ctx.reply('one\\ntwo', prefix='[x] ')
+    await ctx.reply('three', thread=True, prefix='[x] ')
+    await ctx.send('#log', 'four', prefix='[x] ')
+'''
+
+
+def test_a_prefix_starts_every_line(tmp_path):
+    (tmp_path / 'marked.py').write_text(PREFIXED)
+    bot = TestBot(plugin_dir=str(tmp_path))
+    assert bot.say('!marked', nick='ana') == ['[x] one', '[x] two', '[x] ana: three']
+    assert bot.sent_to('#log') == ['[x] four']

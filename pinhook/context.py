@@ -176,7 +176,8 @@ class Context:
         """True if the network supports feature, like 'account-tag'."""
         return self._bot.transport.supports(feature)
 
-    async def reply(self, text: Text, thread: bool = False, private: bool = False) -> None:
+    async def reply(self, text: Text, thread: bool = False, private: bool = False,
+                    prefix: str = '') -> None:
         """Answer where the message came from: the channel, or the sender if private.
 
         Args:
@@ -185,10 +186,11 @@ class Context:
                 under the message, and elsewhere it starts with the sender's nick.
             private: answer the sender in a private message instead, which their client
                 can show with the channel it's about.
+            prefix: text to start every line with, like '[bot] '. A line too long for
+                the network is split, and each part starts with it too.
         """
         target = self.where(self.channel)
         tags: dict[str, str] = {}
-        prefix = ''
         if not self.supports('private'):
             thread = thread or private
             private = False
@@ -199,7 +201,7 @@ class Context:
             if self.msgid and self.supports('reply'):
                 tags['+reply'] = self.msgid
             else:
-                prefix = '{}: '.format(self.nick)
+                prefix += '{}: '.format(self.nick)
         self.out('privmsg', target, text, tags, prefix)
 
     def out(self, kind: str, target: str, text: Text, tags: dict[str, str] | None = None,
@@ -238,9 +240,9 @@ class Context:
             await asyncio.sleep(3)
             self._bot.transport.typing(target, 'active')
 
-    async def send(self, target: str, text: Text) -> None:
-        """Send text to another channel or nick."""
-        self.out('privmsg', target, text)
+    async def send(self, target: str, text: Text, prefix: str = '') -> None:
+        """Send text to another channel or nick, with prefix at the start of every line."""
+        self.out('privmsg', target, text, prefix=prefix)
 
     @overload
     async def action(self, text: Text, /) -> None: ...
