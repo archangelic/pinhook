@@ -13,7 +13,10 @@ too, for plugins with nothing to keep between messages.
 import inspect
 import re
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
+
+if TYPE_CHECKING:
+    from .context import BotInfo
 
 Handler = TypeVar('Handler', bound=Callable[..., Awaitable[Any]])
 
@@ -31,7 +34,10 @@ class Plugin:
     state it wants to keep. Then it calls the old instance's teardown, so take
     anything you keep away from previous, like `self.conn, previous.conn = previous.conn, None`.
     teardown also runs when the plugin is removed and when the bot quits.
+
+    self.bot is the bot, as handlers see it in ctx.bot, from setup on.
     """
+    bot: 'BotInfo'
 
     def setup(self, previous: Any) -> None:
         """Called when the plugin loads. previous is the old instance on !reload, or None."""

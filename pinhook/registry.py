@@ -126,10 +126,13 @@ class Registry:
         prefixes: the command prefixes, like ['!'].
         reserved: names plugins can't use, the bot's own commands.
         logger: the bot's logger.
+        prepare: called with each Plugin instance and its plugin's name before setup, to
+            give it what it has from setup on, like self.bot.
     """
 
-    def __init__(self, bot_name, prefixes, reserved, logger):
+    def __init__(self, bot_name, prefixes, reserved, logger, prepare):
         self.package = 'pinhook_plugins.' + module_name(bot_name)
+        self.prepare = prepare
         self.plugin_dir = ''
         self.imported = {}
         self.prefixes = list(prefixes)
@@ -326,6 +329,7 @@ class Registry:
         try:
             for cls in classes:
                 instance = cls()
+                self.prepare(instance, plugin_name)
                 instance.setup(old_instances.get((plugin_name, cls.__qualname__)))
                 instances[cls] = instance
         except Exception:

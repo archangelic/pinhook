@@ -17,7 +17,8 @@ Text = str | Sequence[str]
 
 
 class BotInfo:
-    """What a plugin can see of the bot. Read only."""
+    """What a plugin can see of the bot: ctx.bot in a handler, and self.bot in a Plugin
+    class, from setup on. Read only."""
 
     def __init__(self, bot: 'Bot') -> None:
         self._bot = bot
@@ -31,6 +32,29 @@ class BotInfo:
     def channels(self) -> tuple[str, ...]:
         """The channels the bot is in."""
         return tuple(self._bot.transport.joined())
+
+    @property
+    def prefix(self) -> str:
+        """The command prefix, like '!'. The first one, when there are several."""
+        return str(self._bot.cmd_prefix)
+
+    @property
+    def data_dir(self) -> str:
+        """The bot's data folder, where a plugin can keep files of its own."""
+        return str(self._bot.data_dir)
+
+    def is_op(self, who: Any) -> bool:
+        """True if who, a Source or a Member, is one of the bot's ops."""
+        return bool(self._bot.is_op(who))
+
+    def matches(self, entry: str, who: Any) -> bool:
+        """True if an entry like '$a:mal', a hostmask or a nick names who, a Source or a
+        Member, the way ops, bans and grants are matched."""
+        return bool(self._bot.transport.matches(entry, who))
+
+    def keeps_history(self, channel: str) -> bool:
+        """True if the history option lists channel, so ctx.history() is kept for it."""
+        return bool(self._bot.history.records(channel))
 
 
 class Context:
@@ -110,7 +134,7 @@ class Context:
         self.plugin = plugin
         self._store: dict[str, Any] | None = None
         self.config = bot.config_for(plugin) if plugin else PluginConfig('plugin')
-        self.bot = BotInfo(bot)
+        self.bot: BotInfo = bot.info
         self.logger = bot.logger
 
     @property

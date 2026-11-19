@@ -29,7 +29,7 @@ async def whoami(ctx):
 | `ctx.command`, `ctx.arg` | the command's name, and everything after it. For [`@on('addressed')`](events.md#answer-when-spoken-to), the message after the bot's nick |
 | `ctx.time` | when it was sent, the server's time when it says |
 | `ctx.tags`, `ctx.msgid` | the message's IRCv3 tags and ID |
-| `ctx.bot.nick`, `ctx.bot.channels` | the bot's nick and channels, read only |
+| `ctx.bot` | the bot's nick, channels, prefix and [more](class-plugins-and-reload.md#use-the-bot-from-a-plugin), read only |
 | `ctx.logger` | the bot's logger |
 
 ## Answer

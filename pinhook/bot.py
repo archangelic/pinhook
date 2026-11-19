@@ -22,7 +22,7 @@ from . import health
 from . import log
 from . import plugin
 from .access import Access
-from .context import Context, server_time, text_lines
+from .context import BotInfo, Context, server_time, text_lines
 from .history import Entry, History
 from .output import OutputQueue
 from . import recipes
@@ -259,13 +259,19 @@ class Bot:
                                  self.transport.casefold)
         # !help isn't listed with the rest, it's shown to everyone
         self.reserved = self.builtins - {'help'} if self.disable_help else self.builtins
-        self.registry = Registry(self.bot_nick, self.prefixes, self.reserved, self.logger)
+        self.info = BotInfo(self)
+        self.registry = Registry(self.bot_nick, self.prefixes, self.reserved, self.logger,
+                                 self.prepare_plugin)
         self.access = Access(self, self.access_config, self.access_path())
         self.history = History(self.history_config, self.transport.casefold)
         self.registry.load(self.plugin_dir, self.plugin_packages)
         self.load_recipes()
         self.reset_timers()
         self.check_plugin_config()
+
+    def prepare_plugin(self, instance, plugin):
+        # what a Plugin instance has from setup on: the bot, as its handlers see it
+        instance.bot = self.info
 
     def load_recipes(self):
         """Load the recipes in recipe_dir as commands, replacing any loaded before. A recipe

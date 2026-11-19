@@ -1,6 +1,6 @@
 # TestBot
 
-`TestBot` runs the real bot on a fake network: plugins, recipes, access and the built-in commands all work, with no server and no waiting on rate limits. Stores live in memory, and a plugin that raises fails the test.
+`TestBot` runs the real bot on a fake network: plugins, recipes, access and the built-in commands all work, with no server and no waiting on rate limits. Stores live in memory, `data_dir` is a new folder removed with the bot, and a plugin that raises fails the test.
 
 ```python
 from pinhook.testing import TestBot

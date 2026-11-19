@@ -9,6 +9,8 @@
 import asyncio
 import logging
 import os
+import shutil
+import tempfile
 import weakref
 from collections.abc import Sequence
 from typing import Any, NamedTuple
@@ -229,6 +231,8 @@ class TestBot(Bot):
     Plugins, ops, bans and the built-in commands all work as they do on a
     real server. What the bot sends is recorded in `sent` instead, and a
     plugin that raises an exception fails the test with a PluginError.
+    Stores stay in memory, and data_dir is a new folder, removed with the bot,
+    unless the options give one.
     """
     # tell pytest this isn't a test class, despite the name
     __test__ = False
@@ -238,6 +242,9 @@ class TestBot(Bot):
         options.setdefault('log_file', os.devnull)
         options.setdefault('ban_file', '')
         options.setdefault('recipe_dir', None)
+        if 'data_dir' not in options and 'bot_dir' not in options:
+            options['data_dir'] = tempfile.mkdtemp(prefix='pinhook-testbot-')
+            weakref.finalize(self, shutil.rmtree, options['data_dir'], True)
         self.sent: list[Sent] = []
         self.quit_message = None
         self._errors = _ErrorCatcher()

@@ -19,6 +19,19 @@ class Counter(Plugin):
 
 The bot makes one instance of each `Plugin` class in a plugin file. Methods take `self`, then `ctx`, then the command's [typed arguments](typed-commands.md).
 
+## Use the bot from a plugin
+
+`self.bot` is the bot, from `setup` on, and handlers get the same as `ctx.bot`. It's read only:
+
+| Member | What it is |
+| --- | --- |
+| `nick`, `channels` | the bot's nick and channels |
+| `prefix` | the command prefix, like `!` |
+| `data_dir` | the bot's data folder, for files a plugin keeps |
+| `is_op(who)` | `True` if `who`, a `Source` or a `Member`, is one of the bot's ops |
+| `matches(entry, who)` | `True` if an entry like `'$a:mal'` names `who`, as ops and bans match |
+| `keeps_history(channel)` | `True` if the [`history`](options.md#history) option lists the channel |
+
 ## Make one with pinhook new
 
 ```bash

@@ -19,6 +19,8 @@ Generated from pinhook's own code and type hints. [The context](the-context.md),
       members: [reply, send, action, notice, typing, members, member, whois, history, commands,
                 run, supports]
 
+::: pinhook.context.BotInfo
+
 ::: pinhook.transport.base.Member
     options:
       members: [is_chanop, is_voiced]
