@@ -56,4 +56,14 @@ async def weather(run, fields):
     run.save(fields.get('save'), forecast)
 ```
 
-A field's kind is one of `template`, `text`, `name`, `path`, `steps`, `flag` or `any`.
+A field's kind is one of `template`, `text`, `name`, `path`, `steps`, `flag` or `any`. `check` looks a step's fields over when its recipe loads, and returns what's wrong, or `None`, so a mistake in a field of kind `any` is caught before the recipe ever runs:
+
+```python
+def known_units(fields):
+    if fields.get('units') not in (None, 'metric', 'imperial'):
+        return 'units should be metric or imperial'
+    return None
+
+
+@recipes.step('weather', {'weather': 'template', 'units': 'text'}, check=known_units)
+```

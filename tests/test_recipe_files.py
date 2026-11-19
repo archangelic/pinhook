@@ -130,6 +130,24 @@ def test_plugins_register_step_types_that_get_checked():
         del STEPS['weather']
 
 
+def test_a_step_type_checks_its_own_fields_when_a_recipe_loads():
+    def units_known(fields):
+        if fields.get('units') not in (None, 'metric', 'imperial'):
+            return 'units should be metric or imperial, not {!r}'.format(fields['units'])
+        return None
+
+    @recipes.step('weather', {'weather': 'template', 'units': 'text'}, check=units_known)
+    async def weather(run, fields):
+        pass
+    try:
+        parse_recipe({'version': 1, 'steps': [{'weather': '{arg}', 'units': 'metric'}]}, 'r')
+        with pytest.raises(recipes.RecipeError,
+                           match=r"r: step 1 \(weather\): units should be metric or imperial"):
+            parse_recipe({'version': 1, 'steps': [{'weather': '{arg}', 'units': 'kelvin'}]}, 'r')
+    finally:
+        del STEPS['weather']
+
+
 def test_a_step_type_with_a_made_up_kind_is_refused():
     with pytest.raises(ValueError, match="has kind 'number'"):
         recipes.step('bad', {'bad': 'number'})

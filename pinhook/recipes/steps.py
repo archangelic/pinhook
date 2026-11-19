@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 StepFunc = Callable[[Any, dict[str, Any]], Awaitable[None]]
+CheckFunc = Callable[[dict[str, Any]], str | None]
 
 KINDS = {'template', 'text', 'name', 'path', 'steps', 'flag', 'any'}
 NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
@@ -29,7 +30,8 @@ class StepType:
     """A kind of step: its name, which is also its key in a recipe file, its fields and
     their kinds, the ones it can't do without, and the async function that runs it.
 
-    saves names the field that holds the variable the step saves to, if any.
+    saves names the field that holds the variable the step saves to, if any. check
+    looks the fields over when a recipe loads, and returns what's wrong, or None.
     """
     name: str
     fields: dict[str, str]
@@ -37,14 +39,15 @@ class StepType:
     run: StepFunc
     saves: str | None = None
     one_of: tuple[frozenset[str], ...] = field(default_factory=tuple)
+    check: CheckFunc | None = None
 
 
 STEPS: dict[str, StepType] = {}
 
 
 def step(name: str, fields: dict[str, str], required: Iterable[str] = (),
-         saves: str | None = None,
-         one_of: Iterable[Iterable[str]] = ()) -> Callable[[StepFunc], StepFunc]:
+         saves: str | None = None, one_of: Iterable[Iterable[str]] = (),
+         check: CheckFunc | None = None) -> Callable[[StepFunc], StepFunc]:
     """Register a step type, for plugins. The function runs it, with a Run, which fills
     in templates and runs commands as the person who started the recipe, and the
     step's fields, templates parsed.
@@ -59,6 +62,9 @@ def step(name: str, fields: dict[str, str], required: Iterable[str] = (),
         required: fields it can't do without. Its own key always is.
         saves: the field naming the variable it saves to, so later steps can use it.
         one_of: sets of fields of which exactly one must be given.
+        check: a function that looks a step's fields over when its recipe loads, after
+            their kinds are checked, and returns what's wrong with them, or None. A
+            recipe with a problem doesn't load.
     """
     for field_name, kind in fields.items():
         if kind not in KINDS:
@@ -69,7 +75,7 @@ def step(name: str, fields: dict[str, str], required: Iterable[str] = (),
 
     def register(func: StepFunc) -> StepFunc:
         STEPS[name] = StepType(name, dict(fields), frozenset(required) | {name}, func, saves,
-                               tuple(frozenset(group) for group in one_of))
+                               tuple(frozenset(group) for group in one_of), check)
         return func
     return register
 

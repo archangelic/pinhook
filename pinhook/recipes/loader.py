@@ -200,6 +200,9 @@ def parse_step(raw, where, known):
         if name == 'when':
             continue
         fields[name] = parse_field(name, step_type.fields[name], value, where, known)
+    problem = step_type.check(fields) if step_type.check else None
+    if problem:
+        raise RecipeError('{}: {}'.format(where, problem))
     if step_type.saves and fields.get(step_type.saves):
         known.add(fields[step_type.saves])
     return Step(step_type.name, fields, when, where)
