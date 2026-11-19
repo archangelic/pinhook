@@ -180,3 +180,13 @@ def test_set_recipes_and_allow_wait_for_the_bot():
         Plugin().set_recipes([])
     with pytest.raises(RuntimeError, match='from setup on'):
         Plugin().allow('pick', ANA)
+
+
+def test_split_says_what_lines_a_long_text_goes_as(tmp_path):
+    bot = make_bot(tmp_path)
+    text = ' '.join('word{}'.format(i) for i in range(150))
+    lines = bot.info.split('#test', text + '\nshort', prefix='[x] ')
+    assert len(lines) == 4 and lines[-1] == 'short'
+    assert ' '.join(lines[:-1]) == text
+    room = bot.transport.text_room('privmsg', '#test', '[x] ')
+    assert all(len(line.encode()) <= room for line in lines)

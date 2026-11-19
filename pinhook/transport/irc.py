@@ -150,10 +150,13 @@ class IrcTransport(IrcIdentity):
         """What a message is sent as: (command, params, tags) for each line, split to fit."""
         command = 'NOTICE' if message.kind == 'notice' else 'PRIVMSG'
         start, end = ('\x01ACTION ', '\x01') if message.kind == 'action' else ('', '')
-        room = self.text_room(message.kind, message.target, message.prefix)
         tags = self.allowed_tags(message.tags)
         return [(command, [message.target, start + message.prefix + piece + end], tags)
-                for piece in split_text(text, room)]
+                for piece in self.split(message.kind, message.target, text, message.prefix)]
+
+    def split(self, kind, target, text, prefix=''):
+        """The pieces text is sent as, split at spaces to fit, without prefix."""
+        return split_text(text, self.text_room(kind, target, prefix))
 
     def join(self, channel, key=''):
         self.write('JOIN', [channel, key] if key else [channel])
@@ -994,10 +997,12 @@ class TwitchTransport(TwitchIdentity, IrcTransport):
                               "{}".format(message.target))
             return []
         start = '/me ' if message.kind == 'action' else ''
-        room = self.text_room(message.kind, message.target, message.prefix)
         return [('PRIVMSG', [message.target,
                              self.unrepeat(message.target, start + message.prefix + piece)], None)
-                for piece in split_text(text, room, chars=True)]
+                for piece in self.split(message.kind, message.target, text, message.prefix)]
+
+    def split(self, kind, target, text, prefix=''):
+        return split_text(text, self.text_room(kind, target, prefix), chars=True)
 
     def unrepeat(self, target, line):
         key = self.casefold(target)

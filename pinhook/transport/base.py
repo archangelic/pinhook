@@ -151,6 +151,10 @@ class Transport(Protocol):
         """How many bytes of text fit in one message of this kind to target."""
         ...
 
+    def split(self, kind: str, target: str, text: str, prefix: str = '') -> list[str]:
+        """The pieces one line of text is sent as, split to fit, without prefix."""
+        ...
+
     def members(self, channel: str) -> list[Member]:
         """Who is in channel, from member tracking, with no call to the server."""
         ...

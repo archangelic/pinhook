@@ -44,6 +44,14 @@ class BotInfo:
         """The bot's data folder, where a plugin can keep files of its own."""
         return str(self._bot.data_dir)
 
+    def split(self, target: str, text: Text, prefix: str = '') -> list[str]:
+        """The lines text would go to target as: a line for each of its lines, and more
+        where one is too long for the network, each without prefix, which every line
+        starts with."""
+        transport = self._bot.transport
+        return [piece for line in text_lines(text)
+                for piece in transport.split('privmsg', target, line, prefix)]
+
     def is_op(self, who: Any) -> bool:
         """True if who, a Source or a Member, is one of the bot's ops."""
         return bool(self._bot.is_op(who))

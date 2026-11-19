@@ -19,7 +19,7 @@ from .bot import Bot
 from .store import Store
 from .transport.base import Event, Limits, Member, Source, Whois, casefold, is_channel
 from .transport.identity import IrcIdentity
-from .transport.irc import text_room
+from .transport.irc import split_text, text_room
 
 
 class Sent(NamedTuple):
@@ -161,6 +161,9 @@ class FakeTransport(IrcIdentity):
 
     def text_room(self, kind, target, prefix=''):
         return text_room(self.nick, kind, target, prefix)
+
+    def split(self, kind, target, text, prefix=''):
+        return split_text(text, self.text_room(kind, target, prefix))
 
     def members(self, channel):
         return self.channels[channel].members() if channel in self.channels else []

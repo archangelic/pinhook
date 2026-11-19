@@ -31,6 +31,7 @@ The bot makes one instance of each `Plugin` class in a plugin file. Methods take
 | `is_op(who)` | `True` if `who`, a `Source` or a `Member`, is one of the bot's ops |
 | `matches(entry, who)` | `True` if an entry like `'$a:mal'` names `who`, as ops and bans match |
 | `keeps_history(channel)` | `True` if the [`history`](options.md#history) option lists the channel |
+| `split(target, text, prefix)` | the lines `text` would go to `target` as, split to fit the network |
 
 ## Add recipes and grant access from a plugin
 
