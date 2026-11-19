@@ -84,11 +84,13 @@ class Handler:
         error_msg: said in chat when a 2.0 command fails.
         timeout: seconds to wait for it, or None for the bot's default.
         aliases: a 2.0 command's other names, which run it too.
+        own_grants: True for a recipe a plugin added, which takes grants of its own: one
+            for its whole plugin doesn't cover it.
     """
 
     def __init__(self, kind, name, plugin_name, func, trigger=None, help_text='N/A', ops=False,
                  restricted=False, denied_msg='', hide=False, native=False, params=(), event=None,
-                 error_msg='', timeout=None, interval=None, aliases=()):
+                 error_msg='', timeout=None, interval=None, aliases=(), own_grants=False):
         self.kind = kind
         self.name = name
         self.trigger = trigger
@@ -106,6 +108,7 @@ class Handler:
         self.timeout = timeout
         self.interval = interval
         self.aliases = tuple(aliases)
+        self.own_grants = own_grants
 
     def label(self, prefix):
         """How the bot writes it in logs and !help: the word that runs a command."""

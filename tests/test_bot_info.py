@@ -141,6 +141,29 @@ def test_switching_a_plugin_off_switches_its_recipes_off(tmp_path):
     assert bot.say('!dance') == ['dances']
 
 
+def test_a_grant_for_the_plugin_doesnt_cover_the_recipes_it_added(tmp_path):
+    bot = make_bot(tmp_path, access={'plugins': {'skills': {'allow': ['$a:carol']}}})
+    assert bot.say('!units', nick='carol', account='carol') == ['none']
+    assert bot.say('!hug bob', nick='carol', account='carol') == []
+    assert bot.say('!access skills', nick='mal', account='mal') == [
+        'plugin skills: restricted, allowed: ops, $a:carol', '!reset: ops only',
+        '!hug: restricted, allowed: ops', '!pick: restricted, allowed: ops']
+    assert bot.say('!grant carol', nick='mal', account='mal') == ['True']
+    assert bot.say('!pick', nick='carol', account='carol') == ['picked']
+    assert bot.say('!allow skills $a:dave', nick='mal', account='mal') == [
+        'mal: gave access to plugin skills to $a:dave. Recipes it added, like !hug, take '
+        'grants of their own']
+
+
+def test_a_deny_or_a_level_for_the_plugin_covers_them(tmp_path):
+    bot = make_bot(tmp_path, access={'plugins': {'skills': {'deny': ['$a:troll']}}})
+    assert bot.say('!hug bob', nick='troll', account='troll') == []
+    assert bot.say('!hug bob', nick='ana', account='ana') == ['ana hugs bob']
+    bot = make_bot(tmp_path, access={'plugins': {'skills': 'ops'}})
+    assert bot.say('!hug bob', nick='ana', account='ana') == []
+    assert bot.say('!hug bob', nick='mal', account='mal') == ['mal hugs bob']
+
+
 def test_allow_gives_access_to_one_of_the_plugins_restricted_commands(tmp_path):
     bot = make_bot(tmp_path)
     assert bot.say('!pick', nick='ana', account='ana') == []

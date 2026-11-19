@@ -392,7 +392,8 @@ class Bot:
         return Handler('command', recipe.name, plugin, run, help_text=recipe.help,
                        ops=recipe.access == 'ops', restricted=recipe.access == 'restricted',
                        native=True, params=[commands.Param(
-                           'arg', str, '', 'what the recipe is given, as {arg}')])
+                           'arg', str, '', 'what the recipe is given, as {arg}')],
+                       own_grants=plugin != RECIPES)
 
     def switches_path(self):
         return os.path.join(self.data_dir, '{}.plugins.json'.format(self.bot_nick))
@@ -1008,6 +1009,10 @@ class Bot:
             done.append(description + ('' if added else ' (already)'))
         verb = 'gave access to {} to' if cmd == 'allow' else 'kept off {}:'
         said = (['{} {}'.format(verb.format(label), ', '.join(done))] if done else []) + problems
+        added = [h for h in self.target_handlers(plugin_name, command) if h.own_grants]
+        if cmd == 'allow' and command is None and done and added:
+            said.append('Recipes it added, like {}, take grants of their own'.format(
+                added[0].label(self.cmd_prefix)))
         return '{}: {}'.format(nick, '. '.join(said))
 
     def revoke(self, nick, plugin_name, command, label, targets):

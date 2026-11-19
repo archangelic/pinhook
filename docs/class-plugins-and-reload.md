@@ -57,7 +57,7 @@ class Moves(Plugin):
         self.set_recipes(found)
 ```
 
-They load after the recipe folder's, so a name a recipe file has is left out, and `set_recipes` returns the problems. Setting them again replaces them at once. Access and `!disable` treat them as the plugin's commands, so `!disable moves` turns them off too.
+They load after the recipe folder's, so a name a recipe file has is left out, and `set_recipes` returns the problems. Setting them again replaces them at once. `!disable moves` turns them off with the plugin, and the plugin's level and denies cover them. A grant for the whole plugin doesn't, since what a plugin adds can change after the grant: each recipe takes its own, from `allow` or `!allow !dance carol`.
 
 `allow` takes only the plugin's own commands, and refuses one that's ops only, as `!allow` does. It returns `False` when they had access already, or the command is open to everyone. Each grant is logged as an audit line.
 

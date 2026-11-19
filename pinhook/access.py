@@ -158,7 +158,8 @@ class Access:
 
     Ops can trigger anything. Otherwise a deny for the command or its plugin keeps
     someone off it, open lets everyone else on, and restricted needs a grant for the
-    command or its plugin. Bans beat all of it.
+    command or its plugin. A recipe a plugin added needs a grant for itself, since what a
+    plugin adds can change while the grant stays. Bans beat all of it.
 
     Args:
         bot: the bot, for its plugins, ops, bans and who has which modes where.
@@ -226,9 +227,12 @@ class Access:
 
     def entries(self, handler, which):
         """Everyone allowed, or denied, a command or listener: the config's, then !allow's
-        or !deny's, for it and for its plugin."""
+        or !deny's, for it and for its plugin. A recipe a plugin added takes only its own
+        grants, and its plugin's denies."""
         rule = self.rules.get(handler.plugin, Rule())
-        found = getattr(rule, which) + self.saved_rule(handler.plugin).get(which, [])
+        found = []
+        if which == 'deny' or not handler.own_grants:
+            found += getattr(rule, which) + self.saved_rule(handler.plugin).get(which, [])
         if handler.kind == 'command':
             own = rule.commands.get(handler.name, Rule())
             found += getattr(own, which) + self.saved_rule(handler.plugin, handler.name).get(

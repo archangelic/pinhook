@@ -11,6 +11,8 @@ Ops give and take access from chat. Grants and denies are saved in `data_dir` an
 
 `!allow` takes a plugin or a command, then one or more people or groups. A command is written with or without its prefix: `!allow !weather carol`.
 
+A grant for a plugin covers its commands, but not the recipes it adds with [`set_recipes`](class-plugins-and-reload.md#add-recipes-and-grant-access-from-a-plugin). Give each of those its own: `!allow !dance carol`.
+
 ## Keep someone off
 
 ```
