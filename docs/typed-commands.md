@@ -19,7 +19,7 @@ async def roll(ctx, count: int = 1, sides: int = 6):
 
 ## Name the command
 
-`@command('roll')` answers to `!roll`. Names are letters, digits, `-` and `_`, written without a prefix. The bot's [`cmd_prefix`](options.md#commands-and-plugins) is the prefix, `!` by default. A message that starts with the bot's nick works too: `gamebot: roll 2 20`.
+`@command('roll')` answers to `!roll`. Names are letters, digits, `-` and `_`, written without a prefix. The bot's [`cmd_prefix`](options.md#commands-and-plugins) is the prefix, `!` by default. A message that starts with the bot's nick works too: `gamebot: roll 2 20`, unless a plugin [handles `addressed`](events.md#answer-when-spoken-to).
 
 ## Give it other names
 

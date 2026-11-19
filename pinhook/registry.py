@@ -370,7 +370,8 @@ class Registry:
         return [h for handlers in self.plugins.values() for h in handlers]
 
     def listener_names(self):
-        return sorted(set(self.listeners) | {h.name for h in self.events.get('message', [])})
+        handlers = self.events.get('message', []) + self.events.get('addressed', [])
+        return sorted(set(self.listeners) | {h.name for h in handlers})
 
     def find(self, word, addressed=False):
         """The command a message's first word runs, or None.

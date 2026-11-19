@@ -1071,9 +1071,14 @@ class Bot:
         arg = rest.strip()
         self.logger.debug('Message info: channel: %s, nick: %s, cmd: %s, text: %s',
                           chan, nick, word, text)
+        # a plugin taking addressed messages gets "gamebot: roll" instead of the roll
+        # command, so only a command written with its prefix runs then
+        takers = [h for h in self.registry.events.get('addressed', [])
+                  if self.enabled_for(h, event.target)] if addressed else []
+        by_nick = addressed and not takers
         name = None
         if word:
-            name = self.registry.strip_prefix(word) or (word if addressed else None)
+            name = self.registry.strip_prefix(word) or (word if by_nick else None)
         if name in self.builtins:
             output = self.call_internal_commands(chan, nick, name, arg, op=op,
                                                  source=event.source)
@@ -1082,13 +1087,15 @@ class Bot:
                 return
         if self.stopping:
             return
-        handler = self.registry.find(word, addressed) if word else None
+        handler = self.registry.find(word, by_nick) if word else None
         if handler:
             await self.run_handler(handler, event, word, arg, addressed)
             return
         listeners = list(self.registry.listeners.values()) + self.registry.events.get('message', [])
-        await asyncio.gather(*(self.run_handler(h, event, None, '', addressed)
-                               for h in listeners))
+        await asyncio.gather(*[self.run_handler(h, event, None, '', addressed)
+                               for h in listeners],
+                             *[self.run_handler(h, event, None, body, addressed)
+                               for h in takers])
 
     def strip_address(self, text):
         """(True, the rest) when text starts with the bot's nick, like "pinhook: hi",
@@ -1196,7 +1203,8 @@ class Bot:
         make_context = functools.partial(
             Context, self, event, plugin=handler.plugin, addressed=addressed,
             command=handler.name if command else None, arg=arg, capture=capture)
-        checked = command or handler.kind == 'listener' or handler.event in ('message', 'notice')
+        checked = command or handler.kind == 'listener' or handler.event in (
+            'message', 'notice', 'addressed')
         if checked and event.source:
             channel = event.target if self.transport.is_channel(event.target) else None
             if not self.access.allows(event.source, handler, channel):

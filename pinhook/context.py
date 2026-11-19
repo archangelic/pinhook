@@ -58,7 +58,8 @@ class Context:
         nicks: everyone who left in a netsplit, or came back in a netjoin. text holds
             the two servers.
         command: the command's name, without a prefix, for a command. None otherwise.
-        arg: everything after the command word, for a command.
+        arg: everything after the command word, for a command. For an @on('addressed')
+            handler, the message after the bot's nick.
         time: when the message was sent, timezone-aware. The server's time when it says.
         tags: the message's IRCv3 tags.
         msgid: the message's ID, when the server gives one.

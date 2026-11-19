@@ -17,8 +17,8 @@ from typing import Any, TypeVar
 
 Handler = TypeVar('Handler', bound=Callable[..., Awaitable[Any]])
 
-EVENTS = {'message', 'notice', 'join', 'part', 'kick', 'quit', 'nick', 'topic', 'invite', 'mode',
-          'netsplit', 'netjoin', 'connected', 'disconnected'}
+EVENTS = {'message', 'addressed', 'notice', 'join', 'part', 'kick', 'quit', 'nick', 'topic',
+          'invite', 'mode', 'netsplit', 'netjoin', 'connected', 'disconnected'}
 NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]*$')
 
 
@@ -121,8 +121,11 @@ def on(event: str, timeout: float | None = None,
     """Make an async function handle an event, like 'join'. It gets a ctx about the event.
 
     Args:
-        event: one of message, notice, join, part, kick, quit, nick, topic, invite, mode,
-            netsplit, netjoin, connected or disconnected. A netsplit or netjoin is one event
+        event: one of message, addressed, notice, join, part, kick, quit, nick, topic,
+            invite, mode, netsplit, netjoin, connected or disconnected. addressed is a
+            message that starts with the bot's nick, with the rest in ctx.arg. While a
+            plugin handles it, a command after the nick goes to that plugin, so only
+            commands written with their prefix run. A netsplit or netjoin is one event
             for everyone who left or came back, with their nicks in ctx.nicks.
         timeout: seconds before the bot stops waiting for it, instead of the bot's default.
         name: what !enable and !disable call it, and !help lists a message handler as.

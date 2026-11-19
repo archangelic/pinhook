@@ -54,7 +54,7 @@ A nick that's taken gets `_` added, and the bot takes its own nick back when it 
 | Option | Default | What it does |
 | --- | --- | --- |
 | `cmd_prefix` | `!` | the prefix for every command, or a list of them: `['!', '.']` |
-| `address_by_nick` | `true` | commands also work after the bot's nick: `gamebot: roll`, `gamebot, roll` or `@gamebot roll` |
+| `address_by_nick` | `true` | commands also work after the bot's nick: `gamebot: roll`, `gamebot, roll` or `@gamebot roll`, unless a plugin [handles `addressed`](events.md#answer-when-spoken-to) |
 | `disable_help` | `false` | turn off the built-in `!help`, so a plugin's own `!help` command answers instead |
 | `plugins` | none | [installed plugins](class-plugins-and-reload.md#load-a-plugin-from-a-package) to load, by name: `['dice']` |
 | `plugin_config` | none | settings for plugins: a section per plugin, and `shared` |

@@ -18,6 +18,7 @@ Handlers never see the bot's own joins or messages, so the bot never welcomes it
 | Event | When | Extra on `ctx` |
 | --- | --- | --- |
 | `message` | a message that isn't a command, `/me` actions included | `text`, `kind` |
+| `addressed` | a message that starts with the bot's nick, like `gamebot: what's on tonight?` | `text`, and `arg`: the message after the nick |
 | `notice` | a notice | `text` |
 | `join` | someone joins a channel | |
 | `part` | someone leaves | `text`, the reason |
@@ -55,6 +56,21 @@ async def thanks(ctx):
 ```
 
 A netsplit is one event for everyone who left, not one per person, so a bot never answers a netsplit with a flood.
+
+## Answer when spoken to
+
+`@on('addressed')` gets the messages that start with the bot's nick, with the rest in `ctx.arg`:
+
+```python
+from pinhook import on
+
+
+@on('addressed')
+async def chat(ctx):
+    await ctx.reply(f'you said: {ctx.arg}')
+```
+
+While a plugin handles `addressed`, `gamebot: roll 2 20` goes to it instead of running `roll`, and commands need their prefix: `!roll 2 20`, or `gamebot: !roll 2 20`. Listeners and `@on('message')` handlers still see the message, with `ctx.addressed` set. `!disable chat` in a channel turns commands after the nick back on there.
 
 ## Test an event
 
