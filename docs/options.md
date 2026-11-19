@@ -12,6 +12,7 @@ unknown option 'ssl_requred' ignored, did you mean 'ssl_required'?
 | --- | --- | --- |
 | `platform` | `irc` | `irc`, or `twitch` for a [Twitch](twitch.md) bot |
 | `nickname` | required | the bot's nick |
+| `realname` | the nickname | the name WHOIS shows for the bot, like `'gamebot, a bot run by mal'` |
 | `server` | required on IRC | the server's name |
 | `channels` | required | the channels to join, quoted: `['#games']` |
 | `port` | `6667`, Twitch `6697` | the server's port. TLS is usually `6697` |

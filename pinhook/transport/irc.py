@@ -46,6 +46,7 @@ class IrcTransport(IrcIdentity):
         sts_path: where servers' STS policies are kept, or None to keep them in memory.
         nickserv, ns_pass: identify with NickServ instead, if SASL didn't log in.
         bot_mode: set the server's bot mode on the bot, if it has one.
+        realname: the name WHOIS shows for the bot. The nickname when not given.
     """
     name = 'irc'
     limits = Limits()
@@ -56,7 +57,8 @@ class IrcTransport(IrcIdentity):
 
     def __init__(self, logger, server, port, nickname, password=None, ssl_context=None,
                  sasl_account=None, sasl_password=None, nickserv='NickServ', ns_pass=None,
-                 bot_mode=True, sasl_mechanism='auto', client_cert=False, sts_path=None):
+                 bot_mode=True, sasl_mechanism='auto', client_cert=False, sts_path=None,
+                 realname=None):
         self.logger = logger
         self.server = server
         self.port = port
@@ -73,6 +75,7 @@ class IrcTransport(IrcIdentity):
         self.nickserv = nickserv
         self.ns_pass = ns_pass
         self.bot_mode = bot_mode
+        self.realname = realname or nickname
         self.open_connection = asyncio.open_connection
         self.queue = asyncio.Queue()
         self.closed = asyncio.Event()
@@ -289,7 +292,7 @@ class IrcTransport(IrcIdentity):
         if self.password:
             self.write('PASS', [self.password])
         self.write('NICK', [self.nickname])
-        self.write('USER', [self.nickname, '0', '*', self.nickname])
+        self.write('USER', [self.nickname, '0', '*', self.realname])
 
     def allowed_tags(self, tags):
         allowed = {name: value for name, value in tags.items() if self.client_tag_allowed(name)}

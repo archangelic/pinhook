@@ -63,6 +63,7 @@ class Config(Schema):
     disable_help = fields.Bool()
     banned_users = fields.List(fields.Str())
     bot_mode = fields.Bool()
+    realname = fields.Str()
     ban_file = fields.Str(allow_none=True)
     require_account = fields.Bool()
     plugin_config = fields.Dict(keys=fields.Str(), values=fields.Dict(keys=fields.Str()))

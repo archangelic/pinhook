@@ -22,6 +22,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 * Access levels: open, restricted or ops-only, per plugin or command, with groups, and `!allow`, `!deny`, `!revoke` and `!access` from chat
 * Recipes: commands written as YAML, which run existing commands as the person who asked, with replies, a store, loops and conditions. Ops add one-line recipes with `!recipe add`
 * IRCv3: SCRAM-SHA-256 and EXTERNAL logins, STS, server time, message tags, threaded and private replies, typing, echo-message, labeled responses, MONITOR and case mapping
+* `realname` sets the name WHOIS shows for the bot
 * Twitch from a config file with `platform: twitch`, badges as access groups, and user IDs as accounts
 * `bot.commands()` lists what someone can run, `bot.run_as()` runs a command as them, and `ctx.history()` reads a channel's recent messages
 * The command line: `pinhook new`, `pinhook check`, `pinhook run`, with `--reload`, and `pinhook connect twitch`

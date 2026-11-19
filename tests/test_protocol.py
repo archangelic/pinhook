@@ -30,6 +30,11 @@ def test_capabilities_are_asked_for_before_nick_and_user(tmp_path):
     assert lines(w.connect()) == ['CAP LS 302', 'NICK pinbot', 'USER pinbot 0 * pinbot']
 
 
+def test_the_realname_option_sets_what_whois_shows(tmp_path):
+    w = Wire(tmp_path, realname='pinbot, a bot run by mal')
+    assert lines(w.connect())[-1] == 'USER pinbot 0 * pinbot, a bot run by mal'
+
+
 def test_wanted_caps_are_requested_and_negotiation_ends(tmp_path):
     w = Wire(tmp_path)
     w.connect()

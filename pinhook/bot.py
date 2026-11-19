@@ -106,7 +106,7 @@ class Bot:
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
         'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
         'history', 'recipe_dir', 'log_format', 'health_port', 'health_host', 'rate_limit',
-        'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile',
+        'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile', 'realname',
     }
     sasl_mechanisms = ('auto', 'PLAIN', 'SCRAM-SHA-256', 'EXTERNAL')
     log_levels = {
@@ -141,6 +141,7 @@ class Bot:
         self.address_by_nick = kwargs.get('address_by_nick', True)
         self.disable_help = kwargs.get('disable_help', False)
         self.bot_mode = kwargs.get('bot_mode', True)
+        self.realname = kwargs.get('realname') or None
         self.require_account = kwargs.get('require_account', False)
         self.sasl_password = kwargs.get('sasl_password') or None
         self.sasl_account = kwargs.get('sasl_account') or nickname
@@ -472,7 +473,7 @@ class Bot:
             ssl_context=self.ssl_context() if self.ssl_required else None,
             sasl_account=self.sasl_account, sasl_password=self.sasl_password,
             nickserv=self.nickserv, ns_pass=self.ns_pass, bot_mode=self.bot_mode,
-            sasl_mechanism=self.sasl_mechanism,
+            realname=self.realname, sasl_mechanism=self.sasl_mechanism,
             client_cert=bool(self.ssl_certfile) and self.ssl_required,
             sts_path=os.path.join(self.data_dir, 'sts.json'))
 
@@ -1288,7 +1289,7 @@ class TwitchBot(Bot):
     options = Bot.options - {
         'ssl_required', 'ssl_verify', 'ssl_certfile', 'ssl_keyfile', 'server_pass',
         'ns_pass', 'nickserv', 'sasl_account', 'sasl_password', 'sasl_mechanism',
-        'require_account',
+        'require_account', 'realname',
     }
 
     def __init__(self, nickname, channel, token, **kwargs):
