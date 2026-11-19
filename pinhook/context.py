@@ -12,6 +12,7 @@ from .transport.base import Event, Member, Source, Whois
 if TYPE_CHECKING:
     from .bot import Bot, RunResult
     from .commands import CommandInfo
+    from .recipes import Recipe
 
 Text = str | Sequence[str]
 
@@ -55,6 +56,21 @@ class BotInfo:
     def keeps_history(self, channel: str) -> bool:
         """True if the history option lists channel, so ctx.history() is kept for it."""
         return bool(self._bot.history.records(channel))
+
+
+class OwnCommands:
+    """What a Plugin class can change of the bot: its own commands, and nothing of another
+    plugin's. Plugin.set_recipes and Plugin.allow go through it."""
+
+    def __init__(self, bot: 'Bot', plugin: str) -> None:
+        self._bot = bot
+        self._plugin = plugin
+
+    def set_recipes(self, recipes: Sequence['Recipe']) -> list[str]:
+        return list(self._bot.set_recipes(self._plugin, list(recipes)))
+
+    def allow(self, command: str, who: Any) -> bool:
+        return bool(self._bot.allow(self._plugin, command, who))
 
 
 class Context:

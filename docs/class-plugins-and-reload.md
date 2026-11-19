@@ -32,6 +32,31 @@ The bot makes one instance of each `Plugin` class in a plugin file. Methods take
 | `matches(entry, who)` | `True` if an entry like `'$a:mal'` names `who`, as ops and bans match |
 | `keeps_history(channel)` | `True` if the [`history`](options.md#history) option lists the channel |
 
+## Add recipes and grant access from a plugin
+
+A class plugin can change its own commands, and nothing else of the bot's, from `setup` on:
+
+| Method | What it does |
+| --- | --- |
+| `self.set_recipes(recipes)` | adds [recipes](writing-recipes.md) as commands of the plugin, in place of the ones it added before |
+| `self.allow(command, who)` | gives `who` access to one of the plugin's restricted commands, as `!allow` does |
+
+A plugin that keeps recipes somewhere other than `recipe_dir` adds them in `setup`:
+
+```python
+from pinhook import Plugin, recipes
+
+
+class Moves(Plugin):
+    def setup(self, previous):
+        found = [recipes.load_recipe(path) for path in self.saved_paths()]
+        self.set_recipes(found)
+```
+
+They load after the recipe folder's, so a name a recipe file has is left out, and `set_recipes` returns the problems. Setting them again replaces them at once. Access and `!disable` treat them as the plugin's commands, so `!disable moves` turns them off too.
+
+`allow` takes only the plugin's own commands, and refuses one that's ops only, as `!allow` does. It returns `False` when they had access already, or the command is open to everyone. Each grant is logged as an audit line.
+
 ## Make one with pinhook new
 
 ```bash

@@ -18,6 +18,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 * Class plugins with `setup(previous)` and `teardown()`, so state carries across `!reload`
 * Plugins from installed packages, named in `plugins` and found through the `pinhook.plugins` entry point
 * `self.bot` in a class plugin, and `ctx.bot`, with the prefix, the data folder, and op, entry and history checks, read only
+* `set_recipes` and `allow` in class plugins, to add recipes as a plugin's own commands and give someone access to them
 * `@on` for joins, parts, kicks, nick changes, topics, invites, modes, netsplits and more, and `@every` for timers
 * `@on('addressed')` for messages that start with the bot's nick, which then go to that plugin instead of running a command
 * `name=` on `@on` and `@every` sets the name `!enable` and `!disable` take, and `!help` lists `@on('message')` handlers with the listeners

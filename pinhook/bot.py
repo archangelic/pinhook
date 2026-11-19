@@ -22,7 +22,7 @@ from . import health
 from . import log
 from . import plugin
 from .access import Access
-from .context import BotInfo, Context, server_time, text_lines
+from .context import BotInfo, Context, OwnCommands, server_time, text_lines
 from .history import Entry, History
 from .output import OutputQueue
 from . import recipes
@@ -264,20 +264,67 @@ class Bot:
                                  self.prepare_plugin)
         self.access = Access(self, self.access_config, self.access_path())
         self.history = History(self.history_config, self.transport.casefold)
-        self.registry.load(self.plugin_dir, self.plugin_packages)
+        self.load_plugins()
         self.load_recipes()
         self.reset_timers()
         self.check_plugin_config()
 
     def prepare_plugin(self, instance, plugin):
-        # what a Plugin instance has from setup on: the bot, as its handlers see it
+        # what a Plugin instance has from setup on: the bot, as its handlers see it, and
+        # its own commands to change
         instance.bot = self.info
+        instance._pinhook = OwnCommands(self, plugin)
+
+    def load_plugins(self):
+        # plugins set their recipes again as they load, and those are added once the
+        # recipe folder's are, in load_recipes
+        self.plugin_recipes = {}
+        self.loading_plugins = True
+        try:
+            self.registry.load(self.plugin_dir, self.plugin_packages)
+        finally:
+            self.loading_plugins = False
+
+    def set_recipes(self, plugin, found):
+        """Add recipes as commands of plugin, in place of the ones it added before, for a
+        plugin whose recipes aren't in recipe_dir. Returns the problems, as text."""
+        self.plugin_recipes[plugin] = list(found)
+        if self.loading_plugins:
+            return []
+        return self.add_plugin_recipes(plugin)
+
+    def add_plugin_recipes(self, plugin):
+        self.registry.remove_added(plugin)
+        handlers = [self.recipe_handler(recipe, plugin) for recipe in self.plugin_recipes[plugin]]
+        problems = self.registry.add_handlers(plugin, handlers)
+        for problem in problems:
+            self.logger.error("couldn't add a recipe: {}".format(problem))
+        return problems
+
+    def allow(self, plugin, command, who):
+        """Give who access to one of plugin's restricted commands, as !allow does, and log it
+        as an audit line. False if they had it, or the command is open to everyone."""
+        handler = self.registry.commands.get(command)
+        if handler is None or handler.plugin != plugin:
+            raise ValueError('plugin {} has no command called {}'.format(plugin, command))
+        label = handler.label(self.cmd_prefix)
+        level = self.access.level(handler)
+        if level == 'ops':
+            raise ValueError("{} is ops only, so it can't be given out".format(label))
+        if level == 'open':
+            return False
+        entry = self.transport.strongest_entry(who)
+        added = self.access.add('allow', plugin, handler.name, entry)
+        if added:
+            self.logger.info('plugin {} gave access to {} to {}'.format(
+                plugin, label, self.access.shown(entry)), extra={'audit': True})
+        return added
 
     def load_recipes(self):
         """Load the recipes in recipe_dir as commands, replacing any loaded before. A recipe
         that can't load, or whose name another command has, is logged and left out, and a
         store key a recipe reads but none sets is warned about."""
-        self.registry.remove_plugin(RECIPES)
+        self.registry.remove_added(RECIPES)
         found, problems = recipes.load_recipes(self.recipe_dir)
         handlers = [self.recipe_handler(recipe) for recipe in found.values()]
         problems += self.registry.add_handlers(RECIPES, handlers)
@@ -291,6 +338,8 @@ class Bot:
         if found:
             self.logger.info('loaded {} recipes from {}'.format(
                 len(self.recipes), self.recipe_dir))
+        for plugin in self.plugin_recipes:
+            self.add_plugin_recipes(plugin)
 
     def recipe_command(self, nick, arg, channel=None):
         # !recipe add <name> <reply template>, and !recipe del <name>
@@ -336,10 +385,10 @@ class Bot:
         self.load_recipes()
         return '{}: removed {}{}'.format(nick, self.cmd_prefix, name)
 
-    def recipe_handler(self, recipe):
+    def recipe_handler(self, recipe, plugin=RECIPES):
         async def run(ctx, arg=''):
             await run_recipe(self, recipe, ctx, arg)
-        return Handler('command', recipe.name, RECIPES, run, help_text=recipe.help,
+        return Handler('command', recipe.name, plugin, run, help_text=recipe.help,
                        ops=recipe.access == 'ops', restricted=recipe.access == 'restricted',
                        native=True, params=[commands.Param(
                            'arg', str, '', 'what the recipe is given, as {arg}')])
@@ -640,7 +689,7 @@ class Bot:
         """Load plugins and recipes again, with plugin_config and access from the config
         file. Says what happened to the config, for !reload's reply."""
         config_note = self.reload_plugin_config()
-        self.registry.load(self.plugin_dir, self.plugin_packages)
+        self.load_plugins()
         self.load_recipes()
         self.reset_timers()
         self.check_plugin_config()

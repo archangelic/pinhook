@@ -148,6 +148,7 @@ class Registry:
         self.events = {}
         self.timers = []
         self.plugins = {}
+        self.added = {}
 
     def load(self, plugin_dir, packages=()):
         """Load every .py file in plugin_dir, then the installed plugins named in packages,
@@ -287,8 +288,9 @@ class Registry:
             self.instances[(plugin_name, cls.__qualname__)] = instance
 
     def add_handlers(self, plugin_name, handlers):
-        """Add commands that don't come from a plugin file, like recipes, under plugin_name.
-        One whose name is taken is left out. Returns the problems, as text."""
+        """Add commands that don't come from a plugin file, like recipes, under plugin_name,
+        beside any it has. One whose name is taken is left out. Returns the problems, as
+        text."""
         problems, added = [], []
         for handler in handlers:
             other = self.owner(handler)
@@ -298,15 +300,19 @@ class Registry:
                 continue
             self.commands[handler.name] = handler
             added.append(handler)
-        self.plugins[plugin_name] = added
+        self.plugins.setdefault(plugin_name, []).extend(added)
+        self.added.setdefault(plugin_name, []).extend(added)
         return problems
 
-    def remove_plugin(self, plugin_name):
+    def remove_added(self, plugin_name):
         """Take out the commands added under plugin_name with add_handlers, like recipes
-        before they're loaded again."""
-        for handler in self.plugins.pop(plugin_name, []):
-            if handler.kind == 'command' and self.commands.get(handler.name) is handler:
+        before they're loaded again. A plugin file's own handlers stay."""
+        added = self.added.pop(plugin_name, [])
+        for handler in added:
+            if self.commands.get(handler.name) is handler:
                 del self.commands[handler.name]
+        if plugin_name in self.plugins:
+            self.plugins[plugin_name] = [h for h in self.plugins[plugin_name] if h not in added]
 
     @staticmethod
     def plugin_classes(module):

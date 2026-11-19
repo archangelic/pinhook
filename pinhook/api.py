@@ -16,7 +16,8 @@ from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
-    from .context import BotInfo
+    from .context import BotInfo, OwnCommands
+    from .recipes import Recipe
 
 Handler = TypeVar('Handler', bound=Callable[..., Awaitable[Any]])
 
@@ -36,14 +37,44 @@ class Plugin:
     teardown also runs when the plugin is removed and when the bot quits.
 
     self.bot is the bot, as handlers see it in ctx.bot, from setup on.
+
+    The bot is read only to a plugin, apart from the plugin's own commands: set_recipes
+    adds recipes as commands of its own, and allow gives someone access to one of them.
     """
     bot: 'BotInfo'
+    _pinhook: 'OwnCommands | None' = None
 
     def setup(self, previous: Any) -> None:
         """Called when the plugin loads. previous is the old instance on !reload, or None."""
 
     def teardown(self) -> None:
         """Called when this instance is replaced or removed, or the bot quits."""
+
+    def set_recipes(self, recipes: Sequence['Recipe']) -> list[str]:
+        """Add recipes as commands of this plugin, in place of the ones it added before.
+
+        They're added after the recipe folder's, so a name that's taken is left out, and
+        access and !disable treat them as this plugin's commands. Works from setup on.
+        Returns the problems, as text.
+        """
+        return _own(self).set_recipes(recipes)
+
+    def allow(self, command: str, who: Any) -> bool:
+        """Give who, a Source, access to one of this plugin's restricted commands, as an
+        op's !allow does: by account when they're logged in, by user and host when not.
+
+        Works from setup on, and each grant is logged as an audit line. Returns False if
+        they had access already, or the command is open to everyone. Raises ValueError
+        for a command that isn't this plugin's, or is ops only.
+        """
+        return _own(self).allow(command, who)
+
+
+def _own(plugin: Plugin) -> 'OwnCommands':
+    if plugin._pinhook is None:
+        raise RuntimeError('set_recipes and allow work from setup on, once the bot has '
+                           'loaded the plugin')
+    return plugin._pinhook
 
 
 def _mark(func: Handler, **spec: Any) -> Handler:
