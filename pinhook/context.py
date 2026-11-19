@@ -1,6 +1,7 @@
 """The context: everything a plugin gets for one message, and nothing else."""
 import asyncio
 import contextlib
+import logging
 from collections.abc import AsyncIterator, Sequence
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, overload
@@ -33,6 +34,11 @@ class BotInfo:
     def channels(self) -> tuple[str, ...]:
         """The channels the bot is in."""
         return tuple(self._bot.transport.joined())
+
+    @property
+    def logger(self) -> logging.Logger:
+        """The bot's logger, as ctx.logger."""
+        return self._bot.logger
 
     @property
     def prefix(self) -> str:

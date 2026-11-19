@@ -22,6 +22,7 @@ class Skills(Plugin):
     def setup(self, previous):
         self.where = (self.bot.nick, self.bot.prefix, self.bot.data_dir)
         self.units = self.config.get('units', 'none')
+        self.bot.logger.info('skills set up')
         self.problems = self.set_recipes([make('hug', '{nick} hugs {arg}'),
                                           make('pick', 'picked', 'restricted')])
 
@@ -201,3 +202,8 @@ def test_a_plugin_class_gets_its_config_before_setup(tmp_path):
     bot = make_bot(tmp_path, plugin_config={'skills': {'units': 'metric'}})
     assert bot.say('!units') == ['metric']
     assert make_bot(tmp_path).say('!units') == ['none']
+
+
+def test_a_plugin_class_logs_through_the_bot(tmp_path, caplog):
+    make_bot(tmp_path)
+    assert 'skills set up' in caplog.text

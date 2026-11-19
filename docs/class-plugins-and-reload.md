@@ -29,6 +29,7 @@ The bot makes one instance of each `Plugin` class in a plugin file. Methods take
 | --- | --- |
 | `nick`, `channels` | the bot's nick and channels |
 | `prefix` | the command prefix, like `!` |
+| `logger` | the bot's logger, as `ctx.logger` |
 | `data_dir` | the bot's data folder, for files a plugin keeps |
 | `is_op(who)` | `True` if `who`, a `Source` or a `Member`, is one of the bot's ops |
 | `matches(entry, who)` | `True` if an entry like `'$a:mal'` names `who`, as ops and bans match |
