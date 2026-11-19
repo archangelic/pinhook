@@ -84,6 +84,7 @@ def step(name: str, fields: dict[str, str], required: Iterable[str] = (),
 async def command(run, fields):
     """Run a command as the person who started the recipe. With save, what it says goes in
     that variable, as a list of lines. Without, it's said."""
+    run.refuse_marked(fields['command'].paths, 'command')
     lines = await run.run_command(run.render(fields['command']))
     if fields.get('save'):
         run.save(fields['save'], lines)
@@ -93,8 +94,10 @@ async def command(run, fields):
 
 @step('reply', {'reply': 'template'})
 async def reply(run, fields):
-    """Say something where the recipe was started."""
-    await run.reply(run.render(fields['reply']))
+    """Say something where the recipe was started. A reply using marked text starts with
+    its mark."""
+    found = run.marked(fields['reply'].paths)
+    await run.reply(run.render(fields['reply']), prefix=found[1] if found else '')
 
 
 @step('store', {'store': 'name', 'set': 'template', 'add': 'template', 'remove': 'template',
@@ -103,6 +106,9 @@ async def store(run, fields):
     """Keep something in the recipes' store, which every recipe shares, lasts between
     restarts and reads back as {store.key}: set it, add to a list, remove from one, or
     clear it."""
+    for name in ('set', 'add', 'remove'):
+        if name in fields:
+            run.refuse_marked(fields[name].paths, 'store')
     run.store_change(fields)
 
 

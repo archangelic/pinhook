@@ -25,6 +25,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 * An async core with an output queue, which keeps to each network's rate limits, so a slow plugin or a long reply never freezes the bot. `rate_limit` changes how fast it sends
 * Access levels: open, restricted or ops-only, per plugin or command, with groups, and `!allow`, `!deny`, `!revoke` and `!access` from chat
 * Recipes: commands written as YAML, which run existing commands as the person who asked, with replies, a store, loops and conditions. Ops add one-line recipes with `!recipe add`
+* Recipe steps from plugins can check their fields when a recipe loads, and mark text as only to be shown, never run or stored
 * IRCv3: SCRAM-SHA-256 and EXTERNAL logins, STS, server time, message tags, threaded and private replies, typing, echo-message, labeled responses, MONITOR and case mapping
 * `prefix=` on `ctx.reply` and `ctx.send` starts every line, split lines included
 * `realname` sets the name WHOIS shows for the bot

@@ -27,6 +27,13 @@ async def two(ctx):
 @recipes.step('shout', {'shout': 'template'})
 async def shout(run, fields):
     await run.reply(run.render(fields['shout']).upper() + '!')
+
+@recipes.step('guess', {'guess': 'template', 'save': 'name'}, saves='save')
+async def guess(run, fields):
+    run.save(fields['save'], {'kind': 'bug', 'words': 'it ' + run.render(fields['guess']),
+                              'names': ['ana', 'bob']})
+    run.mark(fields['save'] + '.words', '[guess] ')
+    run.mark(fields['save'] + '.names', '[guess] ')
 '''
 
 
@@ -45,6 +52,7 @@ def make(tmp_path, ops=('$a:mal',), access=None, **files):
 
 def teardown_function():
     STEPS.pop('shout', None)
+    STEPS.pop('guess', None)
 
 
 def test_gamenight(tmp_path):
@@ -321,3 +329,55 @@ def test_a_private_reply_inside_a_recipe_stays_private(tmp_path):
     assert bot.say('!token', nick='ana') == ['done']
     assert [(s.kind, s.text) for s in bot.sent if s.target == 'ana'] == [
         ('message', 's3cret'), ('notice', 'a notice')]
+
+
+GUESS = '''
+help: guess, then {}
+steps:
+  - guess: '{{arg}}'
+    save: g
+{}
+'''
+
+
+def test_a_reply_using_marked_text_starts_with_its_mark(tmp_path):
+    bot = make(tmp_path, sort=GUESS.format('reply', """  - reply: 'a {g.kind}'
+  - reply: 'so: {g.words}'
+  - reply: '{g}'"""))
+    assert bot.say('!sort crashes', nick='ana') == [
+        'a bug', '[guess] so: it crashes', "[guess] kind: bug, words: it crashes, names: ana, bob"]
+
+
+def test_a_command_using_marked_text_stops_the_recipe(tmp_path):
+    bot = make(tmp_path, sort=GUESS.format('run it', """  - command: 'quote {g.words}'
+  - reply: 'never said'"""))
+    assert bot.say('!sort crashes') == [
+        "sort stopped: {g.words} is only to be shown, so a command step can't use it"]
+
+
+def test_a_store_change_or_a_condition_using_it_stops_the_recipe(tmp_path):
+    bot = make(tmp_path, keep=GUESS.format('keep it', """  - store: notes
+    add: '{g.words}'"""), check=GUESS.format('check it', """  - reply: 'yes'
+    when: g.words is it crashes"""), choose=GUESS.format('choose', """  - reply: 'a bug'
+    when: g.kind is bug"""))
+    assert bot.say('!keep crashes') == [
+        "keep stopped: {g.words} is only to be shown, so a store step can't use it"]
+    assert bot.store('_recipes') == {}
+    assert bot.say('!check crashes') == [
+        "check stopped: {g.words} is only to be shown, so a when step can't use it"]
+    assert bot.say('!choose crashes') == ['a bug']
+
+
+def test_each_item_of_a_marked_list_is_marked(tmp_path):
+    bot = make(tmp_path, each=GUESS.format('each', """  - for_each: g.names
+    steps:
+      - reply: 'hi {item}'
+  - reply: 'after: {nick}'"""))
+    assert bot.say('!each x', nick='mal') == ['[guess] hi ana', '[guess] hi bob', 'after: mal']
+
+
+def test_saving_over_a_marked_variable_unmarks_it(tmp_path):
+    bot = make(tmp_path, again=GUESS.format('again', """  - command: 'quote'
+    save: g
+  - reply: '{g}'"""))
+    assert bot.say('!again x') == ['a quote']

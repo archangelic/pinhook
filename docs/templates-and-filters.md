@@ -67,3 +67,16 @@ def known_units(fields):
 
 @recipes.step('weather', {'weather': 'template', 'units': 'text'}, check=known_units)
 ```
+
+## Mark text to show only
+
+A step that saves text people should see but nothing should act on, like text a model wrote, marks it:
+
+```python
+@recipes.step('guess', {'guess': 'template', 'save': 'name'}, saves='save')
+async def guess(run, fields):
+    run.save(fields['save'], {'kind': 'bug', 'summary': await summarise(run)})
+    run.mark(fields['save'] + '.summary', '[guess] ')
+```
+
+A reply that uses `{g.summary}` starts every line with `[guess] `. A `command`, `store` or `when` that uses it stops the recipe, and a `for_each` over a marked list marks each `{item}`. Saving over a variable clears its marks. `run.marked(template.paths)` tells a step of its own whether a template uses marked text.

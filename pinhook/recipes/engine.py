@@ -32,6 +32,7 @@ class Run:
         ctx: the context of the message that started the recipe.
         vars: the variables so far: nick, channel, arg, members and what steps saved.
         store: the store all recipes share, kept between restarts, read as {store.key}.
+        marks: the variables steps marked as only to be shown, with their marks.
     """
 
     def __init__(self, bot, recipe, ctx, arg):
@@ -42,6 +43,7 @@ class Run:
         self.channel = ctx.channel if self.bot.transport.is_channel(ctx.channel or '') else None
         self.store = bot.store(STORE)
         self.vars = {'nick': ctx.nick, 'channel': ctx.channel or '', 'arg': arg}
+        self.marks = {}
         self.steps_run = 0
 
     def lookup(self, path):
@@ -58,12 +60,36 @@ class Run:
         return template.render(self.lookup)
 
     def save(self, name, value):
-        """Set a variable later steps can use."""
+        """Set a variable later steps can use. Marks it had before are gone."""
         if name:
             self.vars[name] = value
+            for path in [p for p in self.marks if p == name or p.startswith(name + '.')]:
+                del self.marks[path]
 
-    async def reply(self, text_or_lines):
-        await self.ctx.reply(text_or_lines)
+    def mark(self, path, prefix):
+        """Mark a variable, or a key of one like 'sorted.summary', as text only ever to be
+        shown, with prefix in front, the way vermilion marks what a model wrote. A reply
+        that uses it starts every line with prefix. A command, a store change or a when
+        that uses it stops the recipe, and a for_each over it marks each item."""
+        self.marks[path] = prefix
+
+    def marked(self, paths):
+        """(path, prefix) for the first of paths that holds marked text, or None."""
+        for path in paths:
+            for marked, prefix in self.marks.items():
+                if path == marked or path.startswith(marked + '.') or \
+                        marked.startswith(path + '.'):
+                    return path, prefix
+        return None
+
+    def refuse_marked(self, paths, step_type):
+        found = self.marked(paths)
+        if found:
+            self.stop("{{{}}} is only to be shown, so a {} step can't use it".format(
+                found[0], step_type))
+
+    async def reply(self, text_or_lines, prefix=''):
+        await self.ctx.reply(text_or_lines, prefix=prefix)
 
     def stop(self, message):
         """Stop the recipe, telling the person who started it why."""
@@ -105,17 +131,23 @@ class Run:
 
     async def each(self, path, steps):
         before = self.vars.get('item', MISSING)
+        marks_before = {p: m for p, m in self.marks.items()
+                        if p == 'item' or p.startswith('item.')}
+        found = self.marked([path])
         try:
             for item in as_list(self.lookup(path)):
-                self.vars['item'] = item
+                self.save('item', item)
+                if found:
+                    self.mark('item', found[1])
                 await self.run_steps(steps)
         finally:
+            self.save('item', before)
             if before is MISSING:
                 self.vars.pop('item', None)
-            else:
-                self.vars['item'] = before
+            self.marks.update(marks_before)
 
     def holds(self, condition):
+        self.refuse_marked([condition.path], 'when')
         actual = text(self.lookup(condition.path)).strip()
         return (actual == condition.value) != condition.negate
 
