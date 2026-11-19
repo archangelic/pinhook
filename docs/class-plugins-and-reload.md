@@ -51,6 +51,32 @@ def teardown(self):
 
 `ctx.store` lives through a reload without any of this, since it's saved to disk.
 
+## Load a plugin from a package
+
+Install the package, then name its plugin in `plugins`:
+
+```bash
+pip install pinhook-dice
+```
+
+```yaml
+plugins:
+  - dice
+```
+
+The name is the plugin's own: it names its store, its `plugin_config` section, and what `!enable` and `!disable` take. `!reload` makes new instances of its classes, and calls `setup(previous)` as it does for files. Code from an upgraded package loads when the bot restarts.
+
+## Publish a plugin as a package
+
+Point a `pinhook.plugins` entry point at the module holding the plugin's handlers and classes, in `pyproject.toml`:
+
+```toml
+[project.entry-points."pinhook.plugins"]
+dice = "pinhook_dice.plugin"
+```
+
+`dice` is the name bots list in `plugins`. The module uses the 2.0 API: `@command`, `@on`, `@every` and `Plugin` classes, defined in that module.
+
 ## Reload on every save
 
 ```bash

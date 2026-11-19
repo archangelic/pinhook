@@ -1,10 +1,15 @@
-"""Each bot's plugins: loading them from plugin_dir, and finding their commands and handlers.
+"""Each bot's plugins: loading them from plugin_dir and installed packages, and finding
+their commands and handlers.
 
 Every bot has its own registry, so two bots in one process never share plugins.
 A plugin file can hold 1.x commands and listeners, 2.0 handlers made with
 pinhook.command and pinhook.on, and Plugin classes whose methods are handlers.
+An installed package offers a plugin through the pinhook.plugins entry point,
+naming the module that holds its handlers and Plugin classes.
 """
+import difflib
 import importlib.abc
+import importlib.metadata
 import importlib.util
 import inspect
 import os
@@ -21,6 +26,14 @@ from .store import read_json_object, write_json
 
 class LoadError(Exception):
     """A plugin file that can't be loaded alongside the others."""
+
+
+ENTRY_POINTS = 'pinhook.plugins'
+
+
+def installed_plugins():
+    """The plugins installed packages offer, as {name: entry point}."""
+    return {ep.name: ep for ep in importlib.metadata.entry_points(group=ENTRY_POINTS)}
 
 
 _registries: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
@@ -133,8 +146,9 @@ class Registry:
         self.timers = []
         self.plugins = {}
 
-    def load(self, plugin_dir):
-        """Load every .py file in plugin_dir, replacing whatever was loaded before."""
+    def load(self, plugin_dir, packages=()):
+        """Load every .py file in plugin_dir, then the installed plugins named in packages,
+        replacing whatever was loaded before."""
         self.logger.info('clearing plugin cache')
         old = self.instances
         self.instances = {}
@@ -153,6 +167,12 @@ class Registry:
             try:
                 legacy, module = self.import_file(name)
                 self.add(name, legacy, module, old)
+            except Exception:
+                self.logger.exception('could not load plugin {}'.format(name))
+        for name in packages:
+            self.logger.info('loading installed plugin {}'.format(name))
+            try:
+                self.add(name, [], self.import_installed(name), old)
             except Exception:
                 self.logger.exception('could not load plugin {}'.format(name))
         self.teardown(old.values())
@@ -177,6 +197,25 @@ class Registry:
                 sys.modules[package] = module
         _registries[self.package] = self
         self.imported = {}
+
+    def import_installed(self, name):
+        """The module an installed plugin's entry point names. Its code loads once, so
+        !reload makes new instances of its Plugin classes, but new code needs a restart."""
+        if name in self.plugins:
+            raise LoadError('plugin {} is a file in {} and an installed plugin too, so the '
+                            'installed one is left out'.format(name, self.plugin_dir))
+        found = installed_plugins()
+        if name not in found:
+            close = difflib.get_close_matches(name, found, n=1)
+            hint = ", did you mean '{}'?".format(close[0]) if close else (
+                ', installed: {}'.format(', '.join(sorted(found))) if found else
+                ", and no installed package offers one. Install it with pip first")
+            raise LoadError("there's no installed plugin called {}{}".format(name, hint))
+        module = found[name].load()
+        if not isinstance(module, types.ModuleType):
+            raise LoadError('the {} entry point for plugin {} should name a module, like '
+                            '{}.plugin'.format(ENTRY_POINTS, name, name))
+        return module
 
     def import_file(self, name):
         importlib.import_module(self.package + '.' + name)

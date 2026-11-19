@@ -50,6 +50,7 @@ class Config(Schema):
     ssl_required = fields.Bool()
     ssl_verify = fields.Bool()
     plugin_dir = fields.Str()
+    plugins = fields.List(fields.Str())
     ns_pass = fields.Str()
     nickserv = fields.Str()
     log_level = fields.Str(validate=validate.OneOf(['off'] + list(Bot.log_levels)))

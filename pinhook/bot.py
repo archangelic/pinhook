@@ -106,7 +106,7 @@ class Bot:
         'ban_file', 'require_account', 'bot_dir', 'data_dir', 'plugin_config',
         'sasl_account', 'sasl_password', 'address_by_nick', 'plugin_channels', 'access',
         'history', 'recipe_dir', 'log_format', 'health_port', 'health_host', 'rate_limit',
-        'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile', 'realname',
+        'sasl_mechanism', 'ssl_certfile', 'ssl_keyfile', 'realname', 'plugins',
     }
     sasl_mechanisms = ('auto', 'PLAIN', 'SCRAM-SHA-256', 'EXTERNAL')
     log_levels = {
@@ -191,6 +191,11 @@ class Bot:
             log_file = '{}.log'.format(nickname)
             ban_file = '{}.bans.json'.format(nickname)
         self.plugin_dir = self.path(kwargs.get('plugin_dir', 'plugins'))
+        self.plugin_packages = kwargs.get('plugins') or []
+        if not isinstance(self.plugin_packages, list) or not all(
+                isinstance(name, str) and name for name in self.plugin_packages):
+            raise ValueError('plugins should list installed plugins by name, like '
+                             "['vermilion']")
         recipe_dir = kwargs.get('recipe_dir', 'recipes')
         self.recipe_dir = self.path(recipe_dir) if recipe_dir else None
         self.data_dir = self.path(kwargs.get('data_dir', 'data'))
@@ -257,7 +262,7 @@ class Bot:
         self.registry = Registry(self.bot_nick, self.prefixes, self.reserved, self.logger)
         self.access = Access(self, self.access_config, self.access_path())
         self.history = History(self.history_config, self.transport.casefold)
-        self.registry.load(self.plugin_dir)
+        self.registry.load(self.plugin_dir, self.plugin_packages)
         self.load_recipes()
         self.reset_timers()
         self.check_plugin_config()
@@ -629,7 +634,7 @@ class Bot:
         """Load plugins and recipes again, with plugin_config and access from the config
         file. Says what happened to the config, for !reload's reply."""
         config_note = self.reload_plugin_config()
-        self.registry.load(self.plugin_dir)
+        self.registry.load(self.plugin_dir, self.plugin_packages)
         self.load_recipes()
         self.reset_timers()
         self.check_plugin_config()
