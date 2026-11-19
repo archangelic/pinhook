@@ -144,3 +144,47 @@ def test_a_private_run_answers_the_person(tmp_path):
     assert run(bot, ANA, 'roll', '', None, capture=False).status == 'ran'
     bot.driver.run()
     assert bot.sent_to('ana') == ['ana rolled 6']
+
+
+TOOLS = '''
+from pinhook import command
+
+@command('tools')
+async def tools(ctx):
+    await ctx.reply(' '.join(c.label for c in ctx.commands()))
+
+@command('try')
+async def try_(ctx, name: str, arg: str = ''):
+    result = await ctx.run(name, arg)
+    await ctx.reply('{} {} {}'.format(result.status, list(result.lines), result.error))
+'''
+
+
+def make_tools(tmp_path):
+    (tmp_path / 'tools.py').write_text(TOOLS)
+    return make(tmp_path)
+
+
+def test_ctx_commands_lists_what_the_sender_can_trigger_here(tmp_path):
+    bot = make_tools(tmp_path)
+    everyone = ['!broken', '!old', '!roll', '!slow', '!tools', '!try', '!wait']
+    assert bot.say('!tools', nick='ana', account='ana') == [' '.join(everyone)]
+    assert bot.say('!tools', nick='mal', account='mal') == [
+        ' '.join(sorted(everyone + ['!shutdown', '!weather']))]
+
+
+def test_ctx_run_runs_a_command_as_the_sender_and_captures_it(tmp_path):
+    bot = make_tools(tmp_path)
+    assert bot.say('!try roll 20', nick='ana', account='ana') == [
+        "ran ['ana rolled 20'] None"]
+    assert bot.store('plugin')['rolls'] == 1
+    assert bot.say('!try weather', nick='ana', account='ana') == [
+        "refused ['ask an op'] ana doesn't have access to !weather"]
+    assert bot.store('plugin').get('asked') is None
+    assert bot.say('!try weather', nick='mal', account='mal') == ["ran ['sunny'] None"]
+
+
+def test_ctx_run_in_a_private_message_runs_there(tmp_path):
+    bot = make_tools(tmp_path)
+    assert bot.private('!try roll 4', nick='ana', account='ana') == [
+        "ran ['ana rolled 4'] None"]

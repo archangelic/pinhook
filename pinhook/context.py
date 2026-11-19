@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, Any, overload
 
 from .history import Entry
 from .store import PluginConfig, Store
-from .transport.base import Event, Member, Whois
+from .transport.base import Event, Member, Source, Whois
 
 if TYPE_CHECKING:
-    from .bot import Bot
+    from .bot import Bot, RunResult
+    from .commands import CommandInfo
 
 Text = str | Sequence[str]
 
@@ -41,6 +42,7 @@ class Context:
             'disconnected'.
         nick, user, host, account: who sent it, or who did it. account is their
             services account, or None when the server doesn't say.
+        source: the same four as a Source, or None when nobody did it, like a timer.
         channel: where to answer: the channel, or the sender for a private message.
             None when there's nowhere, like a nick change or a quit.
         is_private: True for a private message to the bot.
@@ -80,6 +82,7 @@ class Context:
         self.user = source.user if source else None
         self.host = source.host if source else None
         self.account = source.account if source else None
+        self.source: Source | None = source
         in_channel = bot.transport.is_channel(event.target or '')
         self.is_private = bool(event.target) and not in_channel and source is not None
         self.channel: str | None
@@ -150,6 +153,24 @@ class Context:
         if not self._bot.transport.is_channel(self.channel or ''):
             return ()
         return self._bot.history.recent(self.channel, limit)
+
+    def commands(self) -> list['CommandInfo']:
+        """The commands the sender can trigger here, from the command listing: each one's
+        name, help, typed arguments and access level. Empty when nobody sent this."""
+        if self.source is None:
+            return []
+        return self._bot.commands(self.source, self.in_channel())
+
+    async def run(self, command: str, arg: str = '') -> 'RunResult':
+        """Run a command as the sender, here, with their access, and return how it went,
+        with what it said where it ran instead of saying it. command is its name, like
+        'roll', and arg the text after it."""
+        if self.source is None:
+            raise RuntimeError('there is nobody to run a command as here')
+        return await self._bot.run_as(self.source, command, arg, self.in_channel())
+
+    def in_channel(self) -> str | None:
+        return self.channel if self._bot.transport.is_channel(self.channel or '') else None
 
     def supports(self, feature: str) -> bool:
         """True if the network supports feature, like 'account-tag'."""

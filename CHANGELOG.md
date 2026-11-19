@@ -26,7 +26,7 @@ The 2.0 release candidate: a new core, with 1.x plugins still running through a 
 * IRCv3: SCRAM-SHA-256 and EXTERNAL logins, STS, server time, message tags, threaded and private replies, typing, echo-message, labeled responses, MONITOR and case mapping
 * `realname` sets the name WHOIS shows for the bot
 * Twitch from a config file with `platform: twitch`, badges as access groups, and user IDs as accounts
-* `bot.commands()` lists what someone can run, `bot.run_as()` runs a command as them, and `ctx.history()` reads a channel's recent messages
+* `bot.commands()` lists what someone can run, `bot.run_as()` runs a command as them, `ctx.commands()` and `ctx.run()` do both for the sender, and `ctx.history()` reads a channel's recent messages
 * The command line: `pinhook new`, `pinhook check`, `pinhook run`, with `--reload`, and `pinhook connect twitch`
 * Deployment: an image on ghcr.io, signed and with an SBOM, `${file:PATH}` secrets, `secrets.env`, logs to stdout and as JSON, audit lines, a health endpoint, and compose, systemd and Kubernetes examples
 * Type hints throughout, with `py.typed`, so mypy checks plugins against pinhook's API

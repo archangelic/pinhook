@@ -18,6 +18,7 @@ async def whoami(ctx):
 | --- | --- |
 | `ctx.nick`, `ctx.user`, `ctx.host` | who sent it |
 | `ctx.account` | their services account, or `None`. On Twitch, their numeric user ID |
+| `ctx.source` | the same, as one `Source`, for [`bot.run_as`](api-reference.md#pinhook.bot.Bot.run_as) |
 | `ctx.channel` | where to answer: the channel, or the sender for a private message |
 | `ctx.is_private` | `True` for a private message to the bot |
 | `ctx.is_op` | `True` for one of the bot's [ops](bans-and-ops.md) |
@@ -25,7 +26,7 @@ async def whoami(ctx):
 | `ctx.is_bot` | `True` when the server marks the sender as a bot |
 | `ctx.addressed` | `True` when the message started with the bot's nick, like `gamebot: roll` |
 | `ctx.text` | the whole message |
-| `ctx.command`, `ctx.arg` | the command's name, and everything after it |
+| `ctx.command`, `ctx.arg` | the command's name, and everything after it. For [`@on('addressed')`](events.md#answer-when-spoken-to), the message after the bot's nick |
 | `ctx.time` | when it was sent, the server's time when it says |
 | `ctx.tags`, `ctx.msgid` | the message's IRCv3 tags and ID |
 | `ctx.bot.nick`, `ctx.bot.channels` | the bot's nick and channels, read only |
@@ -100,6 +101,19 @@ A `Member` has `nick`, `account`, `modes`, `is_chanop`, `is_voiced`, `away` and 
 for entry in ctx.history(limit=5):
     ctx.logger.info(f'{entry.nick}: {entry.text}')
 ```
+
+## Run commands as the sender
+
+`ctx.commands()` lists the commands the sender can trigger here, as the [command listing](api-reference.md#pinhook.commands.CommandInfo) gives them: name, help, typed arguments and access level. `await ctx.run('roll', '2 20')` runs one as the sender, with their access, and returns a [`RunResult`](api-reference.md#pinhook.bot.RunResult) holding what it said, instead of saying it:
+
+```python
+@command('quietly')
+async def quietly(ctx, name: str, arg: str = ''):
+    result = await ctx.run(name, arg)
+    await ctx.reply(f'{name} {result.status}: {len(result.lines)} lines', private=True)
+```
+
+A command the sender couldn't run themselves comes back `refused`.
 
 ## What the network supports
 

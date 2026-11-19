@@ -16,7 +16,8 @@ Generated from pinhook's own code and type hints. [The context](the-context.md),
 
 ::: pinhook.context.Context
     options:
-      members: [reply, send, action, notice, typing, members, member, whois, history, supports]
+      members: [reply, send, action, notice, typing, members, member, whois, history, commands,
+                run, supports]
 
 ::: pinhook.transport.base.Member
     options:
