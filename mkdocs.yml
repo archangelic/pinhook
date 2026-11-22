@@ -81,7 +81,7 @@ extra:
   version:
     provider: mike
   # vermilion's homepage, which turns on the homepage's vermilion band once it's set
-  vermilion_url: https://archangelic.github.io/vermilion/
+  vermilion_url:
 
 plugins:
   # listed here because adding any plugin turns off the default search
