@@ -147,6 +147,10 @@ docker run -d -v ./config.yaml:/bot/config.yaml:ro -v ./plugins:/bot/plugins:ro 
 
 The image logs to stdout and serves a health endpoint on port 8080. [Deployment](https://archangelic.github.io/pinhook/2.0/deployment/) has compose, systemd and Kubernetes examples.
 
+## Add an LLM agent
+
+[vermilion](https://github.com/archangelic/vermilion) is a separate package that turns a pinhook bot into an LLM agent, with the bot's own commands as its tools. pinhook has no LLM code of its own.
+
 ## Upgrade from 1.x
 
 Plugins written with `pinhook.plugin` run on 2.0 through a compatibility layer. [Migrating from 1.x](https://archangelic.github.io/pinhook/2.0/migrating-from-1x/) lists what changed for plugins, `Bot` subclasses and config files.
