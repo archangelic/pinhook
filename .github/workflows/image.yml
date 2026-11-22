@@ -3,11 +3,17 @@ name: Publish Image
 on:
   release:
     types: [published]
+  # builds the image for a release that's already out, from its tag
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: the release's tag, like v2.0.0
+        required: true
 
 jobs:
   image:
 
-    if: ${{ !startsWith(github.event.release.tag_name, 'v1.') }}
+    if: ${{ !startsWith(inputs.tag || github.event.release.tag_name, 'v1.') }}
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -17,6 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
+        ref: ${{ inputs.tag || github.ref }}
         persist-credentials: false
     - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
     - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
@@ -29,10 +36,11 @@ jobs:
       uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
       with:
         images: ghcr.io/archangelic/pinhook
+        # pep440 reads versions like 2.0.0rc1, and gives a pre-release only its own tag
         tags: |
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
+          type=pep440,pattern={{version}},value=${{ inputs.tag || github.event.release.tag_name }}
+          type=pep440,pattern={{major}}.{{minor}},value=${{ inputs.tag || github.event.release.tag_name }}
+          type=pep440,pattern={{major}},value=${{ inputs.tag || github.event.release.tag_name }}
     - id: build
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
       with:
