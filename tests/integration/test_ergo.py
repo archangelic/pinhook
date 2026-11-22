@@ -643,7 +643,8 @@ def test_the_showcase_bot_runs_on_a_real_server(tmp_path, names, users, start_bo
         plugin_config = yaml.safe_load(f)['plugin_config']
     plugin_config['shared']['channel'] = channel
     start_bot(mal, ops=['mallory'], plugin_config=plugin_config)
-    assert messages(mal.say('!legacy', channel, bot)) == ['hello mallory from 1.x']
+    # the first call to a 1.x plugin starts its thread, which can take a while on a busy machine
+    assert messages(mal.say('!legacy', channel, bot, seconds=5)) == ['hello mallory from 1.x']
     assert messages(mal.say('ping legacy', channel, bot)) == ['pong from a 1.x listener']
     assert messages(mal.say('ping modern', bot, bot)) == ['pong from a 2.0 listener']
     assert sorted(mal.say('\x01ACTION waves\x01', channel, bot)) == [
